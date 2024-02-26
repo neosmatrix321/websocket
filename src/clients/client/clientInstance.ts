@@ -62,29 +62,29 @@ export class clientWrapper implements IClientService {
     this._settings = { pw_hash: false },
     this._super = { customIntervallTime: false }
   };
-  public create(newID: string, newIP: string): IClient {
+  public static create(newID: string, newIP: string): IClient {
     const newClient = new clientWrapper(newID, newIP);
     return newClient;
   }
-  public connect(): void {
+  public static connect(): void {
     console.log('lets connect!');
   }
-  public disconnect(): void {
+  public static disconnect(): void {
     return;
   }
-  public sendMessage(message: string): void {
+  public static sendMessage(message: string): void {
     return;
   }
-  public receiveMessage(message: string, data?: object | null): void {
+  public static receiveMessage(message: string, data?: object | null): void {
     return;
   }
-  public updateSettings(settings: IClientSettings): void {
+  public static updateSettings(settings: IClientSettings): void {
     this._settings = { ...settings }; // Update settings with spread
     this._stats.eventCount++;
     this._stats.lastUpdates = { updateSettings: Date.now() };
   }
 
-  public updateConfig(config: any): void { // Adjust the 'any' type later
+  public static updateConfig(config: any): void { // Adjust the 'any' type later
     if (config !== '{}') {
       // Update logic if needed
       this._stats.eventCount++;
@@ -92,7 +92,7 @@ export class clientWrapper implements IClientService {
     }
   }
 
-  public async getClientLatency(client: IClient): Promise<void> { // Method returns a promise
+  public static async getClientLatency(client: IClient): Promise<void> { // Method returns a promise
     this._stats.latency = await si.inetLatency(client.info.ip);
     this._stats.eventCount++;
     this._stats.lastUpdates = { 'getClientLatency': Date.now() };

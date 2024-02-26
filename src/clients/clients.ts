@@ -23,7 +23,7 @@ export default class Clients extends EventEmitterMixin(Object) {
     globalEventEmitter.emit("addClient " + id + " ip: "+ ip); 
   }
 
-  updateClientStats(id: string) {
+  async updateClientStats(id: string) {
     const client = this._clients[id];
     this._clients[id]._stats = await client.getClientLatency(this); // Assume getClientLatency returns stats
     globalEventEmitter.emit("updateClientStats" + id);
