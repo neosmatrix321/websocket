@@ -36,6 +36,7 @@ export interface IClientService extends IClient {
   update(): void;
   sendMessage(message: string): void;
   receiveMessage(message: string, data?: object | null): void;
+  getClientLatency(client: this): void;
   // ...weitere Methoden für die Client-Funktionen
 }
 
@@ -48,13 +49,13 @@ export interface IClient {
 }
 
 // client.ts
-export class clientWrapper implements IClient {
+export class clientWrapper {
   info: IClientInfo;
   _stats: IClientStats;
   _config: IClientConfig; // Generisches Objekt für Konfiguration
   _settings: IClientSettings;
   _super: IClientSuper;
-  constructor(newID: string, newIP: string) {
+  protected constructor(newID: string, newIP: string) {
     this.info = { id: newID, ip: newIP },
     this._stats = { eventCount: 0, lastUpdates: { 'create': Date.now() }, messagesReceived: [], messagesToSend: [], latency: undefined },
     this._config = { type: ClientType.Basic },
@@ -62,7 +63,8 @@ export class clientWrapper implements IClient {
     this._super = { customIntervallTime: false }
   };
   public create(newID: string, newIP: string): IClient {
-    return new clientWrapper(newID, newIP);
+    const newClient = new clientWrapper(newID, newIP);
+    return newClient;
   }
   public connect(): void {
     console.log('lets connect!');
@@ -90,8 +92,8 @@ export class clientWrapper implements IClient {
     }
   }
 
-  public async getClientLatency(): Promise<void> { // Method returns a promise
-    this._stats.latency = await si.inetLatency(this.info.ip);
+  public async getClientLatency(client: IClient): void { // Method returns a promise
+    this._stats.latency = await si.inetLatency(client.info.ip);
     this._stats.eventCount++;
     this._stats.lastUpdates = { 'getClientLatency': Date.now() };
   }

@@ -1,7 +1,7 @@
 "use strict";
 import { inject, injectable } from "inversify";
 import { EventEmitterMixin } from "../global/globalEventHandling";
-import { IClient, clientWrapper } from "./client/clientInstance";
+import { clientWrapper, IClient } from "./client/clientInstance";
 
 export const CLIENTS_WRAPPER_TOKEN = Symbol('Clients');
 
@@ -24,7 +24,8 @@ export default class Clients extends EventEmitterMixin(Object) {
   }
 
   updateClientStats(id: string) {
-    this._clients[id].stats = this._clients[id].getClientLatency(); // Assume getClientLatency returns stats
+    const client = this._clients[id];
+    this._clients[id]._stats = await client.getClientLatency(this); // Assume getClientLatency returns stats
     globalEventEmitter.emit("updateClientStats" + id);
   }
 
