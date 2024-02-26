@@ -5,7 +5,7 @@ import { readFileSync } from 'fs';
 import { IncomingMessage } from 'http';
 import { EventEmitterMixin } from '../global/globalEventHandling';
 import { WebSocket, WebSocketServer, createWebSocketStream } from 'ws';
-import Main from '../global/main';
+import Main from '../main';
 
 class MyClass { }
 const MyClassWithMixin = EventEmitterMixin(MyClass);
@@ -48,7 +48,7 @@ export default class Server extends Main {
 
     public async createTimer() {
         // Interval function moved here
-        this.stats.updateAndGetPidIfNecessary();
+        // this.stats.updateAndGetPidIfNecessary();
         this.emitCustomEvent('createTimer', 'Global Timer started');
 
         this._server._handle.web._clients.forEach((ws_client: any) => {
@@ -58,7 +58,7 @@ export default class Server extends Main {
             }
 
             if (ws_client.readyState === ws_client.OPEN) {
-                if (this._clients.has[ws_client.id]) {
+                if (this._clients[ws_client.id]) {
                     console.error(`No Client with ID: ${ws_client.id} known`);
                 }
                 const time_diff = (Date.now() - ws_client.now);

@@ -1,11 +1,11 @@
 "use strict";
 import "reflect-metadata";
 import { inject, injectable } from "inversify";
-import { EventEmitterMixin } from "./globalEventHandling.js";
-import { IStats } from "../stats/statsInstance.js";
-import { IHandleWrapper } from "../server/serverInstance.js";
-import { ISettings } from "../settings/settingsInstance.js";
-import { IClientsService } from "../clients/clientsInstance.js";
+import { EventEmitterMixin } from "./global/globalEventHandling.js";
+import { IStats } from "./stats/statsInstance.js";
+import { IHandleWrapper } from "./server/serverInstance.js";
+import { ISettings } from "./settings/settingsInstance.js";
+import { IClientsService } from "./clients/clientsInstance.js";
 
 const GLOBAL_STATS_TOKEN = Symbol('GlobalStats');
 const SERVER_WRAPPER_TOKEN = Symbol('ServerWrapper');
@@ -53,7 +53,7 @@ export default class Main extends EventEmitterMixin(MyClass) {
   }
 
   private async handleConnection(ws: any) {
-    this.stats.updateClientCounter( { connectedClients: this.main.stats.connectedClients + 1 } );
+    this.stats.clientsCounter++;
     // const client1 = new Client({ /* Client Data */ });
 
     // // Add clients to the container
@@ -85,8 +85,8 @@ export default class Main extends EventEmitterMixin(MyClass) {
   }
 
   private async handleGreeting(client: IClient, obj: any) {
-    this._clients.client.isAdmin = !!obj.admin; // Update isAdmin
-    await this._clients.updateClientStats(this._clients.client.id);
+    this._clients[client.info.id].isAdmin = !!obj.admin; // Update isAdmin
+    await this._clients.updateClientStats(this._clients[client.info.id]);
   }
 
   private async handleMessage(ws: any, data: any, isBinary: any) {

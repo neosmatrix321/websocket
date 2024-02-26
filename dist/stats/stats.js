@@ -81,13 +81,16 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
         if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
     }
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 (function (factory) {
     if (typeof module === "object" && typeof module.exports === "object") {
         var v = factory(require, exports);
         if (v !== undefined) module.exports = v;
     }
     else if (typeof define === "function" && define.amd) {
-        define(["require", "exports", "reflect-metadata", "node:fs/promises", "inversify", "../global/globalEventHandling", "../settings/settingsInstance"], factory);
+        define(["require", "exports", "reflect-metadata", "node:fs/promises", "inversify", "../global/globalEventHandling", "pidusage", "systeminformation", "../settings/settingsInstance"], factory);
     }
 })(function (require, exports) {
     "use strict";
@@ -96,6 +99,8 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
     var promises_1 = require("node:fs/promises");
     var inversify_1 = require("inversify");
     var globalEventHandling_1 = require("../global/globalEventHandling");
+    var pidusage_1 = __importDefault(require("pidusage"));
+    var systeminformation_1 = __importDefault(require("systeminformation"));
     var settings = __importStar(require("../settings/settingsInstance")); // Import settings interface/class
     var MyClass = /** @class */ (function () {
         function MyClass() {
@@ -106,14 +111,14 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
     var globalEventEmitter = new MyClassWithMixin();
     var PRIVATE_SETTINGS_TOKEN = Symbol('PrivateSettings');
     var GLOBAL_STATS_TOKEN = Symbol('GlobalStats');
-    var stats = /** @class */ (function (_super) {
-        __extends(stats, _super);
-        function stats() {
+    var Stats = /** @class */ (function (_super) {
+        __extends(Stats, _super);
+        function Stats() {
             var _this = _super.call(this) || this;
             _this.updateAllStats();
             return _this;
         }
-        stats.prototype.createstatContainer = function () {
+        Stats.prototype.createstatContainer = function () {
             return __awaiter(this, void 0, void 0, function () {
                 return __generator(this, function (_a) {
                     this.stats.lastUpdates = { "createstatContainer": Date.now() };
@@ -121,7 +126,7 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
                 });
             });
         };
-        stats.prototype.getPid = function () {
+        Stats.prototype.getPid = function () {
             return __awaiter(this, void 0, void 0, function () {
                 var data, pid, err_1;
                 return __generator(this, function (_a) {
@@ -135,7 +140,7 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
                             this._settings.pid = pid;
                             this._settings.pidFileExists = true;
                             this._settings.pidFileReadable = true;
-                            this.emit('pidAvailable', pid);
+                            this.emit('pidAvailable ' + pid);
                             return [3 /*break*/, 3];
                         case 2:
                             err_1 = _a.sent();
@@ -158,7 +163,7 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
                 });
             });
         };
-        stats.prototype.updateAndGetPidIfNecessary = function () {
+        Stats.prototype.updateAndGetPidIfNecessary = function () {
             return __awaiter(this, void 0, void 0, function () {
                 return __generator(this, function (_a) {
                     if (!this._settings.pid || typeof this._settings.pid !== "number") {
@@ -170,17 +175,17 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
                 });
             });
         };
-        stats.prototype.updateAllStats = function () {
+        Stats.prototype.updateAllStats = function () {
             return __awaiter(this, void 0, void 0, function () {
                 var _this = this;
                 return __generator(this, function (_a) {
                     try {
                         this.getPid().then(function () {
-                            _this.stats.comparePids();
+                            _this.comparePids();
                         }).then(function () {
-                            _this.stats.getLatencyGoogle();
-                            _this.stats.getSI();
-                            _this.stats.getPU();
+                            _this.getLatencyGoogle();
+                            _this.getSI();
+                            _this.getPU();
                         }).then(function () {
                             // EventEmitterMixin.emit('updateAllStats', Date.now());
                         });
@@ -193,19 +198,120 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
                 });
             });
         };
+        Stats.prototype.comparePids = function () {
+            return __awaiter(this, void 0, void 0, function () {
+                var _this = this;
+                return __generator(this, function (_a) {
+                    this.stats.lastUpdates['comparePids'] = Date.now();
+                    if (this._settings.pid) {
+                        try {
+                            this.getSI().then(function () {
+                                if (_this.stats.si.pid == _this._settings.pid)
+                                    _this.getPU();
+                            }).then(function () {
+                                return true;
+                            }).catch(function (e) {
+                                console.error('Error fetching pid: ' + _this._settings.pid, ' si_pid: ' + _this.stats.si.pid, ' pu_pid: ' + _this.stats.pu.pid, e);
+                                return false;
+                            });
+                        }
+                        catch (e) {
+                            console.error('Error fetching pid: ' + this._settings.pid, ' si_pid: ' + this.stats.si.pid, ' pu_pid: ' + this.stats.pu.pid, e);
+                        }
+                    }
+                    return [2 /*return*/];
+                });
+            });
+        };
+        Stats.prototype.getLatencyGoogle = function () {
+            return __awaiter(this, void 0, void 0, function () {
+                var _a, e_1;
+                return __generator(this, function (_b) {
+                    switch (_b.label) {
+                        case 0:
+                            this.stats.lastUpdates = { "getLatencyGoogle": Date.now() };
+                            _b.label = 1;
+                        case 1:
+                            _b.trys.push([1, 3, , 4]);
+                            _a = this.stats;
+                            return [4 /*yield*/, systeminformation_1.default.inetLatency()];
+                        case 2:
+                            _a.latencyGoogle = _b.sent();
+                            this.emit("getLatencyGoogle" + this.stats.latencyGoogle);
+                            return [3 /*break*/, 4];
+                        case 3:
+                            e_1 = _b.sent();
+                            console.error("Error fetching google ping:", e_1);
+                            this.stats.latencyGoogle = null;
+                            return [3 /*break*/, 4];
+                        case 4: return [2 /*return*/];
+                    }
+                });
+            });
+        };
+        Stats.prototype.getSI = function () {
+            return __awaiter(this, void 0, void 0, function () {
+                var targetProcess, e_2;
+                var _this = this;
+                return __generator(this, function (_a) {
+                    switch (_a.label) {
+                        case 0:
+                            _a.trys.push([0, 2, , 3]);
+                            return [4 /*yield*/, systeminformation_1.default.processLoad("PalServer-Linux")];
+                        case 1:
+                            targetProcess = (_a.sent()).find(function (p) { return p.pid === _this._settings.pid; });
+                            if (targetProcess) {
+                                this.stats.si = { proc: targetProcess.proc, pid: targetProcess.mem, cpu: targetProcess.pid, mem: targetProcess.mem };
+                            }
+                            return [3 /*break*/, 3];
+                        case 2:
+                            e_2 = _a.sent();
+                            console.error("Error fetching system information:", e_2);
+                            return [3 /*break*/, 3];
+                        case 3:
+                            this.stats.lastUpdates = { "getLatencyGoogle": Date.now() };
+                            return [2 /*return*/];
+                    }
+                });
+            });
+        };
+        Stats.prototype.getPU = function () {
+            return __awaiter(this, void 0, void 0, function () {
+                var usage, e_3;
+                return __generator(this, function (_a) {
+                    switch (_a.label) {
+                        case 0:
+                            this.stats.lastUpdates['getPU'] = Date.now();
+                            _a.label = 1;
+                        case 1:
+                            _a.trys.push([1, 3, , 4]);
+                            return [4 /*yield*/, (0, pidusage_1.default)(this._settings.pid)];
+                        case 2:
+                            usage = _a.sent();
+                            this.stats.pu = { cpu: usage.cpu, memory: usage.memory, pid: usage.pid, ctime: usage.ctime, elapsed: usage.elapsed, timestamp: usage.timestamp }; // Map relevant properties
+                            return [3 /*break*/, 4];
+                        case 3:
+                            e_3 = _a.sent();
+                            console.error("Error fetching pid usage:", e_3);
+                            return [3 /*break*/, 4];
+                        case 4: return [2 /*return*/];
+                    }
+                });
+            });
+        };
         __decorate([
             (0, inversify_1.inject)(GLOBAL_STATS_TOKEN),
             __metadata("design:type", Object)
-        ], stats.prototype, "stats", void 0);
+        ], Stats.prototype, "stats", void 0);
         __decorate([
             (0, inversify_1.inject)(PRIVATE_SETTINGS_TOKEN),
             __metadata("design:type", Object)
-        ], stats.prototype, "_settings", void 0);
-        stats = __decorate([
+        ], Stats.prototype, "_settings", void 0);
+        Stats = __decorate([
             (0, inversify_1.injectable)(),
             __metadata("design:paramtypes", [])
-        ], stats);
-        return stats;
+        ], Stats);
+        return Stats;
     }((0, globalEventHandling_1.EventEmitterMixin)(MyClass)));
-    exports.default = stats;
+    exports.default = Stats;
 });

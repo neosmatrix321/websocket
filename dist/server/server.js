@@ -58,7 +58,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
         if (v !== undefined) module.exports = v;
     }
     else if (typeof define === "function" && define.amd) {
-        define(["require", "exports", "https", "fs", "../global/globalEventHandling", "ws", "../global/main"], factory);
+        define(["require", "exports", "https", "fs", "../global/globalEventHandling", "ws", "../main"], factory);
     }
 })(function (require, exports) {
     "use strict";
@@ -67,7 +67,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     var fs_1 = require("fs");
     var globalEventHandling_1 = require("../global/globalEventHandling");
     var ws_1 = require("ws");
-    var main_1 = __importDefault(require("../global/main"));
+    var main_1 = __importDefault(require("../main"));
     var MyClass = /** @class */ (function () {
         function MyClass() {
         }
@@ -118,7 +118,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
                 var _this = this;
                 return __generator(this, function (_a) {
                     // Interval function moved here
-                    this.stats.updateAndGetPidIfNecessary();
+                    // this.stats.updateAndGetPidIfNecessary();
                     this.emitCustomEvent('createTimer', 'Global Timer started');
                     this._server._handle.web._clients.forEach(function (ws_client) {
                         if (ws_client.admin === true) {

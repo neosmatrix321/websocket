@@ -1,6 +1,6 @@
 "use strict";
 import "reflect-metadata";
-import Main from "./global/main";
+import Main from "./main";
 
 
 async function startApplication() {

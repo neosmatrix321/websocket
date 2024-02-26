@@ -5,6 +5,8 @@ import { readFile } from 'node:fs/promises';
 import { Container, inject, injectable } from 'inversify';
 import { EventEmitterMixin } from '../global/globalEventHandling';
 import { IStats } from './statsInstance';
+import pidusage from 'pidusage';
+import si from 'systeminformation';
 import * as settings from '../settings/settingsInstance'; // Import settings interface/class
 class MyClass { }
 const MyClassWithMixin = EventEmitterMixin(MyClass);
@@ -63,10 +65,10 @@ export default class Stats extends EventEmitterMixin(MyClass) {
       this.getPid().then(() => {
         this.comparePids();
       }).then(() => {
-        this.stats.getLatencyGoogle();
-        this.stats.getSI()
-        this.stats.getPU()
-      }).then(() => {
+        this.getLatencyGoogle();
+        this.getSI();
+        this.getPU();
+          }).then(() => {
         // EventEmitterMixin.emit('updateAllStats', Date.now());
       });
     } catch (e) {
@@ -79,7 +81,7 @@ export default class Stats extends EventEmitterMixin(MyClass) {
     if (this._settings.pid) {
       try {
         this.getSI().then(() => { 
-          if (this.stats.si.pid == this._settings.pid) this.getPu(); 
+          if (this.stats.si.pid == this._settings.pid) this.getPU(); 
         }).then(() => { 
           return true; 
         }).catch((e) => { 
@@ -89,6 +91,36 @@ export default class Stats extends EventEmitterMixin(MyClass) {
       } catch (e) {
         console.error('Error fetching pid: ' + this._settings.pid, ' si_pid: ' + this.stats.si.pid, ' pu_pid: ' + this.stats.pu.pid, e);
       }
+    }
+  }
+  async getLatencyGoogle(): Promise<void> {
+    this.stats.lastUpdates = { "getLatencyGoogle": Date.now() };
+    try {
+      this.stats.latencyGoogle = await si.inetLatency();
+      this.emit("getLatencyGoogle" + this.stats.latencyGoogle);
+    } catch (e) {
+      console.error("Error fetching google ping:", e);
+      this.stats.latencyGoogle = null;
+    }
+  }
+  async getSI(): Promise<void> {
+    try {
+      const targetProcess = (await si.processLoad("PalServer-Linux")).find((p) => p.pid === this._settings.pid); 
+      if (targetProcess) {
+        this.stats.si = { proc: targetProcess.proc, pid: targetProcess.mem, cpu: targetProcess.pid, mem: targetProcess.mem };        
+      }
+    } catch (e) {
+      console.error("Error fetching system information:", e);
+    }
+    this.stats.lastUpdates = { "getLatencyGoogle": Date.now() };
+  }
+  async getPU(): Promise<void> {
+    this.stats.lastUpdates['getPU'] = Date.now();
+    try {
+      const usage = await pidusage(this._settings.pid); 
+      this.stats.pu = { cpu: usage.cpu, memory: usage.memory, pid: usage.pid, ctime: usage.ctime, elapsed: usage.elapsed, timestamp: usage.timestamp }; // Map relevant properties
+    } catch (e) {
+      console.error("Error fetching pid usage:", e);
     }
   }
 }

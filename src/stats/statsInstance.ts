@@ -1,8 +1,6 @@
 "use strict";
 import "reflect-metadata";
 import { injectable, optional, inject } from "inversify";
-import pidusage from 'pidusage';
-import { ProcessesProcessLoadData } from 'systeminformation';
 interface IwebHandle {
   isAlive: boolean,
   hasConnection: boolean,
@@ -19,7 +17,7 @@ export interface IStats {
   clientsCounter: number,
   activeClients: number,
   latencyGoogle: number | null,
-  si: ProcessesProcessLoadData,
+  si: { proc: string, pid: number, cpu: number, mem: number},
   pu: { cpu: number, memory: number, pid: number, ctime: number, elapsed: number, timestamp: number },
 rcon: object,
   lastUpdates: Record<string, number>,

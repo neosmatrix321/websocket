@@ -43,13 +43,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
         if (v !== undefined) module.exports = v;
     }
     else if (typeof define === "function" && define.amd) {
-        define(["require", "exports", "reflect-metadata", "./global/main"], factory);
+        define(["require", "exports", "reflect-metadata", "./main"], factory);
     }
 })(function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     require("reflect-metadata");
-    var main_1 = __importDefault(require("./global/main"));
+    var main_1 = __importDefault(require("./main"));
     function startApplication() {
         return __awaiter(this, void 0, void 0, function () {
             return __generator(this, function (_a) {

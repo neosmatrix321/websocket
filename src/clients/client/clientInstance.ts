@@ -1,4 +1,6 @@
 "use strict";
+import si from 'systeminformation';
+import Clients from '../clients';
 export enum ClientType {
   Basic,
   Admin,
@@ -15,7 +17,7 @@ export interface IClientStats {
   lastUpdates: Record<string, number>;
   messagesReceived: string[];
   messagesToSend: string[];
-  latency: number;
+  latency: number | undefined;
 }
 export interface IClientConfig {
   type: ClientType; // 'basic' | 'advanced' | ...
@@ -24,19 +26,20 @@ export interface IClientSettings {
   pw_hash: string | false;
 }
 export interface IClientSuper {
-  custom_intervall_time: number | false;
+  customIntervallTime: number | false;
 }
 
-export interface IClientService extends IClient { 
-    connect(): void;
-    disconnect(): void;
-    update(): void;
-    sendMessage(message: string): void;
-    receiveMessage(message: string, data?: object | null): void;
+export interface IClientService extends IClient {
+  create(newID: string, newIP: string): IClient;
+  connect(): void;
+  disconnect(): void;
+  update(): void;
+  sendMessage(message: string): void;
+  receiveMessage(message: string, data?: object | null): void;
   // ...weitere Methoden für die Client-Funktionen
 }
 
-export interface IClient extends clientWrapper {
+export interface IClient {
   info: IClientInfo;
   _stats?: IClientStats;
   _config?: IClientConfig; // Generisches Objekt für Konfiguration
@@ -45,24 +48,51 @@ export interface IClient extends clientWrapper {
 }
 
 // client.ts
-export class clientWrapper {
+export class clientWrapper implements IClient {
   info: IClientInfo;
-  private constructor(newID: string, newIP: string) { this.info = { id: newID, ip: newIP }; }
-  connect(): void {
+  _stats: IClientStats;
+  _config: IClientConfig; // Generisches Objekt für Konfiguration
+  _settings: IClientSettings;
+  _super: IClientSuper;
+  constructor(newID: string, newIP: string) {
+    this.info = { id: newID, ip: newIP },
+    this._stats = { eventCount: 0, lastUpdates: { 'create': Date.now() }, messagesReceived: [], messagesToSend: [], latency: undefined },
+    this._config = { type: ClientType.Basic },
+    this._settings = { pw_hash: false },
+    this._super = { customIntervallTime: false }
+  };
+  public create(newID: string, newIP: string): IClient {
+    return new clientWrapper(newID, newIP);
+  }
+  public connect(): void {
     console.log('lets connect!');
   }
-  disconnect(): void {
+  public disconnect(): void {
     return;
   }
-  update(): void {
+  public sendMessage(message: string): void {
     return;
   }
-  sendMessage(message: string): void {
+  public receiveMessage(message: string, data?: object | null): void {
     return;
   }
-  receiveMessage(message: string, data?: object | null): void {
-    return;
+  public updateSettings(settings: IClientSettings) {
+    this._settings = { ...settings }; // Update settings with spread
+    this._stats.eventCount++;
+    this._stats.lastUpdates = { updateSettings: Date.now() };
   }
 
-} 
- 
+  public updateConfig(config: any) { // Adjust the 'any' type later
+    if (config !== '{}') {
+      // Update logic if needed
+      this._stats.eventCount++;
+      this._stats.lastUpdates.updateConfig = Date.now();
+    }
+  }
+
+  public async getClientLatency(): Promise<void> { // Method returns a promise
+    this._stats.latency = await si.inetLatency(this.info.ip);
+    this._stats.eventCount++;
+    this._stats.lastUpdates = { 'getClientLatency': Date.now() };
+  }
+}
