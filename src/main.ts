@@ -5,7 +5,7 @@ import { EventEmitterMixin } from "./global/globalEventHandling.js";
 import { IStats } from "./stats/statsInstance.js";
 import { IHandleWrapper } from "./server/serverInstance.js";
 import { ISettings } from "./settings/settingsInstance.js";
-import { IClientsService } from "./clients/clientsInstance.js";
+import { IClient, clientWrapper } from "./clients/client/clientInstance.js";
 
 const GLOBAL_STATS_TOKEN = Symbol('GlobalStats');
 const SERVER_WRAPPER_TOKEN = Symbol('ServerWrapper');
@@ -19,11 +19,11 @@ const MyClassWithMixin = EventEmitterMixin(MyClass);
 const globalEventEmitter = new MyClassWithMixin();
 
 @injectable()
-export default class Main extends EventEmitterMixin(MyClass) {
+export default class Main extends EventEmitterMixin(MyClass) implements clientWrapper {
   @inject(GLOBAL_STATS_TOKEN) stats!: IStats;
   @inject(SERVER_WRAPPER_TOKEN) _server!: IHandleWrapper;
   @inject(PRIVATE_SETTINGS_TOKEN) _settings!: ISettings;
-  @inject(CLIENTS_WRAPPER_TOKEN) _clients!: IClientsService;
+  @inject(CLIENTS_WRAPPER_TOKEN) _clients!: IClient;
     public constructor() {
     super();
     this.initialize();
