@@ -29,17 +29,6 @@ export interface IClientSuper {
   customIntervallTime: number | false;
 }
 
-export interface IClientService extends IClient {
-  create(newID: string, newIP: string): IClient;
-  connect(): void;
-  disconnect(): void;
-  update(): void;
-  sendMessage(message: string): void;
-  receiveMessage(message: string, data?: object | null): void;
-  getClientLatency(client: this): Promise<void>;
-  // ...weitere Methoden für die Client-Funktionen
-}
-
 export interface IClient {
   info: IClientInfo;
   _stats?: IClientStats;
@@ -47,9 +36,20 @@ export interface IClient {
   _settings?: IClientSettings;
   _super?: IClientSuper;
 }
+export interface IClientService extends IClient {
+  create(newID: string, newIP: string): IClient;
+  connect(): void;
+  disconnect(): void;
+  sendMessage(message: string): void;
+  receiveMessage(message: string, data?: object | null): void;
+  getClientLatency(client: IClient): Promise<void>;
+  updateSettings(settings: IClientSettings): void;
+  updateConfig(config: any): void;
+}
+
 
 // client.ts
-export class clientWrapper {
+export class clientWrapper implements IClientService {
   info: IClientInfo;
   _stats: IClientStats;
   _config: IClientConfig; // Generisches Objekt für Konfiguration
@@ -78,13 +78,13 @@ export class clientWrapper {
   public receiveMessage(message: string, data?: object | null): void {
     return;
   }
-  public updateSettings(settings: IClientSettings) {
+  public updateSettings(settings: IClientSettings): void {
     this._settings = { ...settings }; // Update settings with spread
     this._stats.eventCount++;
     this._stats.lastUpdates = { updateSettings: Date.now() };
   }
 
-  public updateConfig(config: any) { // Adjust the 'any' type later
+  public updateConfig(config: any): void { // Adjust the 'any' type later
     if (config !== '{}') {
       // Update logic if needed
       this._stats.eventCount++;
