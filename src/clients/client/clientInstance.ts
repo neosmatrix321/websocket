@@ -23,7 +23,7 @@ export interface IClientConfig {
   type: ClientType; // 'basic' | 'advanced' | ...
 }
 export interface IClientSettings {
-  pw_hash: string | false;
+  pw_hash: string | null;
 }
 export interface IClientSuper {
   customIntervallTime: number | false;
@@ -32,8 +32,8 @@ export interface IClientSuper {
 export interface IClient extends clientWrapper {
   info: IClientInfo;
   _stats: IClientStats;
-  _config: IClientConfig; // Generisches Objekt für Konfiguration
-  _settings: IClientSettings;
+  _config: IClientConfig;
+  _clientSettings: IClientSettings;
   _super: IClientSuper;
 }
 
@@ -52,14 +52,14 @@ export interface IClientService {
 export class clientWrapper {
   info: IClientInfo;
   _stats: IClientStats;
-  _config: IClientConfig; // Generisches Objekt für Konfiguration
-  _settings: IClientSettings;
+  _config: IClientConfig;
+  _clientSettings: IClientSettings;
   _super: IClientSuper;
   constructor(newID: string, newIP: string) {
     this.info = { id: newID, ip: newIP },
     this._stats = { eventCount: 0, lastUpdates: { 'create': Date.now() }, messagesReceived: [], messagesToSend: [], latency: undefined },
     this._config = { type: ClientType.Basic },
-    this._settings = { pw_hash: false },
+    this._clientSettings = { pw_hash: null },
     this._super = { customIntervallTime: false }
   };
   public create(newID: string, newIP: string): IClient {
@@ -79,7 +79,7 @@ export class clientWrapper {
     return;
   }
   public updateSettings(settings: IClientSettings): void {
-    this._settings = { ...settings }; // Update settings with spread
+    this._clientSettings = { ...settings }; // Update settings with spread
     this._stats.eventCount++;
     this._stats.lastUpdates = { updateSettings: Date.now() };
   }

@@ -3,14 +3,18 @@ import "reflect-metadata";
 import { inject, injectable, optional } from 'inversify';
 
 // Interfaces (potentially in a separate file, interfaces.ts)
-interface IHandle {
-  web: any | null;
-  file: any | null;
-}
+import { WebSocketServer } from 'ws'
 
+interface IHandle {
+  web: WebSocketServer;
+  file: any;
+}
+interface IHandleStats {
+
+}
 export interface IHandleWrapper  {
   _handle: IHandle; 
-  _stats: null;
+  _stats: IHandleStats;
 }
 
 export interface IserverWrapper {

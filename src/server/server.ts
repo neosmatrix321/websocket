@@ -6,7 +6,13 @@ import { IncomingMessage } from 'http';
 import { EventEmitterMixin } from '../global/globalEventHandling';
 import { WebSocket, WebSocketServer, createWebSocketStream } from 'ws';
 import Main from '../main';
+import { ClientType } from '../clients/client/clientInstance';
 
+declare module 'ws' {
+  interface WebSocket {
+    id: string
+  }
+}
 class MyClass { }
 const MyClassWithMixin = EventEmitterMixin(MyClass);
 const globalEventEmitter = new MyClassWithMixin();
@@ -31,7 +37,7 @@ export default class Server extends Main {
         _serverCert.on('upgrade', (request, socket, head) => {
             switch (true) {
                 case this.stats.webHandle.isAlive:
-                    this.handleUpgrade(request, socket, head, (ws: WebSocket) => {
+                    this.handleUpgrade(request, socket, head, (ws: WebSocket, request: IncomingMessage, set: Set<WebSocket>) => { 
                         this.emitConnection(ws, request);
                     });
                     break;
@@ -51,9 +57,9 @@ export default class Server extends Main {
         // this.stats.updateAndGetPidIfNecessary();
         this.emitCustomEvent('createTimer', 'Global Timer started');
 
-        this._server._handle.web._clients.forEach((ws_client: any) => {
+        this._server._handle.web.clients.forEach((ws_client: WebSocket, _, __) => {
 
-            if (ws_client.admin === true) {
+            if (this._clients[ws_client.id]._config.type === ClientType.Admin) {
                 console.log(ws_client.admin);
             }
 
@@ -62,7 +68,7 @@ export default class Server extends Main {
                     console.error(`No Client with ID: ${ws_client.id} known`);
                 }
                 const time_diff = (Date.now() - ws_client.now);
-                console.log("admin(" + ws_client.admin + ") sending to ip(" + ws_client.ip + ") alive(" + ws_client.readyState + ") count(" + this.stats.clientsCounter + ") connected(" + Main.stats.connectedClients + ") latency_user(" + ws_client.latency_user + ") latency_google(" + this.stats.latency_google + ") connected since(" + Main.stats.lastUpdates.web + ") diff(" + time_diff + ")");
+                console.log("admin(" + ws_client.admin + ") sending to ip(" + this._clients[ws_client.id].info.ip + ") alive(" + ws_client.readyState + ") count(" + this._clients[ws_client.id]._stats.clientsCounter + ") connected(" + this.stats.connectedClients + ") latency_user(" + this._clients[ws_client.id]._stats.latency_user + ") latency_google(" + this.stats.latencyGoogle + ") connected since(" + this.stats.lastUpdates.web + ") diff(" + time_diff + ")");
 
                 if (time_diff > 20000) {
                     const dummy = true;
@@ -71,7 +77,7 @@ export default class Server extends Main {
         });
     }
 
-    handleUpgrade(request: IncomingMessage, socket: internal.Duplex, head: Buffer, callback: (ws: any) => void) {
+    handleUpgrade(request: IncomingMessage, socket: Duplex, head: Buffer, callback: (ws: any) => void) {
         this._server._handle.web.handleUpgrade(request, socket, head, callback);
     }
 
