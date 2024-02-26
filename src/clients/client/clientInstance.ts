@@ -36,7 +36,7 @@ export interface IClientService extends IClient {
   update(): void;
   sendMessage(message: string): void;
   receiveMessage(message: string, data?: object | null): void;
-  getClientLatency(client: this): void;
+  getClientLatency(client: this): Promise<void>;
   // ...weitere Methoden für die Client-Funktionen
 }
 
@@ -92,7 +92,7 @@ export class clientWrapper {
     }
   }
 
-  public async getClientLatency(client: IClient): void { // Method returns a promise
+  public async getClientLatency(client: IClient): Promise<void> { // Method returns a promise
     this._stats.latency = await si.inetLatency(client.info.ip);
     this._stats.eventCount++;
     this._stats.lastUpdates = { 'getClientLatency': Date.now() };
