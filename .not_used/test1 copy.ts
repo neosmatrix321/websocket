@@ -58,20 +58,7 @@ export default class Stats extends EventEmitterMixin<IStatsEvent>(BaseStatsEvent
         });
     }
 }
-Verwende den Code mit Vorsicht.
-Explanation of Changes
 
-Specific update... Functions: The stats collection logic is broken into separate functions for clarity and individual event emission.
-
-startStatsUpdater:  Initiates periodic updates.
-
-Standardized emitEvent: A helper to emit events with a consistent structure.
-
-Error Handling: Events are emitted on both success and failure, with informative payloads.
-
-Usage Example (Subscriber)
-
-TypeScript
 const stats = new Stats();
 
 stats.on('latencyUpdated', (event) => {

@@ -72,10 +72,7 @@ export default class Stats extends EventEmitterMixin<IStatsEvent>(BaseStatsEvent
 
     // Similar refactoring for getSI and getPU ...
 }
-Verwende den Code mit Vorsicht.
-Subscriber Example
 
-TypeScript
 const stats = new Stats(); // Assuming it's initialized 
 
 stats.on('latencyUpdated', (event: IStatsEvent) => {

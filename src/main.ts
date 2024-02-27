@@ -7,6 +7,7 @@ import { IHandleWrapper, MyWebSocket } from "./server/serverInstance.js";
 import { ISettings, PRIVATE_SETTINGS_TOKEN } from "./settings/settingsInstance.js";
 import { WebSocket } from 'ws'
 import { Server } from "https";
+import Stats, { IStatsEvent } from "./stats/stats.js";
 
 
 function isMyWebSocketWithId(ws: WebSocket): ws is MyWebSocket {
@@ -120,16 +121,27 @@ export default class Main extends EventEmitterMixin(MyClass) {
   }
 
   private async gatherAndSendStats() {
-    const updatedStats = await this.._systemMonitor.getUpdatedStats();
-    this..updateGlobalStats(updatedStats);
+    const updatedStats = await this._systemMonitor.getUpdatedStats();
+    this.updateGlobalStats(updatedStats);
 
-    this.._clients.forEach((client: any) => {
+    this._clients.forEach((client: any) => {
       if (client.readyState === client.OPEN) {
-        // ... detailed logic to build and send the stats payload...
+        // . detailed logic to build and send the stats payload.
         client.send('client aagdssdaf');
       }
     });
   }
 }
+Stats.on('latencyUpdated', (event: IStatsEvent) => {
+  if (event.data.errCode === 0) {
+      console.log('Latency:', event.data.blob.latency);
+  } else {
+      console.error('Latency error:', event.data.message);
+  }
+});
+
+Stats.on('statsUpdated', (event: IStatsEvent) => {
+  // Process the updated stats object (this.stats)
+}); 
 
 // Instantiate the main object to start your application

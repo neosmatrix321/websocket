@@ -1,93 +1,98 @@
-import "reflect-metadata";
-import { injectable, inject, Container } from "inversify";
+"use strict";
 
-// Definieren Sie die Tokens
-const MAIN_SERVICE_TOKEN = Symbol("MainService");
-const GLOBAL_VALUES_TOKEN = Symbol("GlobalValues");
-const SERVER_WRAPPER_TOKEN = Symbol("ServerWrapper");
-const PRIVATE_SETTINGS_TOKEN = Symbol("PrivateSettings");
-const CLIENTS_TOKEN = Symbol("Clients");
-const UNIQUE_CLIENT_TOKEN = Symbol("UniqueClient");
+import 'reflect-metadata';
+import { readFile } from 'node:fs/promises';
+import { Container, inject, injectable } from 'inversify';
+import { EventEmitterMixin } from '../global/globalEventHandling';
+import { IStats } from './statsInstance';
+import pidusage from 'pidusage';
+import si from 'systeminformation';
+import * as settings from '../settings/settingsInstance'; // Import settings interface/class
+import * as eH from "../global/globalEventHandling";
+import * as S from "../stats/statsInstance";
 
-// Definieren Sie die Schnittstellen
-interface IHandle {
-  web: any;
-  file: any;
+// **Revised statsType enum for clarity**
+export enum StatsType {
+  UPDATE = 'update',
+  TIMER_CREATED = 'timerCreated',
+  TIMER_STARTED = 'timerStarted',
+  TIMER_STOPPED = 'timerStopped'  
 }
 
-interface IGlobalValues {
-  // ...
+// **Interfaces for consistent event structure**
+export interface IStatsEvent extends eH.IEventMap {
+  type: StatsType;
+  message?: string; // Optional message
+  data?: {
+    errCode?: number;
+    message?: string;
+    blob?: any;
+  };
 }
 
-interface IServerWrapper {
-  handle: IHandle;
-  // ...
+// **BaseStatsEvent class for consistent event foundation**
+class BaseStatsEvent implements eH.IBaseEvent {
+  "cat": eH.catType = eH.catType.stats;
 }
 
-interface IPrivateSettings {
-  // ...
-}
-
-interface IClients {
-  [id: string]: any; // Ersetzen Sie 'any' durch den tatsächlichen Typ
-}
-
-interface IUniqueClient {
-  // ...
-}
-
-interface IMainService {
-  stats: IGlobalValues;
-  server: IServerWrapper;
-  settings: IPrivateSettings;
-  clients: IClients;
-  uniqueClient: IUniqueClient;
-}
-
-// Implementieren Sie die Klassen
-@injectable()
-class GlobalValues implements IGlobalValues {
-  // ...
-}
+const MyClassWithMixin = EventEmitterMixin(BaseStatsEvent);
+const globalEventEmitter = new MyClassWithMixin();
+const PRIVATE_SETTINGS_TOKEN = Symbol('PrivateSettings');
+const GLOBAL_STATS_TOKEN = Symbol('GlobalStats');
 
 @injectable()
-class ServerWrapper implements IServerWrapper {
-  handle: IHandle = { web: null, file: null };
-  // ...
+export default class Stats extends eH.EventEmitterMixin<IStatsEvent>(BaseStatsEvent) {
+  @inject(GLOBAL_STATS_TOKEN) stats!: IStats;
+  @inject(PRIVATE_SETTINGS_TOKEN) _settings!: settings.ISettings;
+
+  constructor() {
+    super();
+    this.updateAllStats(); 
+  }
+
+  public async createstatContainer(): Promise<void> {
+    this.stats.lastUpdates = { "createstatContainer": Date.now() };
+    this.emit(StatsType.UPDATE, "Container creation status update"); // Emit an event
+  }
+
+  public async getPid(): Promise<void> {
+    try {
+      const data = await readFile(this._settings.pidFile, 'utf-8' as BufferEncoding);
+      const pid = parseInt(data, 10);
+
+      this._settings.pid = pid;
+      this._settings.pidFileExists = true;
+      this._settings.pidFileReadable = true;
+      this.emit('pidAvailable', `PID: ${pid}`);
+
+    } catch (err) {
+      this._settings.pidFileExists = false;
+      this._settings.pidFileReadable = false;
+
+      const errorData = (err instanceof Error) ? { errCode: 999, message: err.message } : null;
+      this.emit(StatsType.UPDATE, "PID retrieval error", errorData);
+    }
+  }
+
+  public async updateAndGetPidIfNecessary(): Promise<void> {
+    if (!this._settings.pid || typeof this._settings.pid !== "number") {
+      this.stats.lastUpdates.getpid = Date.now();
+      await this.getPid(); 
+    }
+  }
+
+  public async updateAllStats() {
+    try {
+      await this.updateAndGetPidIfNecessary(); // Fetch PID if needed
+      await this.comparePids();
+      await this.getLatencyGoogle();
+      await this.getSI();
+      await this.getPU();
+
+    } catch (e) {
+      this.emit(StatsType.UPDATE, "Error updating all stats", { errCode: 998, message: e.message });
+    }
+  }
+
+  // ... (Rest of your functions with emit functionality) 
 }
-
-@injectable()
-class PrivateSettings implements IPrivateSettings {
-  // ...
-}
-
-@injectable()
-class Clients implements IClients {
-  // ...
-}
-
-@injectable()
-class UniqueClient implements IUniqueClient {
-  // ...
-}
-
-@injectable()
-class MainService implements IMainService {
-  @inject(GLOBAL_VALUES_TOKEN) public stats: IGlobalValues;
-  @inject(SERVER_WRAPPER_TOKEN) public server: IServerWrapper;
-  @inject(PRIVATE_SETTINGS_TOKEN) public settings: IPrivateSettings;
-  @inject(CLIENTS_TOKEN) public clients: IClients;
-  @inject(UNIQUE_CLIENT_TOKEN) public uniqueClient: IUniqueClient;
-}
-
-// Erstellen Sie den IoC-Container und registrieren Sie die Bindungen
-const container = new Container();
-container.bind<IGlobalValues>(GLOBAL_VALUES_TOKEN).to(GlobalValues);
-container.bind<IServerWrapper>(SERVER_WRAPPER_TOKEN).to(ServerWrapper);
-container.bind<IPrivateSettings>(PRIVATE_SETTINGS_TOKEN).to(PrivateSettings);
-container.bind<IClients>(CLIENTS_TOKEN).to(Clients);
-container.bind<IUniqueClient>(UNIQUE_CLIENT_TOKEN).to(UniqueClient);
-container.bind<IMainService>(MAIN_SERVICE_TOKEN).to(MainService);
-
-// Holen Sie sich eine Instanz des MainService
-const mainService = container.get<IMainService>(MAIN_SERVICE_TOKEN);

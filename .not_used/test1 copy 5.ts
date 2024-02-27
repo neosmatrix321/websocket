@@ -1,103 +1,102 @@
-// globalValues.ts
-import { IMainService } from './interfaces';
+"use strict";
 
-export interface IGlobalValues {
-  stats: IStats;
-  main: IMainService;  // Hauptdienst-Referenz für die Interaktion
+import 'reflect-metadata';
+import { readFile } from 'node:fs/promises';
+import { Container, inject, injectable } from 'inversify';
+import { EventEmitterMixin } from '../global/globalEventHandling';
+import { IStats } from './statsInstance';
+import pidusage from 'pidusage';
+import si from 'systeminformation';
+import * as settings from '../settings/settingsInstance'; 
+import * as eH from "../global/globalEventHandling";
+
+export enum statsType {
+  update,
+  timerCreated,
+  timerStarted,
+  timerStopped,
+  pidAvailable // Added an event type for pid availability
 }
 
-export interface IStats {
-  clientsConnected: number;
-  serverUptime: number;
-  webHandleStatus: IHandleStatus;  // Ersetzen von Basisarten
-  fileHandleStatus: IHandleStatus;
-  // ...weitere Statistiken
+// Combined interfaces for streamlined event data
+export interface IStatsEvent extends eH.IEventMap {
+  type: statsType;
+  message?: string; // Optional message for flexibility
+  data?: {
+    errCode?: number;
+    blob?: any;
+  };
 }
 
-export interface IHandleStatus {
-  isAlive: boolean;
-  hasConnection: boolean;
-  // ...weitere Handle-spezifische Status
-}
-//server.ts
-import { IHandleStatus } from './globalValues';
-
-export interface IServerWrapper {
-  handle: {
-    web: IWebHandle;
-    file: IFileHandle;
-  }
-  start(): void;
-  stop(): void;
-  // ...weitere serverbezogene Methoden
+class BaseStatsEvent implements eH.IBaseEvent {
+  "cat": eH.catType = eH.catType.stats;
 }
 
-export interface IWebHandle {
-  getStatus(): IHandleStatus;
-  // ...weitere Methoden für die Webverbindung
-}
+const MyClassWithMixin = EventEmitterMixin(BaseStatsEvent);
+const globalEventEmitter = new MyClassWithMixin();
+const PRIVATE_SETTINGS_TOKEN = Symbol('PrivateSettings');
+const GLOBAL_STATS_TOKEN = Symbol('GlobalStats');
 
-export interface IFileHandle {
-  getStatus(): IHandleStatus;
-  // ...weitere Methoden für die Dateiverbindung
-}
+@injectable()
+export default class Stats extends eH.EventEmitterMixin<IStatsEvent>(BaseStatsEvent) {
+  @inject(GLOBAL_STATS_TOKEN) stats!: IStats;
+  @inject(PRIVATE_SETTINGS_TOKEN) _settings!: settings.ISettings;
 
-// (Implementierung von ServerWrapper hier)
-// privateSettings.ts
-export interface IPrivateSettings {
-  apiKey: string;
-  adminPassword: string;
-  // ...weitere private Einstellungen 
-}
-
-// (Implementierung von privateSettings hier)
-// clients.ts 
-export interface IClient {
-  id: string; 
-  settings: IClientSettings;
-  // ...weitere Client-Eigenschaften
-}
-
-export interface IClientSettings {
-  // ... Client-spezifische Einstellungen
-}
-
-// (Implementierung von UniqueClient und ClientContainer hier)
-// main.ts
-import { Injectable, Inject } from './Injectable';
-import { IGlobalValues } from './globalValues';
-import { ServerWrapper, SERVER_WRAPPER_TOKEN } from './server';
-import { ClientContainer, CLIENT_COLLECTOR_TOKEN } from './clients'; // Wichtiger Import
-import { IPrivateSettings, PRIVATE_SETTINGS_TOKEN } from './privateSettings';
-import { Container } from 'inversify';
-
-@Injectable()
-export class MainService {
-  private _globalValues: IGlobalValues;
-  protected _server: ServerWrapper;
-  protected _settings: IPrivateSettings;
-  protected _clients: ClientContainer;
-
-  constructor(
-    @Inject(GLOBAL_VALUES_TOKEN) globalValues: IGlobalValues,
-    @Inject(SERVER_WRAPPER_TOKEN) server: ServerWrapper,
-    @Inject(CLIENT_COLLECTOR_TOKEN) clients: ClientContainer // Clients-Injection
-    @Inject(PRIVATE_SETTINGS_TOKEN) settings: IPrivateSettings
-  ) {
-    this._globalValues = globalValues;
-    this._server = server;
-    this._settings = settings;
-    this._clients = clients;
+  constructor() {
+    super();
+    this.updateAllStats();
   }
 
-  // ...Implementierung der Hauptmethoden 
+  public async createstatContainer(): Promise<void> {
+    this.stats.lastUpdates["createstatContainer"] = Date.now();
+    this.emit('update'); // Emit a generic 'update' event
+  }
+
+  public async getPid(): Promise<void> {
+    try {
+      const data = await readFile(this._settings.pidFile, 'utf-8' as BufferEncoding);
+      const pid = parseInt(data, 10);
+
+      this._settings.pid = pid;
+      this._settings.pidFileExists = true;
+      this._settings.pidFileReadable = true;
+      this.emit('pidAvailable', pid); // Emit a specific event
+
+    } catch (err) {
+      // Improved error handling for clarity
+      if (err instanceof Error && err.code === 'ENOENT') { 
+        this._settings.pidFileExists = false;
+      } else {
+        console.error('Error opening file:', err);
+        this._settings.pidFileExists = true; 
+        this._settings.pidFileReadable = false;
+      }
+      this.emit('update'); // Emit update after potential changes 
+    }
+  }
+
+  public async updateAndGetPidIfNecessary(): Promise<void> {
+    if (!this._settings.pid || typeof this._settings.pid !== "number") {
+      this.stats.lastUpdates.getpid = Date.now();
+      await this.getPid();
+    }
+  }
+
+  public async updateAllStats() {
+    try {
+      await this.updateAndGetPidIfNecessary();
+      await this.comparePids();
+      await this.getLatencyGoogle();
+      await this.getSI();
+      await this.getPU();
+
+      this.emit('update'); // Emit the 'update' event at the end
+    } catch (e) {
+      console.error("Error fetching google ping:", e);
+      this.stats.latencyGoogle = null;
+      this.emit('update'); // Emit 'update' even if there's an error
+    }
+  }
+
+  // ... (Rest of your Stats class methods) 
 }
-// bindConfig.ts (Beispielhafte Konfigurationsdatei)
-import { Container } from 'inversify';
-import { ServerWrapper, SERVER_WRAPPER_TOKEN, MainService, MAIN_SERVICE_TOKEN, /*...weitere Imports */ } from './...';
-
-const container = new Container();
-
-container.bind<MainService>(MAIN_SERVICE_TOKEN).to(MainService).inSingletonScope();
-container.bind<ServerWrapper>(SERVER_WRAPPER_TOKEN).to(ServerWrapper).inSingletonScope();
-// ...weitere Bindungen hinzufügen

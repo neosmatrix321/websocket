@@ -71,24 +71,3 @@ export default class Stats extends EventEmitterMixin<IStatsEvent>(BaseStatsEvent
 
     // ... (Similar refactoring for getSI, getPU, etc.) ...
 }
-Verwende den Code mit Vorsicht.
-Subscriber Example
-
-TypeScript
-import { inject, injectable } from 'inversify';
-import { Stats } from './stats'; 
-
-@injectable()
-export class StatsMonitor {
-    @inject(Stats) private statsService!: Stats;
-
-    startMonitoring() {
-        this.statsService.on('latencyUpdated', (event: IStatsEvent) => {
-            // Handle latency updates
-        });
-
-        this.statsService.on('statsUpdated', (event: IStatsEvent) => {
-            // Handle comprehensive stats updates
-        });
-    }
-}
