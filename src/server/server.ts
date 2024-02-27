@@ -3,7 +3,7 @@
 import { createServer } from 'https';
 import { readFileSync } from 'fs';
 import { IncomingMessage } from 'http';
-import { EventEmitterMixin } from '../global/globalEventHandling';
+import { EventEmitterMixin } from '../global/EventHandlingMixin';
 import { WebSocket, WebSocketServer, createWebSocketStream } from 'ws';
 import Main from '../main';
 import { ClientType, IClient } from '../clients/clientInstance';

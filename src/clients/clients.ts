@@ -1,6 +1,6 @@
 "use strict";
 import { inject, injectable } from "inversify";
-import * as eH from "../global/globalEventHandling";
+import * as eH from "../global/EventHandlingMixin";
 import * as C from "./clientInstance";
 import si from 'systeminformation';
 import { ISettings, PRIVATE_SETTINGS_TOKEN } from "../settings/settingsInstance";

@@ -3,12 +3,12 @@
 import 'reflect-metadata';
 import { readFile } from 'node:fs/promises';
 import { Container, inject, injectable } from 'inversify';
-import { EventEmitterMixin } from '../global/globalEventHandling';
+import { EventEmitterMixin } from '../global/EventHandlingMixin';
 import { IStats } from './statsInstance';
 import pidusage from 'pidusage';
 import si from 'systeminformation';
 import * as settings from '../settings/settingsInstance'; // Import settings interface/class
-import * as eH from "../global/globalEventHandling";
+import * as eH from "../global/EventHandlingMixin";
 import * as S from "../stats/statsInstance";
 import * as pS from "../settings/settingsInstance";
 

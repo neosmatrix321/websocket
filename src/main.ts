@@ -1,18 +1,20 @@
 "use strict";
 import "reflect-metadata";
 import { inject, injectable } from "inversify";
-import { EventEmitterMixin } from "./global/globalEventHandling.js";
-import { GLOBAL_STATS_TOKEN, IStats, IglobalStats } from "./stats/statsInstance.js";
+import { EventEmitterMixin } from "./global/EventHandlingMixin.js";
+import { IStats, IglobalStats } from "./stats/statsInstance.js";
 import { IHandleWrapper, MyWebSocket } from "./server/serverInstance.js";
 import { ISettings, PRIVATE_SETTINGS_TOKEN } from "./settings/settingsInstance.js";
 import { WebSocket } from 'ws'
 import { Server } from "https";
 import Stats, { IStatsEvent } from "./stats/stats.js";
+import * as eM from "./global/EventHandlingManager.js";
 
 
 function isMyWebSocketWithId(ws: WebSocket): ws is MyWebSocket {
   return 'id' in ws;
 }
+export const GLOBAL_STATS_TOKEN = Symbol('privateSettings');
 
 class MyClass { }
 const MyClassWithMixin = EventEmitterMixin(MyClass);
@@ -22,6 +24,7 @@ const globalEventEmitter = new MyClassWithMixin();
 export default class Main extends EventEmitterMixin(MyClass) {
   @inject(GLOBAL_STATS_TOKEN) stats!: IStats;
   @inject(PRIVATE_SETTINGS_TOKEN) _settings!: ISettings;
+  @inject(eM.EVENT_MANAGER_TOKEN) eM!: eM.eventManager;
   public constructor() {
     super();
     this.initialize();
@@ -74,13 +77,6 @@ export default class Main extends EventEmitterMixin(MyClass) {
       }
     }
   }
-  private async setupWebSocketEvents(ws: WebSocket) {
-    ws.on('close', this.handleClose.bind(this, ws));
-    ws.on('message', this.handleMessage.bind(this, ws));
-    ws.on('greeting', this.handleGreeting.bind(this, ws));
-    this.startIntervalIfNeeded();
-  }
-
   private async handleGreeting(client: WebSocket, obj: any) {
     const newIP = client.socket.remoteAddress;
     const type = 'basic'
@@ -132,16 +128,5 @@ export default class Main extends EventEmitterMixin(MyClass) {
     });
   }
 }
-Stats.on('latencyUpdated', (event: IStatsEvent) => {
-  if (event.data.errCode === 0) {
-      console.log('Latency:', event.data.blob.latency);
-  } else {
-      console.error('Latency error:', event.data.message);
-  }
-});
-
-Stats.on('statsUpdated', (event: IStatsEvent) => {
-  // Process the updated stats object (this.stats)
-}); 
 
 // Instantiate the main object to start your application
