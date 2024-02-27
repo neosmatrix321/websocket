@@ -1,43 +1,87 @@
 "use strict";
 import { inject, injectable } from "inversify";
-import { EventEmitterMixin } from "../global/globalEventHandling";
-import { ClientType, clientWrapper, IClient, IClientConfig, IClientSettings } from "./client/clientInstance";
+import * as eH from "../global/globalEventHandling";
+import * as C from "./clientInstance";
 import si from 'systeminformation';
-import Main from "../main";
+import { ISettings, PRIVATE_SETTINGS_TOKEN } from "../settings/settingsInstance";
 
+const CLIENTS_WRAPPER_TOKEN = Symbol('ClientsService');
 
-class MyClass { }
-const MyClassWithMixin = EventEmitterMixin(MyClass);
+export enum clientsType {
+  create,
+  update,
+  delete,
+  statsUpdated
+}
+export interface IClientsEvent {
+  type: clientsType;
+  client?: C.IClientInfo;
+  data?: {
+    errCode: number;
+    message?: string;
+  };
+}
+export class ClientsEvent {
+  type?: clientsType;
+  client?: C.IClientInfo;
+  data?: {
+    errCode: number;
+    message?: string;
+    blob?: any;
+  };
+}
+
+class BaseClientsEvent implements eH.IBaseEvent{
+  "cat": eH.catType = eH.catType.clients;
+}
+
+const MyClassWithMixin = eH.EventEmitterMixin(BaseClientsEvent);
 const globalEventEmitter = new MyClassWithMixin();
-
 @injectable()
-export default class Clients extends Main {
-
+export default class Clients extends eH.EventEmitterMixin<IClientsEvent>(BaseClientsEvent) {
+  private _clients: Record<string, C.IClient>;
+  constructor(@inject(CLIENTS_WRAPPER_TOKEN) clientsInstance: Record<string, C.IClient>) {
+    super();
+    this._clients = clientsInstance || {};  // Initialize if needed
+  }
   public addClient(id: string, ip: string, type: string ) { // Adjust 'any' type later
-    let typeFinal: ClientType;
+    let typeFinal: C.ClientType;
     switch (type) {
       case 'admin':
-        typeFinal = ClientType.Admin; 
+        typeFinal = C.ClientType.Admin; 
         break;
       case 'server':
-        typeFinal = ClientType.Server; 
+        typeFinal = C.ClientType.Server; 
         break;
         default:
-        typeFinal = ClientType.Basic;
+        typeFinal = C.ClientType.Basic;
     }
-    this._clients.create(id, ip, typeFinal); // Use index notation
-    globalEventEmitter.emit("addClient " + id + " ip: "+ ip); 
-  }
-
-  public updateConfig(id: string, config: IClientConfig): void { // Adjust the 'any' type later
-    const client = this._clients[id];
-    if (client) {
-      client._config = { ...config };
-      client._stats.eventCount++;
-      client._stats.lastUpdates.updateConfig = Date.now();
+    //public create(newID: string, newIP: string, type: ClientType): void {
+    const newClientInfo: C.IClientInfo = { id: id, ip: ip, type: typeFinal };
+    let newResult: { errCode: number, message?: string, blob?: any } = { errCode: 1 };
+    try {
+      const newClient: C.IClient = C.clientWrapper.createClient(newClientInfo);
+      this._clients[id] = newClient;
+      newResult = { errCode: 0 };
+    } catch (e) {
+      newResult = { errCode: 2, message: 'create client failed', blob: e };
     }
+    const newEvent: IClientsEvent = {
+      type: clientsType.create,
+      client: newClientInfo,
+      data: newResult 
+  };     this.emit('clientAdded', newEvent);
   }
-  public updateClientSettings(id: string, settings: IClientSettings) {
+  // public updateClientConfig(id: string, info: IClientInfo): void {
+  //   const newClientInfo: IClientInfo = { id: id, ip: ip, type: typeFinal };
+  //   const client = this._clients[id];
+  //   if (client) {
+  //     client.info.type = type;
+  //     client._stats.eventCount++;
+  //     client._stats.lastUpdates.updateConfig = Date.now();
+  //   }
+  // }
+  public updateClientSettings(id: string, settings: C.IClientSettings) {
     const client = this._clients[id];
     if (client) {
       client._clientSettings = { ...settings }; // Update settings
@@ -55,6 +99,13 @@ export default class Clients extends Main {
       client._stats.lastUpdates['getClientLatency'] = Date.now();
       globalEventEmitter.emit("updateClientStats" + id);
     }
+  }
+  public removeClient(clientId: string): void {
+    delete this._clients[clientId];
+  }
+
+  public getClient(clientId: string): C.IClient | undefined {
+    return this._clients[clientId];
   }
 }
 

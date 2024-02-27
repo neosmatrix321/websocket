@@ -1,161 +1,83 @@
-// statsInstance.ts
-export interface IStats {
-  webHandle: { isAlive: boolean, hasConnection: boolean, connectedClients: number },
-  fileHandle: { isAlive: boolean, hasConnection: boolean, connectedClients: number },
-  clientsCounter: number,
-  activeClients: number,
-  latencyGoogle: number | null,
-  si: object,
-  pu: object,
-  rcon: object,
-  lastUpdates: Record<string, number>,
-  clients: object,
-  interval_sendinfo: any
+import { inject, injectable } from 'inversify';
+import { EventEmitterMixin } from '../global/globalEventHandling';
+import { IStats } from './statsInstance';
+import pidusage from 'pidusage';
+import si from 'systeminformation';
+import * as settings from '../settings/settingsInstance'; 
+import * as eH from "../global/globalEventHandling";
+
+interface IStatsUpdateData {
+    errCode: number;  
+    message?: string; 
+    data?: any; 
 }
 
-export class Stats implements IStats {
-  // Implement the properties and methods here
-}
+@injectable()
+export default class Stats extends EventEmitterMixin<IStatsEvent>(BaseStatsEvent) {
+    @inject(GLOBAL_STATS_TOKEN) stats!: IStats;
+    @inject(PRIVATE_SETTINGS_TOKEN) _settings!: settings.ISettings;
 
-// settingsInstance.ts
-export interface ISettings {
-  adminPassword: string,
-  pidFile: string,
-  pid: number | null,
-  pidFileExists: number | null,
-  pidFileReadable: number | null,
-  debug: boolean,
-  certPath: string,
-  keyPath: string,
-  ip: string,
-  rconPort: number,
-  streamServerPort: number
-}
-
-export class Settings implements ISettings {
-  // Implement the properties and methods here
-}
-
-// clientInstance.ts
-export interface IClient {
-  // Define the properties and methods of a client here
-}
-
-export class Client implements IClient {
-  // Implement the properties and methods here
-}
-
-export class ClientContainer {
-  private _clients: Map<number, IClient>;
-
-  constructor() {
-    this._clients = new Map();
-  }
-
-  addClient(client: IClient): void {
-    this._clients.set(client.id, client);
-  }
-
-  removeClient(clientId: number): void {
-    this._clients.delete(clientId);
-  }
-
-  getClient(clientId: number): IClient | undefined {
-    return this._clients.get(clientId);
-  }
-
-  getAllClients(): IClient[] {
-    return Array.from(this._clients.values());
-  }
-}
-
-// main.ts
-import { EventEmitter } from 'events';
-
-export class Main extends EventEmitter {
-  private _stats: Stats;
-  private _settings: Settings;
-  private _clients: ClientContainer;
-
-  constructor(stats: Stats, settings: Settings, clients: ClientContainer) {
-    super();
-    this._stats = stats;
-    this._settings = settings;
-    this._clients = clients;
-  }
-
-  // Implement the methods here
-}
-
-// statsInstance.ts
-export class Stats implements IStats {
-  private static _instance: Stats;
-  private constructor() {
-    // Implement the properties here
-  }
-  public static getInstance(): Stats {
-    if (!Stats._instance) {
-      Stats._instance = new Stats();
+    constructor() {
+        super();
+        this.startStatsUpdater(); // Start periodic updates
     }
-    return Stats._instance;
-  }
-  // Implement the methods here
-}
 
-// settingsInstance.ts
-export class Settings implements ISettings {
-  private static _instance: Settings;
-  private constructor() {
-    // Implement the properties here
-  }
-  public static getInstance(): Settings {
-    if (!Settings._instance) {
-      Settings._instance = new Settings();
+    // ... other methods ...
+
+    private async updateLatency(): Promise<void> {
+        try {
+            const latency = await si.inetLatency();
+            this.stats.latencyGoogle = latency;
+            this.emitEvent('latencyUpdated', { errCode: 0, data: { latency } }); 
+        } catch (e) {
+            this.emitEvent('latencyUpdated', { errCode: 1, message: 'Failed to fetch latency' }); 
+        }
     }
-    return Settings._instance;
-  }
-  // Implement the methods here
-}
 
-// clientInstance.ts
-export class ClientContainer {
-  private static _instance: ClientContainer;
-  private _clients: Map<number, IClient>;
-  private constructor() {
-    this._clients = new Map();
-  }
-  public static getInstance(): ClientContainer {
-    if (!ClientContainer._instance) {
-      ClientContainer._instance = new ClientContainer();
+    private async updateSystemInfo(): Promise<void> {
+        // ... similar logic to update latency, emitting 'systemInfoUpdated'
     }
-    return ClientContainer._instance;
-  }
-  // Implement the methods here
-}
 
-// main.ts
-export class Main extends EventEmitter {
-  private static _instance: Main;
-  private _stats: Stats;
-  private _settings: Settings;
-  private _clients: ClientContainer;
-  private constructor(stats: Stats, settings: Settings, clients: ClientContainer) {
-    super();
-    this._stats = stats;
-    this._settings = settings;
-    this._clients = clients;
-  }
-  public static getInstance(): Main {
-    if (!Main._instance) {
-      const stats = Stats.getInstance();
-      const settings = Settings.getInstance();
-      const clients = ClientContainer.getInstance();
-      Main._instance = new Main(stats, settings, clients);
+    private async updateProcessUsage(): Promise<void> {
+        // ... similar logic, emitting 'processUsageUpdated'
     }
-    return Main._instance;
-  }
-  // Implement the methods here
-}
 
-// index.ts
-const main = Main.getInstance();
+    private async startStatsUpdater() {
+        setInterval(() => {
+            this.updateLatency();
+            this.updateSystemInfo();
+            this.updateProcessUsage();
+        }, 5000); // Update every 5 seconds (adjust as needed)
+    }
+
+    private emitEvent(type: statsType, data: IStatsUpdateData) {
+        this.emit(type, {
+            type, 
+            message: data.message || 'Stats updated', 
+            data
+        });
+    }
+}
+Verwende den Code mit Vorsicht.
+Explanation of Changes
+
+Specific update... Functions: The stats collection logic is broken into separate functions for clarity and individual event emission.
+
+startStatsUpdater:  Initiates periodic updates.
+
+Standardized emitEvent: A helper to emit events with a consistent structure.
+
+Error Handling: Events are emitted on both success and failure, with informative payloads.
+
+Usage Example (Subscriber)
+
+TypeScript
+const stats = new Stats();
+
+stats.on('latencyUpdated', (event) => {
+    if (event.data.errCode === 0) {
+        console.log('Google Latency:', event.data.data.latency);
+    } else {
+        console.error('Error:', event.data.message); 
+    }
+});

@@ -6,7 +6,10 @@ import { IncomingMessage } from 'http';
 import { EventEmitterMixin } from '../global/globalEventHandling';
 import { WebSocket, WebSocketServer, createWebSocketStream } from 'ws';
 import Main from '../main';
-import { ClientType, IClient } from '../clients/client/clientInstance';
+import { ClientType, IClient } from '../clients/clientInstance';
+import { inject, injectable } from 'inversify';
+import { IHandleWrapper, SERVER_WRAPPER_TOKEN } from './serverInstance';
+import { ISettings, PRIVATE_SETTINGS_TOKEN } from '../settings/settingsInstance';
 
 interface MyWebSocket extends WebSocket {
     id: string
@@ -19,19 +22,22 @@ function isMyWebSocketWithId(ws: WebSocket): ws is MyWebSocket {
     return 'id' in ws;
 }
 
-export default class Server extends Main {
+@injectable()
+export default class Server extends EventEmitterMixin(MyClass) {
+    @inject(SERVER_WRAPPER_TOKEN) _server!: IHandleWrapper;
+    @inject(PRIVATE_SETTINGS_TOKEN) _settings!: ISettings;
     constructor() {
         super();
     }
 
-    public async create() {
+    public async createServer() {
         try {
             this._server._handle.web = new WebSocketServer({ noServer: true }); 
             this._server._handle.file = new WebSocketServer({ noServer: true });
             
             const _serverCert = createServer({
-                cert: readFileSync(this._settings.certPath),
-                key: readFileSync(this._settings.keyPath)
+                cert: readFileSync(this._server._settings.certPath),
+                key: readFileSync(this._server._settings.keyPath)
             });
 
             _serverCert.on('upgrade', (request, socket, head) => {
@@ -51,7 +57,6 @@ export default class Server extends Main {
                 this.emitConnection(webSocketStream, request); // Adapt emitConnection if needed 
             });
             });    
-            this.stats.lastUpdates = { "web": Date.now() };
 
                 // if (this.stats.webHandle.isAlive) {
                 //     this._server._handle.web.handleUpgrade(request, socket, head, (ws) => {
@@ -61,18 +66,19 @@ export default class Server extends Main {
                 //     socket.destroy();
                 // }
 
-            _serverCert.listen(this._settings.streamServerPort, this._settings.ip, () => {
-                console.log(`HTTPS server ${this._settings.ip} listening on ${this._settings.streamServerPort}`);
-                globalEventEmitter.emitCustomEvent('server_created');
+            _serverCert.listen(this._server._settings.streamServerPort, this._server._settings.ip, () => {
+                console.log(`HTTPS server ${this._server._settings.ip} listening on ${this._server._settings.streamServerPort}`);
+                this.emit('serverCreated');
             });
         } catch (err) {
             console.error("Error creating server:", err);
+            this.emit('serverCreated', { 'err': err });
         }
     }
     public async createTimer() {
         // Interval function moved here
         // this.stats.updateAndGetPidIfNecessary();
-        this.emitCustomEvent('createTimer', 'Global Timer started');
+        this.emit('createTimer');
 
         this._server._handle.web.clients.forEach((ws_client: WebSocket) => {
             if (isMyWebSocketWithId(ws_client)) {

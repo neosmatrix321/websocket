@@ -1,6 +1,6 @@
 "use strict";
 import "reflect-metadata";
-import { inject, injectable, optional } from 'inversify';
+import { Container, inject, injectable, optional } from 'inversify';
 
 // Interfaces (potentially in a separate file, interfaces.ts)
 import { WebSocketServer, WebSocket } from 'ws'
@@ -12,11 +12,19 @@ interface IHandle {
   file: any;
 }
 interface IHandleStats {
-
+  dummy: number;
+}
+interface IHandleSettings {
+  certPath: string;
+  keyPath: string;
+  ip: string;
+  rconPort: number;
+  streamServerPort: number;
 }
 export interface IHandleWrapper  {
   _handle: IHandle; 
   _stats: IHandleStats;
+  _settings: IHandleSettings;
 }
 
 export interface IserverWrapper {
@@ -32,7 +40,16 @@ export class serverWrapper {
         web: null,
         file: null
       },
-      _stats: null
+      _stats: {
+        dummy: 0
+      },
+      _settings: {
+        certPath: '/etc/letsencrypt/live/neo.dnsfor.me/cert.pem',
+        keyPath: '/etc/letsencrypt/live/neo.dnsfor.me/privkey.pem',
+        ip: "192.168.228.7",
+        rconPort: 25575,
+        streamServerPort: 8080
+      }
     };
   }
 
@@ -47,5 +64,4 @@ export class serverWrapper {
   //   this._server.setHandleProperty(property, value);
   // }
 }
-
 export const SERVER_WRAPPER_TOKEN = Symbol('ServerService');

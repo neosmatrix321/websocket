@@ -2,7 +2,7 @@
 import "reflect-metadata";
 
 
-import { optional, inject, injectable } from "inversify";
+import { optional, inject, injectable, Container } from "inversify";
 
 export interface ISettings {
   adminPassword: string,
@@ -11,11 +11,6 @@ export interface ISettings {
   pidFileExists: boolean,
   pidFileReadable: boolean,
   debug: boolean,
-  certPath: string,
-  keyPath: string,
-  ip: string,
-  rconPort: number,
-  streamServerPort: number
 }
 export interface IprivateSettings {
   getSettings(): ISettings; 
@@ -32,11 +27,6 @@ export class privateSettings implements IprivateSettings {
       pidFileExists: false,
       pidFileReadable: false,
       debug: false,
-      certPath: '/etc/letsencrypt/live/neo.dnsfor.me/cert.pem',
-      keyPath: '/etc/letsencrypt/live/neo.dnsfor.me/privkey.pem',
-      ip: "192.168.228.7",
-      rconPort: 25575,
-      streamServerPort: 8080
     };
   }
   public getSettings(): ISettings {

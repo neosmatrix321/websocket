@@ -2,17 +2,12 @@
 import "reflect-metadata";
 import { inject, injectable } from "inversify";
 import { EventEmitterMixin } from "./global/globalEventHandling.js";
-import { IStats } from "./stats/statsInstance.js";
+import { GLOBAL_STATS_TOKEN, IStats, IglobalStats } from "./stats/statsInstance.js";
 import { IHandleWrapper, MyWebSocket } from "./server/serverInstance.js";
-import { ISettings } from "./settings/settingsInstance.js";
-import { ClientType, IClient, clientWrapper } from "./clients/client/clientInstance.js";
+import { ISettings, PRIVATE_SETTINGS_TOKEN } from "./settings/settingsInstance.js";
 import { WebSocket } from 'ws'
+import { Server } from "https";
 
-const GLOBAL_STATS_TOKEN = Symbol('GlobalStats');
-const SERVER_WRAPPER_TOKEN = Symbol('ServerWrapper');
-const PRIVATE_SETTINGS_TOKEN = Symbol('PrivateSettings');
-const CLIENTS_WRAPPER_TOKEN = Symbol('ClientsWrapper');
-export const MAIN_SERVICE_TOKEN = Symbol('Main');
 
 function isMyWebSocketWithId(ws: WebSocket): ws is MyWebSocket {
   return 'id' in ws;
@@ -25,21 +20,20 @@ const globalEventEmitter = new MyClassWithMixin();
 @injectable()
 export default class Main extends EventEmitterMixin(MyClass) {
   @inject(GLOBAL_STATS_TOKEN) stats!: IStats;
-  @inject(SERVER_WRAPPER_TOKEN) _server!: IHandleWrapper;
   @inject(PRIVATE_SETTINGS_TOKEN) _settings!: ISettings;
-  @inject(CLIENTS_WRAPPER_TOKEN) _clients!: IClient;
-    public constructor() {
+  public constructor() {
     super();
     this.initialize();
+    this.on('serverCreated', this.gatherAndSendStats );
   }
 
   public async initialize() {
     console.log(this);
     try {
-      await this._server.create();
+      await Server.createServer();
       this._server.on('connection', this.handleConnection.bind(this));
       this.setupGlobalEventListeners();
-      this.gatherAndSendStats();
+      
 
     } catch (err) {
       console.error("Main Initialization Error: ", err);
@@ -52,8 +46,6 @@ export default class Main extends EventEmitterMixin(MyClass) {
     globalEventEmitter.on('close', this.handleClose.bind(this));
     globalEventEmitter.on('message', this.handleMessage.bind(this));
     globalEventEmitter.on('error', console.error);
-    // this.._server.on('message', this.handleMessage.bind(this)); // Assuming ServerWrapper emits 'message'
-    // this.._server.on('close', this.handleClose.bind(this));
   }
 
   private async handleConnection(ws: any) {
@@ -116,7 +108,7 @@ export default class Main extends EventEmitterMixin(MyClass) {
     await this._clients.removeClient(ws.id); // Assuming you have removeClient
     this._server._handle.web.destroyClient(ws.ip); // If applicable
     ws.terminate();
-    this.clearIntervalIfNeeded();
+    this.startIntervalIfNeeded();
   }
 
   private startIntervalIfNeeded() {
@@ -124,13 +116,6 @@ export default class Main extends EventEmitterMixin(MyClass) {
       this.stats.interval_sendinfo = setInterval(() => {
         this.gatherAndSendStats();
       }, 1000);
-    }
-  }
-
-  private clearIntervalIfNeeded() {
-    if (this.stats.interval_sendinfo) {
-      clearInterval(this.stats.interval_sendinfo);
-      this.stats.interval_sendinfo = undefined;
     }
   }
 

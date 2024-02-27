@@ -8,14 +8,55 @@ import { IStats } from './statsInstance';
 import pidusage from 'pidusage';
 import si from 'systeminformation';
 import * as settings from '../settings/settingsInstance'; // Import settings interface/class
-class MyClass { }
-const MyClassWithMixin = EventEmitterMixin(MyClass);
+import * as eH from "../global/globalEventHandling";
+import * as S from "../stats/statsInstance";
+
+export enum statsType {
+  update,
+  timerCreated,
+  timerStarted,
+  timerStopped  
+}
+
+export interface IStatsEvent extends eH.IEventMap {
+  type: statsType;
+  message: string;
+  data?: {
+    errCode: number;
+    message?: string;
+    blob?: any;
+  };
+}
+export interface IStatsEvent {
+  type: statsType;
+  data?: {
+    errCode: number;
+    message?: string;
+    blob?: any;
+  };
+}
+export class StatsEvent {
+  type?: statsType;
+  data?: {
+    errCode: number;
+    message?: string;
+    blob?: any;
+  };
+}
+
+class BaseStatsEvent implements eH.IBaseEvent{
+  "cat": eH.catType = eH.catType.stats;
+}
+
+
+
+const MyClassWithMixin = EventEmitterMixin(BaseStatsEvent);
 const globalEventEmitter = new MyClassWithMixin();
 const PRIVATE_SETTINGS_TOKEN = Symbol('PrivateSettings');
 const GLOBAL_STATS_TOKEN = Symbol('GlobalStats');
 
 @injectable()
-export default class Stats extends EventEmitterMixin(MyClass) {
+export default class Stats extends eH.EventEmitterMixin<IStatsEvent>(BaseStatsEvent) {
   @inject(GLOBAL_STATS_TOKEN) stats!: IStats;
   @inject(PRIVATE_SETTINGS_TOKEN) _settings!: settings.ISettings;
   constructor(

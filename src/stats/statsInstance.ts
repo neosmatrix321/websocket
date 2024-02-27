@@ -1,6 +1,6 @@
 "use strict";
 import "reflect-metadata";
-import { injectable, optional, inject } from "inversify";
+import { injectable, optional, inject, Container } from "inversify";
 interface IwebHandle {
   isAlive: boolean,
   hasConnection: boolean,
@@ -33,8 +33,8 @@ export interface IglobalStats {
 //   updateGlobalStats(allStats: IglobalStats): void;
 // }
 @injectable()
-export default class globalStats implements IglobalStats {
-  public stats!: IStats;
+export class globalStats {
+  public stats: IStats;
   public constructor(@inject(GLOBAL_STATS_TOKEN) statsInstance: IStats) {
     this.stats = statsInstance || {
       webHandle: { isAlive: false, hasConnection: false, connectedClients: 0 },
@@ -59,7 +59,9 @@ export default class globalStats implements IglobalStats {
   // }
 }
 export const GLOBAL_STATS_TOKEN = Symbol('StatService');
-// const statsInstance = new Container();
-// statsInstance.bind<IStats>(GLOBAL_STATS_TOKEN).toConstantValue(null);
-// export default statsInstance;
 
+const stats = new Container();
+stats.bind<IStats>(GLOBAL_STATS_TOKEN);
+stats.bind<globalStats>(globalStats).toSelf().inSingletonScope();
+
+export default stats;

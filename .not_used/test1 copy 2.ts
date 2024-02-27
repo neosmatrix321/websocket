@@ -1,44 +1,94 @@
-import "reflect-metadata";
-import { Container, injectable, inject } from "inversify";
+import { inject, injectable } from 'inversify';
+import { EventEmitterMixin, catType, IStatsEvent, statsType, IBaseEvent } from '../global/globalEventHandling';
+import { IStats } from './statsInstance';
+import pidusage from 'pidusage';
+import si from 'systeminformation';
+import * as settings from '../settings/settingsInstance'; 
 
-const TYPES = {
-    ClassA: Symbol.for("ClassA"),
-    ClassB: Symbol.for("ClassB"),
-    Main: Symbol.for("Main")
-};
+// ... interfaces (IStatsEvent, IBaseEvent) ...
 
-@injectable()
-class ClassA {
-    public value = "Wert aus Klasse A";
-}
-@injectable()
-class ClassB {
-    public value = "Wert aus Klasse B";
+class BaseStatsEvent implements IBaseEvent {
+    cat = catType.stats;
 }
 
 @injectable()
-class Main {
-    private classA: ClassA;
-    private classB: ClassB;
+export default class Stats extends EventEmitterMixin<IStatsEvent>(BaseStatsEvent) {
+    @inject(GLOBAL_STATS_TOKEN) stats!: IStats;
+    @inject(PRIVATE_SETTINGS_TOKEN) _settings!: settings.ISettings;
 
-    public constructor(
-        @inject(TYPES.ClassA) classA: ClassA,
-        @inject(TYPES.ClassB) classB: ClassB
-    ) {
-        this.classA = classA;
-        this.classB = classB;
+    constructor() {
+        super();
+        this.initialize();
     }
 
-    public logValues(): void {
-        console.log(this.classA.value);
-        console.log(this.classB.value);
+    private async initialize() {
+        // ... (Potentially fetch initial stats here) ...
+        this.updateStatsPeriodically(); 
+    }
+
+    private updateStatsPeriodically() {
+        // Example: Update stats every 5 seconds
+        setInterval(() => {
+            this.updateAllStats(); 
+        }, 5000);
+    }
+
+    // ... (other Stats class methods) ...
+
+    public async updateAllStats() {
+        try {
+            await this.getPid(); 
+            await this.comparePids(); 
+            await this.getLatencyGoogle();
+            await this.getSI();
+            await this.getPU();
+
+            this.emit('statsUpdated', { 
+                type: statsType.update, 
+                data: { errCode: 0, blob: this.stats } 
+            }); 
+        } catch (e) {
+            this.emit('statsUpdated', {
+                type: statsType.update,
+                data: { errCode: 1, message: e.message }
+            }); 
+        }
+    }
+
+    private async getLatencyGoogle(): Promise<void> {
+        // ... (your existing logic) ...
+
+        const eventData: IStatsEvent = {
+            type: statsType.update,
+            message: 'Google latency updated', // Or a more specific message
+            data: {
+                errCode: 0, 
+                blob: { latencyGoogle: this.stats.latencyGoogle }
+            } 
+        };
+        this.emit('latencyUpdated', eventData); 
+    }
+
+    // ... (Similar refactoring for getSI, getPU, etc.) ...
+}
+Verwende den Code mit Vorsicht.
+Subscriber Example
+
+TypeScript
+import { inject, injectable } from 'inversify';
+import { Stats } from './stats'; 
+
+@injectable()
+export class StatsMonitor {
+    @inject(Stats) private statsService!: Stats;
+
+    startMonitoring() {
+        this.statsService.on('latencyUpdated', (event: IStatsEvent) => {
+            // Handle latency updates
+        });
+
+        this.statsService.on('statsUpdated', (event: IStatsEvent) => {
+            // Handle comprehensive stats updates
+        });
     }
 }
-
-const container = new Container();
-container.bind(TYPES.ClassA).to(ClassA);
-container.bind(TYPES.ClassB).to(ClassB);
-container.bind(TYPES.Main).to(Main);
-
-const main = container.get<Main>(TYPES.Main);
-main.logValues();
