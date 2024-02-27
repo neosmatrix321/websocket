@@ -1,45 +1,60 @@
 "use strict";
 import { inject, injectable } from "inversify";
 import { EventEmitterMixin } from "../global/globalEventHandling";
-import { clientWrapper, IClient } from "./client/clientInstance";
+import { ClientType, clientWrapper, IClient, IClientConfig, IClientSettings } from "./client/clientInstance";
+import si from 'systeminformation';
+import Main from "../main";
 
-export const CLIENTS_WRAPPER_TOKEN = Symbol('Clients');
 
 class MyClass { }
 const MyClassWithMixin = EventEmitterMixin(MyClass);
 const globalEventEmitter = new MyClassWithMixin();
 
 @injectable()
-export default class Clients extends EventEmitterMixin(Object) {
-  protected _clients: Record<string, IClient> = {}; // Clients dictionary
+export default class Clients extends Main {
 
-  public constructor(@inject(CLIENTS_WRAPPER_TOKEN) statsInstance: Record<string, IClient>) {
-    super();
-    this._clients = {};  // Initialize if needed
-  }
-
-  addClient(id: string, ip: string) { // Adjust 'any' type later
-    this._clients[id].create(id, ip); // Use index notation
+  public addClient(id: string, ip: string, type: string ) { // Adjust 'any' type later
+    let typeFinal: ClientType;
+    switch (type) {
+      case 'admin':
+        typeFinal = ClientType.Admin; 
+        break;
+      case 'server':
+        typeFinal = ClientType.Server; 
+        break;
+        default:
+        typeFinal = ClientType.Basic;
+    }
+    this._clients.create(id, ip, typeFinal); // Use index notation
     globalEventEmitter.emit("addClient " + id + " ip: "+ ip); 
   }
 
-  async updateClientStats(id: string) {
-    const client = this._clients[id];
-    this._clients[id].getClientLatency(this._clients[id], () => { globalEventEmitter.emit("updateClientStats" + id); }); // Assume getClientLatency returns stats
-    
-  }
-
-  updateClient(id: string, settings: any) { // Replace 'any' later
+  public updateConfig(id: string, config: IClientConfig): void { // Adjust the 'any' type later
     const client = this._clients[id];
     if (client) {
-      client.updateSettings(settings); // Use existing method
-      globalEventEmitter.emit("updateClient" + id);
-    } 
+      client._config = { ...config };
+      client._stats.eventCount++;
+      client._stats.lastUpdates.updateConfig = Date.now();
+    }
+  }
+  public updateClientSettings(id: string, settings: IClientSettings) {
+    const client = this._clients[id];
+    if (client) {
+      client._clientSettings = { ...settings }; // Update settings
+      client._stats.eventCount++;
+      client._stats.lastUpdates.updateSettings = Date.now();
+    }
   }
 
-  removeClient(id: string) {
-    delete this._clients[id]; 
-    globalEventEmitter.emit("removeClient" + id);
+  public async updateClientStats(id: string) {
+    
+    const client = this._clients[id];
+    if (client) {
+      client._stats.latency = await si.inetLatency(client.info.ip);
+      client._stats.eventCount++;
+      client._stats.lastUpdates['getClientLatency'] = Date.now();
+      globalEventEmitter.emit("updateClientStats" + id);
+    }
   }
 }
 

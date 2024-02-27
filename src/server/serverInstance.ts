@@ -3,8 +3,10 @@ import "reflect-metadata";
 import { inject, injectable, optional } from 'inversify';
 
 // Interfaces (potentially in a separate file, interfaces.ts)
-import { WebSocketServer } from 'ws'
-
+import { WebSocketServer, WebSocket } from 'ws'
+export interface MyWebSocket extends WebSocket {
+        id: string
+    }
 interface IHandle {
   web: WebSocketServer;
   file: any;

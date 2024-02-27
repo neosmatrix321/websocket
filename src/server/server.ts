@@ -6,61 +6,79 @@ import { IncomingMessage } from 'http';
 import { EventEmitterMixin } from '../global/globalEventHandling';
 import { WebSocket, WebSocketServer, createWebSocketStream } from 'ws';
 import Main from '../main';
-import { ClientType } from '../clients/client/clientInstance';
+import { ClientType, IClient } from '../clients/client/clientInstance';
 
-declare module 'ws' {
-  interface WebSocket {
+interface MyWebSocket extends WebSocket {
     id: string
-  }
 }
 class MyClass { }
 const MyClassWithMixin = EventEmitterMixin(MyClass);
 const globalEventEmitter = new MyClassWithMixin();
 
+function isMyWebSocketWithId(ws: WebSocket): ws is MyWebSocket {
+    return 'id' in ws;
+}
+
 export default class Server extends Main {
     constructor() {
         super();
-     }
-
-    public async create() {
-        const newStreamServer = new WebSocketServer({ noServer: true });
-        const streamFile = new WebSocketServer({ noServer: true });
-        this.stats.lastUpdates = { "web": Date.now() };
-        this._server._handle.web = newStreamServer;
-        this._server._handle.file = streamFile;
-
-        const _serverCert = createServer({
-            cert: readFileSync(this._settings.certPath),
-            key: readFileSync(this._settings.keyPath)
-        });
-
-        _serverCert.on('upgrade', (request, socket, head) => {
-            switch (true) {
-                case this.stats.webHandle.isAlive:
-                    this.handleUpgrade(request, socket, head, (ws: WebSocket, request: IncomingMessage, set: Set<WebSocket>) => { 
-                        this.emitConnection(ws, request);
-                    });
-                    break;
-                default:
-                    socket.destroy();
-            }
-        });
-
-        _serverCert.listen(this._settings.streamServerPort, this._settings.ip, () => {
-            console.log(`HTTPS server ${this._settings.ip} listening on ${this._settings.streamServerPort}`);
-            globalEventEmitter.emitCustomEvent('server_created');
-        });
     }
 
+    public async create() {
+        try {
+            this._server._handle.web = new WebSocketServer({ noServer: true }); 
+            this._server._handle.file = new WebSocketServer({ noServer: true });
+            
+            const _serverCert = createServer({
+                cert: readFileSync(this._settings.certPath),
+                key: readFileSync(this._settings.keyPath)
+            });
+
+            _serverCert.on('upgrade', (request, socket, head) => {
+                //  ... adjust upgrade handling as needed ...
+                this._server._handle.web.handleUpgrade(request, socket, head, (client: WebSocket, request: IncomingMessage) => { // ws is a WebSocket object
+                const webSocketStream = createWebSocketStream(client as MyWebSocket);
+    
+                webSocketStream.on('data', (data: Buffer) => { // Buffer type for data
+                    try {
+                        const message = JSON.parse(data.toString());
+                        console.log("connected:", message);
+                    } catch (error) {
+                        console.error("Error parsing message:", error);
+                    }    
+                });    
+    
+                this.emitConnection(webSocketStream, request); // Adapt emitConnection if needed 
+            });
+            });    
+            this.stats.lastUpdates = { "web": Date.now() };
+
+                // if (this.stats.webHandle.isAlive) {
+                //     this._server._handle.web.handleUpgrade(request, socket, head, (ws) => {
+                //         this._server._handle.web.emit('connection', ws, request);
+                //     });
+                // } else {
+                //     socket.destroy();
+                // }
+
+            _serverCert.listen(this._settings.streamServerPort, this._settings.ip, () => {
+                console.log(`HTTPS server ${this._settings.ip} listening on ${this._settings.streamServerPort}`);
+                globalEventEmitter.emitCustomEvent('server_created');
+            });
+        } catch (err) {
+            console.error("Error creating server:", err);
+        }
+    }
     public async createTimer() {
         // Interval function moved here
         // this.stats.updateAndGetPidIfNecessary();
         this.emitCustomEvent('createTimer', 'Global Timer started');
 
-        this._server._handle.web.clients.forEach((ws_client: WebSocket, _, __) => {
-
-            if (this._clients[ws_client.id]._config.type === ClientType.Admin) {
-                console.log(ws_client.admin);
+        this._server._handle.web.clients.forEach((ws_client: WebSocket) => {
+            if (isMyWebSocketWithId(ws_client)) {
+            const client = this._clients[ws_client.id] as IClient;
+            if (client._config.type === ClientType.Admin) {
+                console.log(client._config.type);
             }
 
             if (ws_client.readyState === ws_client.OPEN) {
@@ -74,6 +92,7 @@ export default class Server extends Main {
                     const dummy = true;
                 }
             }
+        }
         });
     }
 

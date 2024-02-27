@@ -30,6 +30,7 @@
   "main": "index.js",
   "devDependencies": {
     "@tsconfig/node18": "^18.2.2",
+    "@types/ws": "^8.5.10",
     "tsx": "^4.7.1"
   }
 }

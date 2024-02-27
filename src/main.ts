@@ -3,9 +3,10 @@ import "reflect-metadata";
 import { inject, injectable } from "inversify";
 import { EventEmitterMixin } from "./global/globalEventHandling.js";
 import { IStats } from "./stats/statsInstance.js";
-import { IHandleWrapper } from "./server/serverInstance.js";
+import { IHandleWrapper, MyWebSocket } from "./server/serverInstance.js";
 import { ISettings } from "./settings/settingsInstance.js";
-import { IClient, clientWrapper } from "./clients/client/clientInstance.js";
+import { ClientType, IClient, clientWrapper } from "./clients/client/clientInstance.js";
+import { WebSocket } from 'ws'
 
 const GLOBAL_STATS_TOKEN = Symbol('GlobalStats');
 const SERVER_WRAPPER_TOKEN = Symbol('ServerWrapper');
@@ -13,13 +14,16 @@ const PRIVATE_SETTINGS_TOKEN = Symbol('PrivateSettings');
 const CLIENTS_WRAPPER_TOKEN = Symbol('ClientsWrapper');
 export const MAIN_SERVICE_TOKEN = Symbol('Main');
 
+function isMyWebSocketWithId(ws: WebSocket): ws is MyWebSocket {
+  return 'id' in ws;
+}
 
 class MyClass { }
 const MyClassWithMixin = EventEmitterMixin(MyClass);
 const globalEventEmitter = new MyClassWithMixin();
 
 @injectable()
-export default class Main extends EventEmitterMixin(MyClass) implements clientWrapper {
+export default class Main extends EventEmitterMixin(MyClass) {
   @inject(GLOBAL_STATS_TOKEN) stats!: IStats;
   @inject(SERVER_WRAPPER_TOKEN) _server!: IHandleWrapper;
   @inject(PRIVATE_SETTINGS_TOKEN) _settings!: ISettings;
@@ -48,8 +52,8 @@ export default class Main extends EventEmitterMixin(MyClass) implements clientWr
     globalEventEmitter.on('close', this.handleClose.bind(this));
     globalEventEmitter.on('message', this.handleMessage.bind(this));
     globalEventEmitter.on('error', console.error);
-    // this.main._server.on('message', this.handleMessage.bind(this)); // Assuming ServerWrapper emits 'message'
-    // this.main._server.on('close', this.handleClose.bind(this));
+    // this.._server.on('message', this.handleMessage.bind(this)); // Assuming ServerWrapper emits 'message'
+    // this.._server.on('close', this.handleClose.bind(this));
   }
 
   private async handleConnection(ws: any) {
@@ -58,7 +62,7 @@ export default class Main extends EventEmitterMixin(MyClass) implements clientWr
 
     // // Add clients to the container
     // clientsContainer.addClient(client1);
-    await this._clients.addClient(ws); // Integrate with your client management 
+    this.handleGreeting(ws, 'greeting'); // Integrate with your client management 
     this.setupWebSocketEvents(ws);
     this.startIntervalIfNeeded();
   }
@@ -77,16 +81,30 @@ export default class Main extends EventEmitterMixin(MyClass) implements clientWr
       }
     }
   }
-  private async setupWebSocketEvents(ws: any) {
+  private async setupWebSocketEvents(ws: WebSocket) {
     ws.on('close', this.handleClose.bind(this, ws));
     ws.on('message', this.handleMessage.bind(this, ws));
     ws.on('greeting', this.handleGreeting.bind(this, ws));
     this.startIntervalIfNeeded();
   }
 
-  private async handleGreeting(client: IClient, obj: any) {
-    this._clients[client.info.id].isAdmin = !!obj.admin; // Update isAdmin
-    await this._clients.updateClientStats(this._clients[client.info.id]);
+  private async handleGreeting(client: WebSocket, obj: any) {
+    const newIP = client.socket.remoteAddress;
+    const type = 'basic'
+  if (!isMyWebSocketWithId(client)) {
+      this.stats.clientsCounter++;
+      const newIP = client.socket.remoteAddress;
+      const newID = this.stats.clientsCounter;
+      const type = 'basic'
+      this._clients.addClient(newIP, newID, type);
+    }
+    if (isMyWebSocketWithId(client)) {
+      const ID = client.id;
+      // this._clients[client.info.id]._config.type = ClientType.Admin; // Update isAdmin
+      await this._clients.updateClientStats(this._clients[ID]);
+    } else {
+      console.error("Could not create Client " + newIP)
+    }
   }
 
   private async handleMessage(ws: any, data: any, isBinary: any) {
@@ -94,33 +112,33 @@ export default class Main extends EventEmitterMixin(MyClass) implements clientWr
   }
 
   private async handleClose(ws: any, code: any) {
-    console.log("dead ip(" + ws.ip + ") alive(" + ws.readyState + ") code(" + code + ") count(" + this.main.stats.clientsCounter + ")");
-    await this.main._clients.removeClient(ws.id); // Assuming you have removeClient
-    this.main._server._handle.web.destroyClient(ws.ip); // If applicable
+    console.log("dead ip(" + ws.ip + ") alive(" + ws.readyState + ") code(" + code + ") count(" + this.stats.clientsCounter + ")");
+    await this._clients.removeClient(ws.id); // Assuming you have removeClient
+    this._server._handle.web.destroyClient(ws.ip); // If applicable
     ws.terminate();
     this.clearIntervalIfNeeded();
   }
 
   private startIntervalIfNeeded() {
-    if (this.main.stats.clientsCounter > 0 && !this.main.stats._interval_sendInfo) {
-      this.main.stats._interval_sendInfo = setInterval(() => {
+    if (this.stats.clientsCounter > 0 && !this.stats.interval_sendinfo) {
+      this.stats.interval_sendinfo = setInterval(() => {
         this.gatherAndSendStats();
       }, 1000);
     }
   }
 
   private clearIntervalIfNeeded() {
-    if (this.main.stats._interval_sendInfo) {
-      clearInterval(this.main.stats._interval_sendInfo);
-      this.main.stats._interval_sendInfo = undefined;
+    if (this.stats.interval_sendinfo) {
+      clearInterval(this.stats.interval_sendinfo);
+      this.stats.interval_sendinfo = undefined;
     }
   }
 
   private async gatherAndSendStats() {
-    const updatedStats = await this.main._systemMonitor.getUpdatedStats();
-    this.main.updateGlobalStats(updatedStats);
+    const updatedStats = await this.._systemMonitor.getUpdatedStats();
+    this..updateGlobalStats(updatedStats);
 
-    this.main._clients.forEach((client: any) => {
+    this.._clients.forEach((client: any) => {
       if (client.readyState === client.OPEN) {
         // ... detailed logic to build and send the stats payload...
         client.send('client aagdssdaf');
