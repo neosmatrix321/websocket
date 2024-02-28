@@ -17,8 +17,6 @@ function isMyWebSocketWithId(ws: WebSocket): ws is MyWebSocket {
 export const GLOBAL_STATS_TOKEN = Symbol('privateSettings');
 
 class MyClass { }
-const MyClassWithMixin = EventEmitterMixin(MyClass);
-const globalEventEmitter = new MyClassWithMixin();
 
 @injectable()
 export default class Main extends EventEmitterMixin(MyClass) {
@@ -42,14 +40,6 @@ export default class Main extends EventEmitterMixin(MyClass) {
     } catch (err) {
       console.error("Main Initialization Error: ", err);
     }
-  }
-
-  private setupGlobalEventListeners() {
-    // Event handling for client connections, messages, errors
-    globalEventEmitter.on('clientConnected', this.handleConnection.bind(this));
-    globalEventEmitter.on('close', this.handleClose.bind(this));
-    globalEventEmitter.on('message', this.handleMessage.bind(this));
-    globalEventEmitter.on('error', console.error);
   }
 
   private async handleConnection(ws: any) {

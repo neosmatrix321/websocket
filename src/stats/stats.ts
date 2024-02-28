@@ -187,6 +187,11 @@ export default class Stats extends eH.EventEmitterMixin<IStatsEvent>(BaseStatsEv
       console.error("Error fetching pid usage:", e);
     }
   }
+  private setupGlobalEventListeners() {
+    // Event handling for client connections, messages, errors
+
+  }
+
 }
 
 /*
