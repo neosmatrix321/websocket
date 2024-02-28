@@ -55,9 +55,6 @@ class BaseStatsEvent implements eH.IBaseEvent {
 }
 
 
-const MyClassWithMixin = EventEmitterMixin(BaseStatsEvent);
-const globalEventEmitter = new MyClassWithMixin();
-
 @injectable()
 export default class Stats extends eH.EventEmitterMixin<IStatsEvent>(BaseStatsEvent) {
   public stats!: S.IStats;

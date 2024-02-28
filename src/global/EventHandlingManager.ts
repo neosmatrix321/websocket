@@ -43,7 +43,7 @@ export class eventManager extends EventEmitterMixin<IeMEvent>(BaseEMEvent) {
         this.setupWebSocketListeners();
         // Register event listeners
         // Stats Event Handlers
-        this.on('stats', (event: IStatsEvent) => {
+        this.on('stats', (event: S.IStatsEvent) => {
             switch (event.type) {
                 case S.statsType.updated:
                     this.handleStatsUpdate(event);
@@ -150,3 +150,53 @@ export class eventManager extends EventEmitterMixin<IeMEvent>(BaseEMEvent) {
         // ... process updated stats, potentially send to clients ...
     }
 }
+
+/* https://github.com/neosmatrix321/websocket/tree/master
+import { inject, injectable } from "inversify";
+import { EventEmitterMixin } from "./EventHandlingMixin";
+import { WebSocketServer } from "ws";
+import * as sI from "../stats/statsInstance";
+import * as S from "../stats/stats";
+import * as cI from "../clients/clientInstance";
+import * as C from "../clients/clients";
+
+// ... other imports 
+
+@injectable()
+export class eventManager extends EventEmitterMixin<IeMEvent>(BaseEMEvent) {
+  // ... properties
+
+  constructor() {
+    super();
+    this.webServer = new WebSocketServer({ noServer: true });
+    this.setupWebSocketListeners();
+    this.registerEventHandlers(); 
+  }
+
+  private registerEventHandlers() {
+    this.on('stats', this.handleStatsEvent); 
+    this.on('client', this.handleClientEvent);
+
+    // Consider registering server handlers separately if needed:
+    // this.on('server', this.handleServerEvent); 
+  }
+
+  private handleStatsEvent(event: S.IStatsEvent) {
+    switch (event.type) {
+      case S.statsType.updated:
+        this.handleStatsUpdated(event);
+        break;
+      case S.statsType.latencyUpdated:
+        this.handleLatencyUpdated(event);
+        break;
+      // ... other stats cases
+      default: 
+        console.warn('Unhandled stats event type:', event.type);
+    }
+  }
+
+  private handleClientEvent(event: C.IClientEvent) {
+    // ... similar structure as handleStatsEvent
+  }
+
+  // ... other handlers and helper functions */

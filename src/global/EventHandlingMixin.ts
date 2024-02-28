@@ -23,23 +23,6 @@ export interface IEventMap {
   };
 }
 
-/* stats interface
-export enum statsType {
-  update,
-  timerCreated,
-  timerStarted,
-  timerStopped  
-}
-
-export interface IStatsEvent extends IEventMap {
-  type: statsType;
-  message: string;
-  data: {
-    result: boolean;
-    error?: IClientError;
-  };
-} */
-
 export const EventEmitterMixin = <E extends IEventMap>(BaseClass: new (...args: any[]) => {}) =>   
       class extends BaseClass {
     protected _emitter: EventEmitter;
