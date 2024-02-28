@@ -16,7 +16,7 @@ export interface IBaseEvent {
 
 export interface IEventMap {
   type: any;
-  data?: {
+  data: {
     errCode: number;
     message?: string;
     blob?: any;

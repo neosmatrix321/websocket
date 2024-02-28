@@ -27,28 +27,13 @@ export enum statsType {
 export interface IStatsEvent extends eH.IEventMap {
   type: statsType;
   message: string;
-  data?: {
+  data: {
     errCode: number;
     message?: string;
     blob?: any;
   };
 }
-export interface IStatsEvent {
-  type: statsType;
-  data?: {
-    errCode: number;
-    message?: string;
-    blob?: any;
-  };
-}
-export class StatsEvent {
-  type?: statsType;
-  data?: {
-    errCode: number;
-    message?: string;
-    blob?: any;
-  };
-}
+
 
 class BaseStatsEvent implements eH.IBaseEvent {
   "cat": eH.catType = eH.catType.stats;

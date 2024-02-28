@@ -26,28 +26,13 @@ export enum serverType {
 export interface IServerEvent extends eH.IEventMap {
   type: serverType;
   message: string;
-  data?: {
+  data: {
     errCode: number;
     message?: string;
     blob?: any;
   };
 }
-export interface IServerEvent {
-  type: serverType;
-  data?: {
-    errCode: number;
-    message?: string;
-    blob?: any;
-  };
-}
-export class ServerEvent {
-  type?: serverType;
-  data?: {
-    errCode: number;
-    message?: string;
-    blob?: any;
-  };
-}
+
 
 class BaseServerEvent implements eH.IBaseEvent {
   "cat": eH.catType = eH.catType.server;

@@ -18,7 +18,7 @@ export interface IStats {
   latencyGoogle: number | null,
   si: { proc: string, pid: number, cpu: number, mem: number},
   pu: { cpu: number, memory: number, pid: number, ctime: number, elapsed: number, timestamp: number },
-rcon: object,
+  rcon: object,
   lastUpdates: Record<string, number>,
   clients: object,
   interval_sendinfo: any

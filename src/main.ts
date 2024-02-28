@@ -21,7 +21,7 @@ export enum StatsType {
 export interface IStatsEvent extends eH.IEventMap {
   type: StatsType;
   message: string;
-  data?: {
+  data: {
       errCode: number;
       message?: string;
       blob?: any;

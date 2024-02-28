@@ -3,7 +3,6 @@ import { inject, injectable } from "inversify";
 import * as eH from "../global/EventHandlingMixin";
 import * as C from "./clientInstance";
 import si from 'systeminformation';
-import { ISettings, PRIVATE_SETTINGS_TOKEN } from "../settings/settingsInstance";
 
 const CLIENTS_WRAPPER_TOKEN = Symbol('ClientsService');
 
@@ -16,20 +15,12 @@ export enum clientsType {
 export interface IClientsEvent {
   type: clientsType;
   client?: C.IClientInfo;
-  data?: {
+  data: {
     errCode: number;
     message?: string;
   };
 }
-export class ClientsEvent {
-  type?: clientsType;
-  client?: C.IClientInfo;
-  data?: {
-    errCode: number;
-    message?: string;
-    blob?: any;
-  };
-}
+
 
 class BaseClientsEvent implements eH.IBaseEvent{
   "cat": eH.catType = eH.catType.clients;
