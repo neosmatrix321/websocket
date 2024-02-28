@@ -18,6 +18,7 @@ const GLOBAL_STATS_TOKEN = Symbol('GlobalStats');
 
 export enum statsType {
   update,
+  updated,
   timerCreated,
   timerStarted,
   timerStopped

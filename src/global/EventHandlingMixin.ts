@@ -6,7 +6,8 @@ export enum catType {
   basic,
   clients,
   stats,
-  server
+  server,
+  eventManager
 }
 
 export interface IBaseEvent {

@@ -3,15 +3,20 @@ import { inject, injectable } from "inversify";
 import { EventEmitterMixin } from "./EventHandlingMixin";
 import { Server } from "https";
 import * as eH from "./EventHandlingMixin";
+import { WebSocketServer } from "ws";
+import * as sI from "../stats/statsInstance";
+import * as S from "../stats/stats";
+import * as cI from "../clients/clientInstance";
+import * as C from "../clients/clients";
+import * as srvI from "../server/serverInstance";
+import * as srv from "../server/server";
 
 // ... your other imports 
 export const EVENT_MANAGER_TOKEN = Symbol('eventManager');
 
 export enum eMType {
-    update,
-    timerCreated,
-    timerStarted,
-    timerStopped
+    started,
+    stopped
 }
 
 export interface IeMEvent extends eH.IEventMap {
@@ -23,37 +28,74 @@ export interface IeMEvent extends eH.IEventMap {
         blob?: any;
     };
 }
-export interface IStatsEvent {
-    type: eMType;
-    data?: {
-        errCode: number;
-        message?: string;
-        blob?: any;
-    };
-}
-export class StatsEvent {
-    type?: eMType;
-    data?: {
-        errCode: number;
-        message?: string;
-        blob?: any;
-    };
-}
 
-class BaseStatsEvent implements eH.IBaseEvent {
-    "cat": eH.catType = eH.catType.stats;
+class BaseEMEvent implements eH.IBaseEvent {
+    "cat": eH.catType = eH.catType.eventManager;
 }
-
 
 @injectable()
-export class eventManager extends EventEmitterMixin(BaseStatsEvent) {
+export class eventManager extends EventEmitterMixin<IeMEvent>(BaseEMEvent) {
     @inject(EVENT_MANAGER_TOKEN) private eM!: eventManager;
-
+    public webServer: WebSocketServer;
     constructor() {
         super();
+        this.webServer = new WebSocketServer({ noServer: true });
+        this.setupWebSocketListeners();
         // Register event listeners
-        this.eM.on('latencyUpdated', this.handleLatencyUpdate.bind(this));
-        this.eM.on('statsUpdated', this.handleStatsUpdate.bind(this));
+        // Stats Event Handlers
+        this.on('stats', (event: IStatsEvent) => {
+            switch (event.type) {
+                case S.statsType.updated:
+                    this.handleStatsUpdate(event);
+                    break;
+                case S.statsType.timerCreated:
+                    this.handleTimerCreated(event);
+                    break;
+                case S.statsType.timerStarted:
+                    this.handleTimerStarted(event);
+                    break;
+                case S.statsType.timerStopped:
+                    this.handleLatencyStopped(event);
+                    break;
+                // ... other 'stats' event types
+            }
+        });
+
+        // Client Event Handlers
+        this.on('client', (event: C.IClientsEvent) => {
+            switch (event.type) {
+                case C.clientsType.create:
+                    break;
+                case C.clientsType.update:
+                    this.clientSettingsUpdated(event);
+                    break;
+                case C.clientsType.delete:
+                    this.clientBye(event);
+                    break;
+                case C.clientsType.statsUpdated:
+                    this.clientMessageReady(event);
+                    break;
+                // ... other 'client' event types
+            }
+        });
+        this.on('client', (event: C.IClientsEvent) => {
+            switch (event.type) {
+                case srv.serverType.listen:
+                    this.serverActive(event);
+                    break;
+                case srv.serverType.clientConnected:
+                    this.handleClientConnected(event);
+                    break;
+                case srv.serverType.clientMessageReady:
+                    this.handleClientMessage(event);
+                    break;
+                case srv.serverType.clientDisconcted:
+                    this.clientBye(event);
+                    this.handleClientConnected(event);
+                    break;
+                // ... other 'client' event types
+            }
+        });
         this.eM.on('serverCreated', this.gatherAndSendStats.bind(this));
         this.eM.on('latencyUpdated', (event: IStatsEvent) => {
             this.eM.on(eMType.clientLatencyThresholdExceeded, this.handleClientLatency.bind(this));
@@ -63,11 +105,22 @@ export class eventManager extends EventEmitterMixin(BaseStatsEvent) {
                 console.error('Latency error:', event.data.message);
             }
         });
+        this.eM.on('clientConnected', this.handleClientConnected.bind(this));
+        this.eM.on('clientDisconnected', this.handleClientDisconnected.bind(this));
+        this.eM.on('statsUpdated', this.handleStatsUpdated.bind(this));
 
-        Stats.on('statsUpdated', (event: IStatsEvent) => {
+        this.eM.on('statsUpdated', (event: IStatsEvent) => {
             // Process the updated stats object (this.stats)
         });
     }
+    private setupWebSocketListeners() {
+        this.webServer.on('connection', (ws: WebSocket, request: IncomingMessage) => {
+            this.emit('clientConnected', ws);
+        });
+
+        // ... other event listeners for 'close', 'message', etc.
+    }
+
     private handleClientLatency(event: IeMEvent) {
         console.log('Client Latency Exceeded:', event.data);
         // ... React to client latency (e.g., send warning, log data)
@@ -81,7 +134,19 @@ export class eventManager extends EventEmitterMixin(BaseStatsEvent) {
         }
     }
 
-    private handleStatsUpdate(event: <IStatsEvent | IeMEvent>) {
-    this.clientManager.sendStatsUpdate(event.data.blob);  // Delegate to ClientManager
-} 
+    private handleStatsUpdate(event: S.IStatsEvent | IeMEvent) {
+        this.clientMessageReady(event);
+
+    }
+    private handleClientConnected(ws: WebSocket) {
+        // ... manage client connection ...
+    }
+
+    private handleClientDisconnected(ws: WebSocket) {
+        // ... handle client disconnection ...
+    }
+
+    private handleStatsUpdated(stats: IStats) { // Assuming IStats exists
+        // ... process updated stats, potentially send to clients ...
+    }
 }

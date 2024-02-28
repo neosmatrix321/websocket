@@ -7,19 +7,38 @@ import { IHandleWrapper, MyWebSocket } from "./server/serverInstance.js";
 import { ISettings, PRIVATE_SETTINGS_TOKEN } from "./settings/settingsInstance.js";
 import { WebSocket } from 'ws'
 import { Server } from "https";
-import Stats, { IStatsEvent } from "./stats/stats.js";
-import * as eM from "./global/EventHandlingManager.js";
+import Stats, { IStatsEvent } from "./stats/stats";
+import * as eM from "./global/EventHandlingManager";
+import * as eH from "./global/EventHandlingMixin";
 
+export enum StatsType {
+  updated,
+  timerCreated,
+  timerStarted,
+  timerStopped
+}
+
+export interface IStatsEvent extends eH.IEventMap {
+  type: StatsType;
+  message: string;
+  data?: {
+      errCode: number;
+      message?: string;
+      blob?: any;
+  };
+}
 
 function isMyWebSocketWithId(ws: WebSocket): ws is MyWebSocket {
   return 'id' in ws;
 }
 export const GLOBAL_STATS_TOKEN = Symbol('privateSettings');
 
-class MyClass { }
+class BaseStatsEvent implements eH.IBaseEvent {
+  "cat": eH.catType = eH.catType.stats;
+}
 
 @injectable()
-export default class Main extends EventEmitterMixin(MyClass) {
+export default class Main extends EventEmitterMixin<IStatsEvent>(BaseStatsEvent) {
   @inject(GLOBAL_STATS_TOKEN) stats!: IStats;
   @inject(PRIVATE_SETTINGS_TOKEN) _settings!: ISettings;
   @inject(eM.EVENT_MANAGER_TOKEN) eM!: eM.eventManager;
