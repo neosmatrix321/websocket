@@ -14,6 +14,7 @@ import * as eH from "../global/EventHandlingMixin";
 import * as eM from "../global/EventHandlingManager";
 import { statsType } from '../stats/stats';
 import { clientsType } from '../clients/clients';
+import * as serverI from "../server/serverInstance";
 
 interface MyWebSocket extends WebSocket {
   id: string

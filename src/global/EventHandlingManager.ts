@@ -64,6 +64,10 @@ export class eventManager extends EventEmitterMixin(MyClass) {
 
     // Client Event Handlers
     this.eM.on(eH.catType.clients, (event: clientsC.IClientsEvent) => {
+      if (!event) {
+        console.error('Event is undefined');
+        return;
+      }
       switch (event.type) {
         case clientsC.clientsType.create:
           break;
@@ -80,6 +84,10 @@ export class eventManager extends EventEmitterMixin(MyClass) {
       }
     });
     this.eM.on(eH.catType.server, (event: serverC.IServerEvent) => {
+      if (!event) {
+        console.error('Event is undefined');
+        return;
+      }
       switch (event.type) {
         case serverC.serverType.listen:
           this.serverActive(event);
@@ -98,6 +106,10 @@ export class eventManager extends EventEmitterMixin(MyClass) {
       }
     });
     this.eM.on(eH.catType.main, (event: mainC.IMainEvent) => {
+      if (!event) {
+        console.error('Event is undefined');
+        return;
+      }
       switch (event.type) {
         case mainC.MainType.timerCreated:
           this.handleTimerCreated(event);

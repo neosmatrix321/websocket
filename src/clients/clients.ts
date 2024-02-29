@@ -29,7 +29,7 @@ class BaseClientsEvent implements eH.IBaseEvent{
 const MyClassWithMixin = eH.EventEmitterMixin(BaseClientsEvent);
 const globalEventEmitter = new MyClassWithMixin();
 @injectable()
-export default class Clients extends eH.EventEmitterMixin<IClientsEvent>(BaseClientsEvent) {
+export default class Clients extends eH.EventEmitterMixin<IBaseEvent>(BaseClientsEvent) {
   private _clients: Record<string, C.IClient>;
   constructor(@inject(CLIENTS_WRAPPER_TOKEN) clientsInstance: Record<string, C.IClient>) {
     super();

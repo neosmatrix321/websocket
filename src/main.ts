@@ -6,9 +6,8 @@ import { WebSocket } from 'ws'
 import { Server } from "https";
 import * as eM from "./global/EventHandlingManager";
 import * as eH from "./global/EventHandlingMixin";
-import * as statsMain from "./stats/stats";
+import * as statsC from "./stats/stats";
 import * as statsI from "./stats/statsInstance";
-import * as serverI from "./server/serverInstance";
 
 export enum MainType {
   timerCreated,
@@ -20,9 +19,9 @@ export interface IMainEvent extends eH.IBaseEvent {
   type: MainType;
   message: string;
   data: {
-      errCode: number;
-      message?: string;
-      blob?: any;
+    errCode: number;
+    message?: string;
+    blob?: any;
   };
 }
 
@@ -33,23 +32,18 @@ class BaseMainEvent implements eH.IBaseEvent {
 
 
 @injectable()
-export default class Main extends eH.EventEmitterMixin<IStatsEvent>(BaseMainEvent) {
-  @inject(statsMain.GLOBAL_STATS_TOKEN) stats!: statsI.IStats;
+export default class Main extends eH.EventEmitterMixin<statsC.IStatsEvent>(BaseMainEvent) {
+  @inject(statsC.GLOBAL_STATS_TOKEN) stats!: statsI.IStats;
   @inject(PRIVATE_SETTINGS_TOKEN) _settings!: ISettings;
   @inject(eM.EVENT_MANAGER_TOKEN) eM!: eM.eventManager;
   public constructor() {
     super();
     this.initialize();
-    this.on('serverCreated', this.gatherAndSendStats );
   }
-
   public async initialize() {
     console.log(this);
     try {
       await Server.createServer();
-      this._server.on('connection', this.handleConnection.bind(this));
-      this.setupGlobalEventListeners();
-      
 
     } catch (err) {
       console.error("Main Initialization Error: ", err);
@@ -84,7 +78,7 @@ export default class Main extends eH.EventEmitterMixin<IStatsEvent>(BaseMainEven
   private async handleGreeting(client: WebSocket, obj: any) {
     const newIP = client.socket.remoteAddress;
     const type = 'basic'
-  if (!isMyWebSocketWithId(client)) {
+    if (!isMyWebSocketWithId(client)) {
       this.stats.clientsCounter++;
       const newIP = client.socket.remoteAddress;
       const newID = this.stats.clientsCounter;
