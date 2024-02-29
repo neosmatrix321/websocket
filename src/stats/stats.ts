@@ -7,34 +7,31 @@ import { EventEmitterMixin } from '../global/EventHandlingMixin';
 import { IStats } from './statsInstance';
 import pidusage from 'pidusage';
 import si from 'systeminformation';
-import * as settings from '../settings/settingsInstance'; // Import settings interface/class
 import * as eH from "../global/EventHandlingMixin";
-import * as S from "../stats/statsInstance";
-import * as pS from "../settings/settingsInstance";
+import * as eM from "../global/EventHandlingManager";
+import * as settingsI from '../settings/settingsInstance'; // Import settings interface/class
+import * as statsI from "../stats/statsInstance";
+import * as clientsC from "../clients/clients";
+import * as clientsI from "../clients/clientInstance";
+import * as serverC from "../server/server";
+import * as serverI from "../server/serverInstance";
+import * as mainC from "../main";
 
 const PRIVATE_SETTINGS_TOKEN = Symbol('PrivateSettings');
 export const GLOBAL_STATS_TOKEN = Symbol('GlobalStats');
 
 export enum statsType {
   update,
-  updated
-}
-
-export interface IStatsEvent extends eH.IBaseEvent {
-  type: statsType;
-  message: string;
-  data: {
-      errCode: number;
-      message?: string;
-      blob?: any;
-  };
+  updated,
+  pidAvailable
 }
 
 
-export interface IStatsEvent extends eH.IBaseEvent {
-  type: statsType;
-  message: string;
-  data: {
+export interface IStatsEvent extends eH.IEventMap {
+  cat: eH.catType.stats;
+  type?: eM.eMType | statsType | clientsC.clientsType | serverC.serverType | mainC.MainType;
+  message?: string;
+  data?: {
     errCode: number;
     message?: string;
     blob?: any;
@@ -42,17 +39,16 @@ export interface IStatsEvent extends eH.IBaseEvent {
 }
 
 
-class BaseStatsEvent implements eH.IBaseEvent {
-  "cat": eH.catType = eH.catType.stats;
+class BaseStatsEvent {
 }
 
 
 @injectable()
 export default class Stats extends eH.EventEmitterMixin<IStatsEvent>(BaseStatsEvent) {
-  public stats!: S.IStats;
-  private _settings!: pS.ISettings
-  constructor(@inject(GLOBAL_STATS_TOKEN) statsInstance: S.IStats,
-    @inject(PRIVATE_SETTINGS_TOKEN) settingsInstance: pS.ISettings) {
+  public stats!: statsI.IStats;
+  private _settings!: settingsI.ISettings
+  constructor(@inject(GLOBAL_STATS_TOKEN) statsInstance: statsI.IStats,
+    @inject(PRIVATE_SETTINGS_TOKEN) settingsInstance: settingsI.ISettings) {
     super();
     this.stats = statsInstance || {
       webHandle: { isAlive: false, hasConnection: false, connectedClients: 0 },
@@ -124,7 +120,7 @@ export default class Stats extends eH.EventEmitterMixin<IStatsEvent>(BaseStatsEv
       this._settings.pid = pid;
       this._settings.pidFileExists = true;
       this._settings.pidFileReadable = true;
-      this.emit('pidAvailable', `PID: ${pid}`);
+      this.emit(statsType.pidAvailable, `PID: ${pid}`);
 
     } catch (err) {
       this._settings.pidFileExists = false;

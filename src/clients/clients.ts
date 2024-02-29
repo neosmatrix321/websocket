@@ -1,7 +1,7 @@
 "use strict";
 import { inject, injectable } from "inversify";
 import * as eH from "../global/EventHandlingMixin";
-import * as C from "./clientInstance";
+import * as clientsI from "./clientInstance";
 import si from 'systeminformation';
 
 const CLIENTS_WRAPPER_TOKEN = Symbol('ClientsService');
@@ -12,12 +12,14 @@ export enum clientsType {
   delete,
   statsUpdated
 }
-export interface IClientsEvent {
-  type: clientsType;
-  client?: C.IClientInfo;
-  data: {
+export interface IClientsEvent extends eH.IBaseEvent{
+  cat: eH.catType.clients;
+  type?: clientsType;
+  client?: clientsI.IClientInfo;
+  data?: {
     errCode: number;
     message?: string;
+    blob?: any;
   };
 }
 
@@ -29,29 +31,29 @@ class BaseClientsEvent implements eH.IBaseEvent{
 const MyClassWithMixin = eH.EventEmitterMixin(BaseClientsEvent);
 const globalEventEmitter = new MyClassWithMixin();
 @injectable()
-export default class Clients extends eH.EventEmitterMixin<IBaseEvent>(BaseClientsEvent) {
-  private _clients: Record<string, C.IClient>;
-  constructor(@inject(CLIENTS_WRAPPER_TOKEN) clientsInstance: Record<string, C.IClient>) {
+export default class Clients extends eH.EventEmitterMixin<eH.IBaseEvent>(BaseClientsEvent) {
+  private _clients: Record<string, clientsI.IClient>;
+  constructor(@inject(CLIENTS_WRAPPER_TOKEN) clientsInstance: Record<string, clientsI.IClient>) {
     super();
     this._clients = clientsInstance || {};  // Initialize if needed
   }
   public addClient(id: string, ip: string, type: string ) { // Adjust 'any' type later
-    let typeFinal: C.ClientType;
+    let typeFinal: clientsI.ClientType;
     switch (type) {
       case 'admin':
-        typeFinal = C.ClientType.Admin; 
+        typeFinal = clientsI.ClientType.Admin; 
         break;
       case 'server':
-        typeFinal = C.ClientType.Server; 
+        typeFinal = clientsI.ClientType.Server; 
         break;
         default:
-        typeFinal = C.ClientType.Basic;
+        typeFinal = clientsI.ClientType.Basic;
     }
     //public create(newID: string, newIP: string, type: ClientType): void {
-    const newClientInfo: C.IClientInfo = { id: id, ip: ip, type: typeFinal };
+    const newClientInfo: clientsI.IClientInfo = { id: id, ip: ip, type: typeFinal };
     let newResult: { errCode: number, message?: string, blob?: any } = { errCode: 1 };
     try {
-      const newClient: C.IClient = C.clientWrapper.createClient(newClientInfo);
+      const newClient: clientsI.IClient = clientsI.clientWrapper.createClient(newClientInfo);
       this._clients[id] = newClient;
       newResult = { errCode: 0 };
     } catch (e) {
@@ -72,7 +74,7 @@ export default class Clients extends eH.EventEmitterMixin<IBaseEvent>(BaseClient
   //     client._stats.lastUpdates.updateConfig = Date.now();
   //   }
   // }
-  public updateClientSettings(id: string, settings: C.IClientSettings) {
+  public updateClientSettings(id: string, settings: clientsI.IClientSettings) {
     const client = this._clients[id];
     if (client) {
       client._clientSettings = { ...settings }; // Update settings
@@ -95,7 +97,7 @@ export default class Clients extends eH.EventEmitterMixin<IBaseEvent>(BaseClient
     delete this._clients[clientId];
   }
 
-  public getClient(clientId: string): C.IClient | undefined {
+  public getClient(clientId: string): clientsI.IClient | undefined {
     return this._clients[clientId];
   }
 }

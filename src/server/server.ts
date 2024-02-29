@@ -3,33 +3,35 @@
 import { createServer } from 'https';
 import { readFileSync } from 'fs';
 import { IncomingMessage } from 'http';
-import { EventEmitterMixin } from '../global/EventHandlingMixin';
 import { WebSocket, WebSocketServer, createWebSocketStream } from 'ws';
-import Main from '../main';
-import { ClientType, IClient } from '../clients/clientInstance';
 import { inject, injectable } from 'inversify';
-import { IHandleWrapper, SERVER_WRAPPER_TOKEN } from './serverInstance';
-import { ISettings, PRIVATE_SETTINGS_TOKEN } from '../settings/settingsInstance';
 import * as eH from "../global/EventHandlingMixin";
 import * as eM from "../global/EventHandlingManager";
-import { statsType } from '../stats/stats';
-import { clientsType } from '../clients/clients';
+import * as statsC from "../stats/stats";
+import * as statsI from "../stats/statsInstance";
+import * as clientsC from "../clients/clients";
+import * as clientsI from "../clients/clientInstance";
+import * as serverC from "../server/server";
 import * as serverI from "../server/serverInstance";
+import * as mainC from "../main";
 
 interface MyWebSocket extends WebSocket {
   id: string
 }
 export enum serverType {
   listen,
+  updateClientStats,
   clientConnected,
+  clientMessage,
   clientMessageReady,
   clientDisconcted
 }
 
-export interface IServerEvent extends eH.IBaseEvent {
-  type: serverType;
-  message: string;
-  data: {
+export interface IServerEvent extends eH.IEventMap {
+  cat: eH.catType.server;
+  type?: serverType;
+  message?: string;
+  data?: {
     errCode: number;
     message?: string;
     blob?: any;
@@ -37,7 +39,7 @@ export interface IServerEvent extends eH.IBaseEvent {
 }
 
 
-class BaseServerEvent implements eH.IBaseEvent {
+class BaseServerEvent {
   "cat": eH.catType = eH.catType.server;
 }
 
@@ -46,19 +48,18 @@ function isMyWebSocketWithId(ws: WebSocket): ws is MyWebSocket {
 }
 
 @injectable()
-export default class Server extends EventEmitterMixin<IServerEvent>(BaseServerEvent) {
-  @inject(SERVER_WRAPPER_TOKEN) _server!: IHandleWrapper;
-  @inject(PRIVATE_SETTINGS_TOKEN) _settings!: ISettings;
+export default class Server extends eH.EventEmitterMixin<IServerEvent>(BaseServerEvent) {
+  @inject(serverI.SERVER_WRAPPER_TOKEN) _server!: serverI.IHandleWrapper;
   @inject(eM.EVENT_MANAGER_TOKEN) eM!: eM.eventManager;
   constructor() {
     super();
-    this._server._handle.web = ;
     this._server._handle.file = new WebSocketServer({ noServer: true });
     this.setupWebSocketListeners();
   }
   private setupWebSocketListeners() {
-    this._server._handle.web.on('connection', this.handleConnection.bind(this));
-    this._server._handle.web.on('close', this.handleClose.bind(this));
+    this.eM.webServer.on('connection',  this.eM.handleClientConnected.bind(this));
+    this.eM.webServer.on('message',  this.eM.handleClientMessage.bind(this));
+    this.eM.webServer.on('close',  this.eM.handleClientDisconnected.bind(this));
     // ... Add listeners for other WebSocketServer events if needed
   }
   public async createServer() {
@@ -90,35 +91,29 @@ export default class Server extends EventEmitterMixin<IServerEvent>(BaseServerEv
         console.log(`HTTPS server ${this._server._settings.ip} listening on ${this._server._settings.streamServerPort}`);
         this.emit('serverCreated');
       });
-    } catch (err) {
-      console.error("Error creating server:", err);
-      this.emit('serverCreated', { 'err': err });
+    } catch (error) {
+      console.error("Error creating server:", error);
+      this.eM.handleError(new Error('Error creating server'), error);
     }
   }
   public async createTimer() {
     // Interval function moved here
     // this.stats.updateAndGetPidIfNecessary();
-    this.emit('createTimer');
+    this.eM.emit('createTimer');
     this._server._handle.web.clients.forEach((ws_client: WebSocket) => {
+      if (!isMyWebSocketWithId(ws_client)) {
+        this.eM.emit(serverC.serverType.clientConnected, ws_client);
+      }
       if (isMyWebSocketWithId(ws_client)) {
-        const client = this._clients[ws_client.id] as IClient;
-        if (client._config.type === ClientType.Admin) {
-          console.log(client._config.type);
-        }
-
         if (ws_client.readyState === ws_client.OPEN) {
-          if (this._clients[ws_client.id]) {
+          if (!ws_client.id) {
             console.error(`No Client with ID: ${ws_client.id} known`);
           }
           const time_diff = (Date.now() - ws_client.now);
           console.log("admin(" + ws_client.admin + ") sending to ip(" + this._clients[ws_client.id].info.ip + ") alive(" + ws_client.readyState + ") count(" + this._clients[ws_client.id]._stats.clientsCounter + ") connected(" + this.stats.connectedClients + ") latency_user(" + this._clients[ws_client.id]._stats.latency_user + ") latency_google(" + this.stats.latencyGoogle + ") connected since(" + this.stats.lastUpdates.web + ") diff(" + time_diff + ")");
 
           if (time_diff > 20000) {
-            this.eM.emit(clientsType.statsUpdated, {
-              clientId: ws_client.id,
-              latency: time_diff,
-              // ... more data 
-            });
+            this.eM.emit(serverType.updateClientStats, ws_client.id);
           }
         }
       }

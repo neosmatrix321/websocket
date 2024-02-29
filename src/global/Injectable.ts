@@ -1,3 +1,4 @@
+/*
 "use strict";
 import 'reflect-metadata';
 
@@ -31,3 +32,4 @@ export function Inject(token: any | symbol): any {
   };
 }
 
+*/

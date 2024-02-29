@@ -1,6 +1,11 @@
 "use strict";
 
 import { EventEmitter } from "events";
+import * as eM from "./EventHandlingManager";
+import * as statsC from "../stats/stats";
+import * as clientsC from "../clients/clients";
+import * as serverC from "../server/server";
+import * as mainC from "../main";
 
 export enum catType {
   basic,
@@ -10,25 +15,23 @@ export enum catType {
   server,
   eventManager
 }
-export interface IBaseEvent {
+
+export interface IEventMap {
   cat: catType;
+  message?: string | symbol;
+  type?: eM.eMType | statsC.statsType | clientsC.clientsType | serverC.serverType | mainC.MainType;
+  data?: {
+    errCode: number;
+    message?: string;
+    blob?: any;
+  };
 }
 
-// export interface IEventMap {
-//   message: string;
-//   data?: {
-//     errCode: number;
-//     message?: string;
-//     blob?: any;
-//   };
-// }
-
-export const EventEmitterMixin = <E extends IBaseEvent>(BaseClass: new (...args: any[]) => {}) =>  
-// export const EventEmitterMixin = (BaseClass: new (...args: any[]) => {}) =>
+export const EventEmitterMixin = <E extends Partial<IEventMap>>(BaseClass: new (...args: any[]) => {}) =>
   class extends BaseClass {
     private _defaultCategory: catType = catType.basic; // Default category
     protected _emitter: EventEmitter;
-    private _events: Map<catType, ((...args: any[]) => void)[]>;
+    private _events: Map<any, ((...args: E[]) => void)[]>;
 
     constructor(...args: any[]) {
       super(...args);
@@ -36,37 +39,36 @@ export const EventEmitterMixin = <E extends IBaseEvent>(BaseClass: new (...args:
       this._events = new Map(); // Internal Map 
     }
 
-    async on<K extends keyof E>(event: catType, listener: (...args: E[K][]) => void): Promise<void> {
+    async on<E extends Partial<E>>(event: catType | string | symbol, listener: (...args: Partial<IEventMap>[]) => void): Promise<void> {
       if (!this._events.has(event)) {
-        this._events.set(event, []); // Initialize an empty array
+        this._events.set(event, []);
       }
-      this._events.get(event)?.push(listener); // Safe push
-    }
-    async prepend<K extends keyof E>(event: catType, listener: (...args: E[K][]) => void): Promise<void> {
+      this._events.get(event)?.push(listener);
+    } 
+    async prepend<E extends Partial<E>>(event: catType | string | symbol, listener: (...args: Partial<IEventMap>[]) => void): Promise<void> {
       console.log("prepend Event ", this._events, event);
       this._events?.get(event)?.push(listener);
     }
 
-    async off<K extends keyof E>(event: catType, listener: (...args: E[K][]) => void): Promise<void> {
+    async off(event: catType | string | symbol, listener: (...args: Partial<IEventMap>[]) => void): Promise<void> {
       if (this._events.has(event)) {
-        const listeners = this._events.get(event)?.filter((cb: (...args: E[K][]) => void) => cb !== listener);
+        const listeners = this._events.get(event)?.filter((cb: (...args: E[]) => void) => cb !== listener);
         if (listeners) this._events.set(event, listeners);
       }
     }
 
-    async emit(event: string | symbol | IBaseEvent, ...args: any[]): Promise<void> {
-      let emitEvent: IBaseEvent;
-    
-      if (typeof event === 'string' || typeof event === 'symbol') {        // Treat as unknown type, wrap in basic category
-        emitEvent = { cat: this._defaultCategory, type: event, ...args[0] };
+    async emit<E extends Partial<E>>(event: catType | string | symbol, ...args: Partial<IEventMap>[]): Promise<void> {
+      let emitEvent: IEventMap;
+
+      if (typeof event === 'object' && !('cat' in event)) {
+        emitEvent = { cat: this._defaultCategory, ...args[0] };
+      } else if (typeof event === 'string' || typeof event === 'symbol') {
+        emitEvent = { cat: this._defaultCategory, ...args[0] };
       } else {
-        emitEvent = { ...event }; // Spread the existing event
-        if (!emitEvent.cat) {  // Only add 'cat' if not already present
-          emitEvent.cat = this._defaultCategory;
-        }
+        emitEvent = { cat: event, ...args[0] };
       }
-      // Emit logic using 'emitEvent'
-      if (this._events.has(emitEvent.cat) && Array.isArray(this._events.get(emitEvent.cat))) {
-        await Promise.all(this._events.get(emitEvent.cat)!.map((listener: (...args: any[]) => void) => listener(...args)));      }
+      if (this._events.has(emitEvent) && Array.isArray(this._events.get(emitEvent))) {
+        await Promise.all(this._events.get(emitEvent)!.map((listener: (...args: any[]) => void) => listener(...args)));
+      }
     }
   }
