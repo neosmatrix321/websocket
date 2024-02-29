@@ -1,25 +1,23 @@
 "use strict";
 import "reflect-metadata";
 import { inject, injectable } from "inversify";
-import { EventEmitterMixin } from "./global/EventHandlingMixin.js";
-import { IStats, IglobalStats } from "./stats/statsInstance.js";
-import { IHandleWrapper, MyWebSocket } from "./server/serverInstance.js";
 import { ISettings, PRIVATE_SETTINGS_TOKEN } from "./settings/settingsInstance.js";
 import { WebSocket } from 'ws'
 import { Server } from "https";
-import Stats, { IStatsEvent } from "./stats/stats";
 import * as eM from "./global/EventHandlingManager";
 import * as eH from "./global/EventHandlingMixin";
+import * as statsMain from "./stats/stats";
+import * as statsI from "./stats/statsInstance";
+import * as serverI from "./server/serverInstance";
 
-export enum StatsType {
-  updated,
+export enum MainType {
   timerCreated,
   timerStarted,
   timerStopped
 }
 
-export interface IStatsEvent extends eH.IEventMap {
-  type: StatsType;
+export interface IMainEvent extends eH.IBaseEvent {
+  type: MainType;
   message: string;
   data: {
       errCode: number;
@@ -28,18 +26,15 @@ export interface IStatsEvent extends eH.IEventMap {
   };
 }
 
-function isMyWebSocketWithId(ws: WebSocket): ws is MyWebSocket {
-  return 'id' in ws;
-}
-export const GLOBAL_STATS_TOKEN = Symbol('privateSettings');
 
-class BaseStatsEvent implements eH.IBaseEvent {
-  "cat": eH.catType = eH.catType.stats;
+class BaseMainEvent implements eH.IBaseEvent {
+  "cat": eH.catType = eH.catType.main;
 }
+
 
 @injectable()
-export default class Main extends EventEmitterMixin<IStatsEvent>(BaseStatsEvent) {
-  @inject(GLOBAL_STATS_TOKEN) stats!: IStats;
+export default class Main extends eH.EventEmitterMixin<IStatsEvent>(BaseMainEvent) {
+  @inject(statsMain.GLOBAL_STATS_TOKEN) stats!: statsI.IStats;
   @inject(PRIVATE_SETTINGS_TOKEN) _settings!: ISettings;
   @inject(eM.EVENT_MANAGER_TOKEN) eM!: eM.eventManager;
   public constructor() {

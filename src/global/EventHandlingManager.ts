@@ -3,13 +3,14 @@ import { inject, injectable } from "inversify";
 import { EventEmitterMixin } from "./EventHandlingMixin";
 import { Server } from "https";
 import { WebSocketServer } from "ws";
-import * as eventI from "./EventHandlingMixin";
+import * as eH from "./EventHandlingMixin";
+import * as statsC from "../stats/stats";
 import * as statsI from "../stats/statsInstance";
+import * as clientsC from "../clients/clients";
 import * as clientsI from "../clients/clientInstance";
+import * as serverC from "../server/server";
 import * as serverI from "../server/serverInstance";
-import * as statsMain from "../stats/stats";
-import * as clientsMain from "../clients/clients";
-import * as serverMain from "../server/server";
+import * as mainC from "../main";
 
 // ... your other imports 
 export const EVENT_MANAGER_TOKEN = Symbol('eventManager');
@@ -20,7 +21,7 @@ export enum eMType {
   error
 }
 
-export interface IeMEvent extends eventI.IEventMap {
+export interface IeMEvent extends eH.IBaseEvent {
   type: eMType;
   message: string;
   data: {
@@ -30,12 +31,13 @@ export interface IeMEvent extends eventI.IEventMap {
   };
 }
 
-class BaseEMEvent implements eventI.IBaseEvent {
-  "cat": eventI.catType = eventI.catType.eventManager;
-}
+// class BaseEMEvent implements eH.IBaseEvent {
+//   "cat": eH.catType = eH.catType.eventManager;
+// }
+class MyClass {}
 
 @injectable()
-export class eventManager extends EventEmitterMixin<IeMEvent>(BaseEMEvent) {
+export class eventManager extends EventEmitterMixin(MyClass) {
   @inject(EVENT_MANAGER_TOKEN) private eM!: eventManager;
   public webServer: WebSocketServer;
   constructor() {
@@ -44,61 +46,73 @@ export class eventManager extends EventEmitterMixin<IeMEvent>(BaseEMEvent) {
     this.eM.setupWebSocketListeners();
     // Register event listeners
     // Stats Event Handlers
-    this.eM.on('stats', (event: statsMain.IStatsEvent) => {
-      switch (event.type) {
-        case statsMain.statsType.updated:
-          this.handleStatsUpdate(event);
+    this.eM.on(eH.catType.stats, (event: statsC.IStatsEvent) => {
+      if (!event) {
+        console.error('Event is undefined');
+        return;
+      }
+      switch (event) {
+        case statsC.statsType.update:
+          this.handleStatsUpdate(event as statsC.IStatsEvent);
           break;
-        case statsMain.statsType.timerCreated:
-          this.handleTimerCreated(event);
-          break;
-        case statsMain.statsType.timerStarted:
-          this.handleTimerStarted(event);
-          break;
-        case statsMain.statsType.timerStopped:
-          this.handleLatencyStopped(event);
+        case statsC.statsType.updated:
+          this.handleStatsUpdate(event as statsC.IStatsEvent);
           break;
         // ... other 'stats' event types
       }
     });
 
     // Client Event Handlers
-    this.eM.on('clients', (event: clientsMain.IClientsEvent) => {
+    this.eM.on(eH.catType.clients, (event: clientsC.IClientsEvent) => {
       switch (event.type) {
-        case clientsMain.clientsType.create:
+        case clientsC.clientsType.create:
           break;
-        case clientsMain.clientsType.update:
+        case clientsC.clientsType.update:
           this.clientSettingsUpdated(event);
           break;
-        case clientsMain.clientsType.delete:
+        case clientsC.clientsType.delete:
           this.clientBye(event);
           break;
-        case clientsMain.clientsType.statsUpdated:
+        case clientsC.clientsType.statsUpdated:
           this.clientMessageReady(event);
           break;
         // ... other 'client' event types
       }
     });
-    this.eM.on('server', (event: srvI.IServerEvent) => {
+    this.eM.on(eH.catType.server, (event: serverC.IServerEvent) => {
       switch (event.type) {
-        case serverMain.serverType.listen:
+        case serverC.serverType.listen:
           this.serverActive(event);
           break;
-        case serverMain.serverType.clientConnected:
+        case serverC.serverType.clientConnected:
           this.handleClientConnected(event);
           break;
-        case serverMain.serverType.clientMessageReady:
+        case serverC.serverType.clientMessageReady:
           this.handleClientMessage(event);
           break;
-        case serverMain.serverType.clientDisconcted:
+        case serverC.serverType.clientDisconcted:
           this.clientBye(event);
           this.handleClientConnected(event);
           break;
         // ... other 'client' event types
       }
     });
-    this.eM.on('clientConnected', this.handleClientConnected.bind(this));
-    this.eM.on('clientDisconnected', this.handleClientDisconnected.bind(this));
+    this.eM.on(eH.catType.main, (event: mainC.IMainEvent) => {
+      switch (event.type) {
+        case mainC.MainType.timerCreated:
+          this.handleTimerCreated(event);
+          break;
+        case mainC.MainType.timerStarted:
+          this.handleTimerStarted(event);
+          break;
+        case mainC.MainType.timerStopped:
+          this.handleLatencyStopped(event);
+          break;
+        // ... other 'client' event types
+      }
+    });
+    // this.eM.on('clientConnected', this.handleClientConnected.bind(this));
+    // this.eM.on('clientDisconnected', this.handleClientDisconnected.bind(this));
 
     // Process the updated stats object (this.stats)
 

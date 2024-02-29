@@ -12,6 +12,8 @@ import { IHandleWrapper, SERVER_WRAPPER_TOKEN } from './serverInstance';
 import { ISettings, PRIVATE_SETTINGS_TOKEN } from '../settings/settingsInstance';
 import * as eH from "../global/EventHandlingMixin";
 import * as eM from "../global/EventHandlingManager";
+import { statsType } from '../stats/stats';
+import { clientsType } from '../clients/clients';
 
 interface MyWebSocket extends WebSocket {
   id: string
@@ -23,7 +25,7 @@ export enum serverType {
   clientDisconcted
 }
 
-export interface IServerEvent extends eH.IEventMap {
+export interface IServerEvent extends eH.IBaseEvent {
   type: serverType;
   message: string;
   data: {
@@ -43,7 +45,7 @@ function isMyWebSocketWithId(ws: WebSocket): ws is MyWebSocket {
 }
 
 @injectable()
-export default class Server extends EventEmitterMixin(BaseServerEvent) {
+export default class Server extends EventEmitterMixin<IServerEvent>(BaseServerEvent) {
   @inject(SERVER_WRAPPER_TOKEN) _server!: IHandleWrapper;
   @inject(PRIVATE_SETTINGS_TOKEN) _settings!: ISettings;
   @inject(eM.EVENT_MANAGER_TOKEN) eM!: eM.eventManager;
@@ -111,7 +113,7 @@ export default class Server extends EventEmitterMixin(BaseServerEvent) {
           console.log("admin(" + ws_client.admin + ") sending to ip(" + this._clients[ws_client.id].info.ip + ") alive(" + ws_client.readyState + ") count(" + this._clients[ws_client.id]._stats.clientsCounter + ") connected(" + this.stats.connectedClients + ") latency_user(" + this._clients[ws_client.id]._stats.latency_user + ") latency_google(" + this.stats.latencyGoogle + ") connected since(" + this.stats.lastUpdates.web + ") diff(" + time_diff + ")");
 
           if (time_diff > 20000) {
-            this.eM.emit('clientLatencyThresholdExceeded', {
+            this.eM.emit(clientsType.statsUpdated, {
               clientId: ws_client.id,
               latency: time_diff,
               // ... more data 

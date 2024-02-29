@@ -5,8 +5,8 @@ import { Container, inject, injectable, optional } from 'inversify';
 // Interfaces (potentially in a separate file, interfaces.ts)
 import { WebSocketServer, WebSocket } from 'ws'
 export interface MyWebSocket extends WebSocket {
-        id: string
-    }
+  id: string
+}
 interface IHandle {
   web: WebSocketServer;
   file: any;
@@ -21,8 +21,8 @@ interface IHandleSettings {
   rconPort: number;
   streamServerPort: number;
 }
-export interface IHandleWrapper  {
-  _handle: IHandle; 
+export interface IHandleWrapper {
+  _handle: IHandle;
   _stats: IHandleStats;
   _settings: IHandleSettings;
 }

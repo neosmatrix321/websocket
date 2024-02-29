@@ -13,18 +13,25 @@ import * as S from "../stats/statsInstance";
 import * as pS from "../settings/settingsInstance";
 
 const PRIVATE_SETTINGS_TOKEN = Symbol('PrivateSettings');
-const GLOBAL_STATS_TOKEN = Symbol('GlobalStats');
-
+export const GLOBAL_STATS_TOKEN = Symbol('GlobalStats');
 
 export enum statsType {
   update,
-  updated,
-  timerCreated,
-  timerStarted,
-  timerStopped
+  updated
 }
 
-export interface IStatsEvent extends eH.IEventMap {
+export interface IStatsEvent extends eH.IBaseEvent {
+  type: statsType;
+  message: string;
+  data: {
+      errCode: number;
+      message?: string;
+      blob?: any;
+  };
+}
+
+
+export interface IStatsEvent extends eH.IBaseEvent {
   type: statsType;
   message: string;
   data: {
