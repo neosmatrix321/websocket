@@ -1,12 +1,13 @@
 "use strict";
 import "reflect-metadata";
 import { Container, inject, injectable, optional } from 'inversify';
+import * as eM from "../global/EventHandlingManager";
+import * as eH from "../global/EventHandlingMixin";
+import * as serverI from "../server/serverInstance";
 
 // Interfaces (potentially in a separate file, interfaces.ts)
 import { WebSocketServer, WebSocket } from 'ws'
-export interface MyWebSocket extends WebSocket {
-  id: string
-}
+
 interface IHandle {
   web: WebSocketServer;
   file: any;
@@ -26,15 +27,37 @@ export interface IHandleWrapper {
   _stats: IHandleStats;
   _settings: IHandleSettings;
 }
+interface MyWebSocket extends WebSocket {
+  id: string
+}
+
+
+export interface IServerEvent {
+  cat: eH.catType.server;
+  type?: serverType;
+  message?: string;
+  data?: {
+    errCode: number;
+    message?: string;
+    blob?: any;
+  };
+}
+
+
+class BaseServerEvent {
+  "cat": eH.catType = eH.catType.server;
+}
 
 export interface IserverWrapper {
   killAll(): void;
+  isMyWebSocketWithId(ws: WebSocket): ws is MyWebSocket
 }
 
 @injectable()
-export class serverWrapper {
+export default class serverWrapper extends eH.EventEmitterMixin<IServerEvent>(BaseServerEvent) {
   protected _server: IHandleWrapper;
   public constructor(@inject(SERVER_WRAPPER_TOKEN) @optional() server: IHandleWrapper) {
+    super();
     this._server = server || {
       _handle: {
         web: null,
@@ -52,7 +75,10 @@ export class serverWrapper {
       }
     };
   }
-
+  public isMyWebSocketWithId(ws: WebSocket): ws is MyWebSocket {
+    return 'id' in ws;
+  }
+  
   public killAll() {
     console.log('no please!');
   }

@@ -17,7 +17,7 @@ export interface IprivateSettings {
   setSettings(newSettings: ISettings): void;
 }
 @injectable()
-export class privateSettings implements IprivateSettings {
+export default class privateSettings implements IprivateSettings {
   private _settings: ISettings;
   public constructor(@inject(PRIVATE_SETTINGS_TOKEN) @optional() settings: ISettings) {
     this._settings = settings ?? {
@@ -39,3 +39,4 @@ export class privateSettings implements IprivateSettings {
   }}
 
 export const PRIVATE_SETTINGS_TOKEN = Symbol('privateSettings');
+

@@ -1,138 +1,115 @@
-import "reflect-metadata";
-import { inject, injectable } from "inversify";
-import { EventEmitterMixin } from "./EventHandlingMixin";
-import { Server } from "https";
-import { WebSocketServer } from "ws";
 import { IncomingMessage } from "http";
+import { inject, injectable } from "inversify";
+import "reflect-metadata";
+import { WebSocketServer } from "ws";
+// import * as statsC from "../stats/stats";
+import * as statsI from "../stats/statsInstance";
+// import * as clientsC from "../clients/clients";
+// import * as serverC from "../server/server";
+// import * as clientsC from "../clients/clients";
 import * as eH from "./EventHandlingMixin";
-// import * as eM from "../global/EventHandlingManager";
-import * as statsC from "../stats/stats";
-// import * as statsI from "../stats/statsInstance";
-import * as clientsC from "../clients/clients";
-// import * as clientsI from "../clients/clientInstance";
-import * as serverC from "../server/server";
-// import * as serverI from "../server/serverInstance";
-import * as mainC from "../main";
 
-// ... your other imports 
 export const EVENT_MANAGER_TOKEN = Symbol('eventManager');
 
-export enum eMType {
-  started,
-  stopped,
-  error
-}
-
-export interface IeMEvent extends eH.IEventMap {
-  cat: eH.catType;
-  type?: eMType | statsC.statsType | clientsC.clientsType | serverC.serverType | mainC.MainType;
-  message?: string;
-  data?: {
-    errCode: number;
-    message?: any;
-    blob?: any;
-  };
-}
-
-// class BaseEMEvent implements eH.IBaseEvent {
-//   "cat": eH.catType = eH.catType.eventManager;
-// }
-class BaseEventManager implements eH.IEventMap {
-  "cat": eH.catType = eH.catType.eventManager;
-}
-
 @injectable()
-export class eventManager extends EventEmitterMixin<IeMEvent>(BaseEventManager) {
-  @inject(EVENT_MANAGER_TOKEN) private eM!: eventManager;
-  public webServer: WebSocketServer;
-  constructor() {
-    super();
-    this.webServer = new WebSocketServer({ noServer: true });
-    this.eM.setupWebSocketListeners();
-    // Register event listeners
-    // Stats Event Handlers
-    this.eM.on(eH.catType.stats, (event: any) => {
+export default class eventManager {
+  private webServer: WebSocketServer;
+  private evMan: typeof eH.EventEmitterMixin;
+  public constructor(
+    @inject(eH.EVENT_HANDLER_TOKEN) {
+      eventManagerInstance,
+    }: {
+      evMan: eventManager;
+    },
+    @inject(EVENT_MANAGER_TOKEN) {
+      webServerInstance
+    }: {
+      webServerInstance: WebSocketServer
+    }
+  ) {
+    this.evMan = eventManagerInstance || eH.EventEmitterMixin(eH.EmptyClass);
+    this.webServer = webServerInstance || new WebSocketServer({ noServer: true });
+    this.setupEventListeners();
+    this.storeEvent(eM.DefaultIEvent);
+    this.on("eH.MAIN", (event: eH.IEvent) => {
       if (!event) {
         console.error('Event is undefined');
         return;
       }
+      // Access properties safely (assuming your IStatsEvent interface is correct)
       switch (event.type) {
-        case statsC.statsType.update:
-          this.handleStatsUpdate(event as statsC.IStatsEvent);
+        case eH.STATS.PID_AVAILABLE:
+          this.handleStatsUpdate(event);
           break;
-        case statsC.statsType.updated:
-          this.handleStatsUpdated(event as statsC.IStatsEvent);
-          break;
-        // ... other 'stats' event types
+        case eH.STATS.UPDATED: // Or any other relevant type that might be emitted
+          this.handleStatsUpdated(event);
+          break;        // ... other 'stats' event types
       }
     });
 
     // Client Event Handlers
-    this.eM.on(eH.catType.clients, (event: any) => {
+    this.on('type', (event: IEvent) => {
       if (!event) {
         console.error('Event is undefined');
         return;
       }
       switch (event.type) {
-        case clientsC.clientsType.create:
+        case eH.CLIENTS.CREATE:
           break;
-        case clientsC.clientsType.update:
+        case eH.CLIENTS.MODIFY:
           this.clientSettingsUpdated(event);
           break;
-        case clientsC.clientsType.delete:
+        case eH.CLIENTS.DELETE:
           this.clientBye(event);
           break;
-        case clientsC.clientsType.statsUpdated:
+        case eH.CLIENTS.STATS_UPDATED:
           this.clientMessageReady(event);
           break;
         // ... other 'client' event types
       }
     });
-    this.eM.on(eH.catType.server, (event: any) => {
+    this.on('serverEvent', (event: IEvent) => {
       if (!event) {
         console.error('Event is undefined');
         return;
       }
       switch (event.type) {
-        case serverC.serverType.listen:
+        case eH.SERVER.LISTEN:
           this.serverActive(event);
           break;
-        case serverC.serverType.clientConnected:
+        case eH.SERVER.CLIENT_CONNECTED:
           this.handleClientConnected(event);
           break;
-        case serverC.serverType.clientMessageReady:
+        case eH.SERVER.CLIENT_MESSAGE_READY:
           this.handleClientMessage(event);
           break;
-        case serverC.serverType.clientDisconcted:
+        case eH.SERVER.CLIENT_DISCONNECTED:
           this.clientBye(event);
           this.handleClientConnected(event);
           break;
         // ... other 'client' event types
       }
     });
-    this.eM.on(eH.catType.main, (event: any) => {
+    this.on('BASIC', (event: IEvent) => {
       if (!event) {
         console.error('Event is undefined');
         return;
       }
-      switch (event.type) {
-        case mainC.MainType.timerCreated:
+      switch (event[eH.MAIN.BASIC]) {
+        case eH.MAIN.BASIC:
           this.handleTimerCreated(event);
           break;
-        case mainC.MainType.timerStarted:
+        case eH.MAIN.BASIC:
           this.handleTimerStarted(event);
           break;
-        case mainC.MainType.timerStopped:
+        case eH.MAIN.BASIC:
           this.handleLatencyStopped(event);
           break;
         // ... other 'client' event types
       }
     });
-    // this.eM.on('clientConnected', this.handleClientConnected.bind(this));
-    // this.eM.on('clientDisconnected', this.handleClientDisconnected.bind(this));
-
-    // Process the updated stats object (this.stats)
-
+    // this.on('clientConnected', this.handleClientConnected.bind(this));
+    // this.on('clientDisconnected', this.handleClientDisconnected.bind(this));
   }
   handleLatencyStopped(event: any) {
     throw new Error("Method not implemented.");
@@ -143,65 +120,78 @@ export class eventManager extends EventEmitterMixin<IeMEvent>(BaseEventManager) 
 
   private setupWebSocketListeners() {
     this.webServer.on('connection', (ws: WebSocket, request: IncomingMessage): void => {
-      this.emit('clientConnected', ws);
+      this.eventManager.emit(eH.SERVER.CLIENT_CONNECTED, ws);
     });
-
-    // ... other event listeners for 'close', 'message', etc.
+  }
+  private clientSettingsUpdated(event: IEvent): void {
+    // implement this method
   }
 
-  private handleStatsUpdate(event: statsC.IStatsEvent | IeMEvent): void {
+  private clientBye(event: IEvent): void {
+    // implement this method
+  }
+  // ... other event listeners for 'close', 'message', etc.
+
+  private serverActive(event: IEvent): void {
+    // implement this method
+  }
+
+  private gatherAndSendStats(): void {
+    // implement this method
+  }
+  private handleStatsUpdate(event: IEvent): void {
     if (event.data.errCode === 0) {
-      this.eM.on('statsUpdated', this.handleStatsUpdated.bind(this));
+      this.on(eH.STATS.PID_AVAILABLE, this.handleStatsUpdated.bind(this));
       console.log('Latency:', event.data.blob);
     } else {
-      this.eM.handleError(new Error(event.data.message)); // Or a custom error type
+      this.handleError(new Error(event.data.message)); // Or a custom error type
     }
   }
 
-  private handleClientstats(event: IeMEvent) {
+  private handleClientstats(event: IEvent) {
     console.log('Client Latency Exceeded:', event.data);
     // ... React to client latency (e.g., send warning, log data)
   }
 
-  private handleTimerStarted(event: statsC.IStatsEvent): void {
+  private handleTimerStarted(event: statsI.IStatsEvent): void {
     if (event.data && event.data.errCode === 0) {
-      this.eM.gatherAndSendStats.bind(this)
+      this.gatherAndSendStats.bind(this)
       console.log('Latency:', event.data.blob);
     } else {
-      this.eM.handleError(new Error(event.data.message)); // Or a custom error type
+      this.handleError(new Error(event.data.message)); // Or a custom error type
     }
   }
 
   public handleClientConnected(_ws: WebSocket): void {
-    const event: IeMEvent = {
-      cat: eH.catType.server,
-      type: serverC.serverType.clientConnected, // or another appropriate type
+    const event: IEvent = {
+      cat: eH.SERVER.LISTEN,
+      type: eH.SERVER.CLIENT_CONNECTED, // or another appropriate type
       message: 'Client connected',
       data: {
         errCode: 0, // or another appropriate code
         blob: _ws
       }
     };
-    this.eM.emit(eH.catType.server, event);
+    this.emit(eH.SERVER.LISTEN, event);
   }
 
   public handleClientMessage(_ws: WebSocket): void {
-    const event: IeMEvent = {
-      cat: eH.catType.server,
-      type: serverC.serverType.clientMessage, // or another appropriate type
+    const event: IEvent = {
+      cat: eH.SERVER.LISTEN,
+      type: eH.SERVER.CLIENT_MESSAGE, // or another appropriate type
       message: 'Client connected',
       data: {
         errCode: 0, // or another appropriate code
         blob: _ws
       }
     };
-    this.eM.emit(eH.catType.server, event);
+    this.emit(eH.SERVER.LISTEN, event);
   }
 
   public handleClientDisconnected(ws: WebSocket): void {
-    const event: IeMEvent = {
-      cat: eH.catType.server,
-      type: serverC.serverType.clientDisconcted, // or another appropriate type
+    const event: IEvent = {
+      cat: eH.SERVER.LISTEN,
+      type: eH.SERVER.CLIENT_DISCONNECTED, // or another appropriate type
       message: 'Client disconnected',
       data: {
         errCode: 0, // or another appropriate code
@@ -211,20 +201,20 @@ export class eventManager extends EventEmitterMixin<IeMEvent>(BaseEventManager) 
     this.handleError(new Error(event.data.message)); // Or a custom error type
   }
 
-  private handleStatsUpdated(event: statsC.IStatsEvent): void { // Assuming IStats exists
+  private handleStatsUpdated(event: statsI.IStatsEvent): void { // Assuming IStats exists
     try {
       this.clientMessageReady(event);
     } catch (error) {
       this.handleError(new Error('statsUpdated'), error); // Or a custom error type
     }
   }
-  clientMessageReady(event: statsC.IStatsEvent) {
+  clientMessageReady(event: statsI.IStatsEvent) {
     throw new Error("Method not implemented.");
   }
   public emitError(error: any): void {
-    const event: IeMEvent = {
-      cat: eH.catType.eventManager,
-      type: eMType.error, // Or other relevant type
+    const event: IEvent = {
+      cat: eH.EVENT.ERROR,
+      type: eH.EVENT.ERROR, // Or other relevant type
       message: 'An error occurred',
       data: {
         errCode: -1, // Replace with suitable error code if you have them
@@ -233,63 +223,16 @@ export class eventManager extends EventEmitterMixin<IeMEvent>(BaseEventManager) 
       }
     };
 
-    this.emit(eH.catType.eventManager, event);
+    this.emit(eH.EVENT.ERROR, event);
   }
 
   public handleError(error: any, errorBlob?: any): void {
     const errorData: any = { ...errorBlob || error };
     console.error('Error from eventManager:', error);
-    this.eM.emitError(errorData); // Emit the error for wider handling
+    this.emitError(errorData); // Emit the error for wider handling
   }
 }
 
-/* https://github.com/neosmatrix321/websocket/tree/master
-import { inject, injectable } from "inversify";
-import { EventEmitterMixin } from "./EventHandlingMixin";
-import { WebSocketServer } from "ws";
-import * as sI from "../stats/statsInstance";
-import * as statsC from "../stats/stats";
-import * as cI from "../clients/clientInstance";
-import * as clientsMain from "../clients/clients";
-import { IncomingMessage } from 'http';
-
-// ... other imports 
-
-@injectable()
-export class eventManager extends EventEmitterMixin<IeMEvent>(BaseEMEvent) {
-  // ... properties
-
-  constructor() {
-    super();
-    this.webServer = new WebSocketServer({ noServer: true });
-    this.setupWebSocketListeners();
-    this.registerEventHandlers(); 
-  }
-
-  private registerEventHandlers() {
-    this.on('stats', this.handleStatsEvent); 
-    this.on('client', this.handleClientEvent);
-
-    // Consider registering server handlers separately if needed:
-    // this.on('server', this.handleServerEvent); 
-  }
-
-  private handleStatsEvent(event: statsC.IStatsEvent) {
-    switch (event.type) {
-      case statsC.statsType.updated:
-        this.handleStatsUpdated(event);
-        break;
-      case statsC.statsType.latencyUpdated:
-        this.handleLatencyUpdated(event);
-        break;
-      // ... other stats cases
-      default: 
-        console.warn('Unhandled stats event type:', event.type);
-    }
-  }
-
-  private handleClientEvent(event: clientsMain.IClientEvent) {
-    // ... similar structure as handleStatsEvent
-  }
-
-  // ... other handlers and helper functions */
+/* 
+https://github.com/neosmatrix321/websocket/tree/master
+*/

@@ -1,4 +1,8 @@
 "use strict";
+import { Injectable } from "@angular/core";
+import * as eM from "../global/EventHandlingManager";
+import * as eH from "../global/EventHandlingMixin";
+import { inject, injectable } from "inversify";
 
 export enum ClientType {
   Basic,
@@ -33,7 +37,28 @@ export interface IClient {
   _super: IClientSuper;
 }
 
+export enum clientsType {
+  create,
+  update,
+  delete,
+  statsUpdated
+}
+export interface IClientsEvent extends eH.IEventMap{
+  message?: string;
+  type?: clientsType;
+  client: IClientInfo;
+  data?: {
+    errCode: number;
+    message?: string;
+    blob?: any;
+  };
+}
+export class BaseClientsEvent {
+  "cat": eH.catType = eH.catType.clients;
+}
+
 // client.ts
+@Injectable()
 export class clientWrapper {
   info: IClientInfo;
   _stats: IClientStats;
@@ -53,3 +78,13 @@ export class clientWrapper {
 export interface IClients {
   id: IClient;
 }
+
+@injectable()
+export default class clientsWrapper {
+  protected _clients: Record<string, IClient>;
+  constructor(@inject(CLIENTS_WRAPPER_TOKEN) clientsInstance: Record<string, IClient>) {
+    this._clients = clientsInstance || {};  // Initialize if needed
+  }
+}
+
+export const CLIENTS_WRAPPER_TOKEN = Symbol('clientsWrapper');

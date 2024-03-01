@@ -1,5 +1,7 @@
 "use strict";
 import "reflect-metadata";
+import * as eH from "../global/EventHandlingMixin";
+
 interface IwebHandle {
   isAlive: boolean,
   hasConnection: boolean,
@@ -10,6 +12,23 @@ interface IfileHandle {
   hasConnection: boolean,
   connectedClients: number
 }
+
+
+
+export interface IStatsEvent extends eH.IEventMap {
+  cat: eH.catType.stats;
+  type?: statsType;
+  message?: string;
+  data?: {
+    errCode: number;
+    message?: string;
+    blob?: any;
+  };
+}
+class BaseStatsEvent {
+}
+
+
 export interface IStats {
   webHandle: IwebHandle,
   fileHandle: IfileHandle,
@@ -26,6 +45,8 @@ export interface IStats {
 export interface IglobalStats {
   stats: IStats
 }
+export const GLOBAL_STATS_TOKEN = Symbol('GlobalStats');
+
 
 // export interface IStatsService extends globalStats {
 //   getGlobalStats(): IglobalStats;

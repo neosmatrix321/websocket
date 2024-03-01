@@ -1,53 +1,42 @@
 "use strict";
 import "reflect-metadata";
 import { inject, injectable } from "inversify";
-import { ISettings, PRIVATE_SETTINGS_TOKEN } from "./settings/settingsInstance.js";
 import { WebSocket } from 'ws'
 import { Server } from "https";
 import * as eM from "./global/EventHandlingManager";
 import * as eH from "./global/EventHandlingMixin";
 import * as statsC from "./stats/stats";
 import * as statsI from "./stats/statsInstance";
-
-export enum MainType {
-  timerCreated,
-  timerStarted,
-  timerStopped
-}
-
-export interface IMainEvent extends eH.IBaseEvent {
-  type: MainType;
-  message: string;
-  data: {
-    errCode: number;
-    message?: string;
-    blob?: any;
-  };
-}
-
-
-class BaseMainEvent implements eH.IBaseEvent {
-  "cat": eH.catType = eH.catType.main;
-}
-
+import * as settingsI from "./settings/settingsInstance";
 
 @injectable()
-export default class Main extends eH.EventEmitterMixin<statsC.IStatsEvent>(BaseMainEvent) {
-  @inject(statsC.GLOBAL_STATS_TOKEN) stats!: statsI.IStats;
-  @inject(PRIVATE_SETTINGS_TOKEN) _settings!: ISettings;
-  @inject(eM.EVENT_MANAGER_TOKEN) eM!: eM.eventManager;
+export default class Main {
+  @inject(settingsI.PRIVATE_SETTINGS_TOKEN) private _settings!: settingsI.ISettings;
+  @inject(eM.EVENT_MANAGER_TOKEN) private eM!: eM.eventManager;
+  @inject(statsI.GLOBAL_STATS_TOKEN) private stats!: statsI.IStats;
   public constructor() {
     super();
     this.initialize();
   }
-  public async initialize() {
-    console.log(this);
-    try {
-      await Server.createServer();
 
-    } catch (err) {
-      console.error("Main Initialization Error: ", err);
-    }
+  private async gatherAndSendStats() {
+    const updatedStats = await this._systemMonitor.getUpdatedStats();
+    this.updateGlobalStats(updatedStats);
+
+    this._clients.forEach((client: any) => {
+      if (client.readyState === client.OPEN) {
+        // . detailed logic to build and send the stats payload.
+        client.send('client aagdssdaf');
+      }
+    });
+  }
+
+  private async handleClose(ws: any, code: any) {
+    console.log("dead ip(" + ws.ip + ") alive(" + ws.readyState + ") code(" + code + ") count(" + this.stats.clientsCounter + ")");
+    await this._clients.removeClient(ws.id); // Assuming you have removeClient
+    this._server._handle.web.destroyClient(ws.ip); // If applicable
+    ws.terminate();
+    this.startIntervalIfNeeded();
   }
 
   private async handleConnection(ws: any) {
@@ -60,21 +49,7 @@ export default class Main extends eH.EventEmitterMixin<statsC.IStatsEvent>(BaseM
     this.setupWebSocketEvents(ws);
     this.startIntervalIfNeeded();
   }
-  private async handleWebSocketMessage(ws: any, data: any, isBinary: any) {
-    const decodedData = Buffer.from(data, 'base64').toString();
-    const messageObject = JSON.parse(decodedData);
 
-    if (messageObject.type) {
-      switch (messageObject.type) {
-        case 'greeting':
-          this.handleGreeting(ws, messageObject);
-          break;
-        // Add other cases for message types 
-        default:
-          console.log("Unknown message type");
-      }
-    }
-  }
   private async handleGreeting(client: WebSocket, obj: any) {
     const newIP = client.socket.remoteAddress;
     const type = 'basic'
@@ -98,12 +73,20 @@ export default class Main extends eH.EventEmitterMixin<statsC.IStatsEvent>(BaseM
     console.log('dummy');
   }
 
-  private async handleClose(ws: any, code: any) {
-    console.log("dead ip(" + ws.ip + ") alive(" + ws.readyState + ") code(" + code + ") count(" + this.stats.clientsCounter + ")");
-    await this._clients.removeClient(ws.id); // Assuming you have removeClient
-    this._server._handle.web.destroyClient(ws.ip); // If applicable
-    ws.terminate();
-    this.startIntervalIfNeeded();
+  private async handleWebSocketMessage(ws: any, data: any, isBinary: any) {
+    const decodedData = Buffer.from(data, 'base64').toString();
+    const messageObject = JSON.parse(decodedData);
+
+    if (messageObject.type) {
+      switch (messageObject.type) {
+        case 'greeting':
+          this.handleGreeting(ws, messageObject);
+          break;
+        // Add other cases for message types 
+        default:
+          console.log("Unknown message type");
+      }
+    }
   }
 
   private startIntervalIfNeeded() {
@@ -114,16 +97,14 @@ export default class Main extends eH.EventEmitterMixin<statsC.IStatsEvent>(BaseM
     }
   }
 
-  private async gatherAndSendStats() {
-    const updatedStats = await this._systemMonitor.getUpdatedStats();
-    this.updateGlobalStats(updatedStats);
+  public async initialize() {
+    console.log(this);
+    try {
+      await Server.createServer();
 
-    this._clients.forEach((client: any) => {
-      if (client.readyState === client.OPEN) {
-        // . detailed logic to build and send the stats payload.
-        client.send('client aagdssdaf');
-      }
-    });
+    } catch (err) {
+      console.error("Main Initialization Error: ", err);
+    }
   }
 }
 

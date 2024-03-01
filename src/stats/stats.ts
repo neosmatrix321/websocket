@@ -2,49 +2,16 @@
 
 import 'reflect-metadata';
 import { readFile } from 'node:fs/promises';
-import { Container, inject, injectable } from 'inversify';
-import { EventEmitterMixin } from '../global/EventHandlingMixin';
-import { IStats } from './statsInstance';
+import { inject, injectable } from 'inversify';
 import pidusage from 'pidusage';
 import si from 'systeminformation';
 import * as eH from "../global/EventHandlingMixin";
-import * as eM from "../global/EventHandlingManager";
 import * as settingsI from '../settings/settingsInstance'; // Import settings interface/class
 import * as statsI from "../stats/statsInstance";
-import * as clientsC from "../clients/clients";
-import * as clientsI from "../clients/clientInstance";
-import * as serverC from "../server/server";
-import * as serverI from "../server/serverInstance";
-import * as mainC from "../main";
-
-const PRIVATE_SETTINGS_TOKEN = Symbol('PrivateSettings');
-export const GLOBAL_STATS_TOKEN = Symbol('GlobalStats');
-
-export enum statsType {
-  update,
-  updated,
-  pidAvailable
-}
-
-
-export interface IStatsEvent extends eH.IEventMap {
-  cat: eH.catType.stats;
-  type?: eM.eMType | statsType | clientsC.clientsType | serverC.serverType | mainC.MainType;
-  message?: string;
-  data?: {
-    errCode: number;
-    message?: string;
-    blob?: any;
-  };
-}
-
-
-class BaseStatsEvent {
-}
 
 
 @injectable()
-export default class Stats extends eH.EventEmitterMixin<IStatsEvent>(BaseStatsEvent) {
+export default class Stats {
   public stats!: statsI.IStats;
   private _settings!: settingsI.ISettings
   constructor(@inject(GLOBAL_STATS_TOKEN) statsInstance: statsI.IStats,

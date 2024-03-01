@@ -7,48 +7,12 @@ import { WebSocket, WebSocketServer, createWebSocketStream } from 'ws';
 import { inject, injectable } from 'inversify';
 import * as eH from "../global/EventHandlingMixin";
 import * as eM from "../global/EventHandlingManager";
-import * as statsC from "../stats/stats";
-import * as statsI from "../stats/statsInstance";
-import * as clientsC from "../clients/clients";
-import * as clientsI from "../clients/clientInstance";
 import * as serverC from "../server/server";
 import * as serverI from "../server/serverInstance";
-import * as mainC from "../main";
 
-interface MyWebSocket extends WebSocket {
-  id: string
-}
-export enum serverType {
-  listen,
-  updateClientStats,
-  clientConnected,
-  clientMessage,
-  clientMessageReady,
-  clientDisconcted
-}
-
-export interface IServerEvent extends eH.IEventMap {
-  cat: eH.catType.server;
-  type?: serverType;
-  message?: string;
-  data?: {
-    errCode: number;
-    message?: string;
-    blob?: any;
-  };
-}
-
-
-class BaseServerEvent {
-  "cat": eH.catType = eH.catType.server;
-}
-
-function isMyWebSocketWithId(ws: WebSocket): ws is MyWebSocket {
-  return 'id' in ws;
-}
 
 @injectable()
-export default class Server extends eH.EventEmitterMixin<IServerEvent>(BaseServerEvent) {
+export default class Server {
   @inject(serverI.SERVER_WRAPPER_TOKEN) _server!: serverI.IHandleWrapper;
   @inject(eM.EVENT_MANAGER_TOKEN) eM!: eM.eventManager;
   constructor() {
