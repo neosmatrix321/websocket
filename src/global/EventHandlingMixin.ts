@@ -20,33 +20,42 @@ export enum EventTypes {
   ERROR = 'ERROR',
   EVENT = 'EVENT'
 }
-
-
-export const DefaultIEvent: IEmptyClass = {
-  "EVENT": {
-    type: "UNKNOWN",
-    success: false,
-    message: 'Where am I?',
-    timestamp: Date.now()
-  }
-};
-
-export const FirstIEvent: IEmptyClass = {
-  "BASIC": {
-    success: false,
-    message: '',
-    type: "UNKNOWN",
-    timestamp: Date.now(),
-    mainEvent: { pid: 0 },
-    statsEvent: { statsId: 0, newValue: null, oldValue: null, updatedFields: null },
-    serverEvent: { timerId: 0, startTime: 0, endTime: 0, duration: 0 },
-    clientsEvent: { clientId: '', message: '' },
-    errorEvent: { error: new Error(), errCode: 0 }
-  }
+export enum SubEventTypes {
+  TIMER_CREATED = 'TIMER_CREATED',
+  TIMER_STARTED = 'TIMER_STARTED',
+  TIMER_STOPPED = 'TIMER_STOPPED',
+  START_TIMER = 'START_TIMER',
+  STOP_TIMER = 'STOP_TIMER',
+  PID_AVAILABLE = 'PID_AVAILABLE',
+  LISTEN = 'LISTEN',
+  CLIENT_CONNECTED = 'CLIENT_CONNECTED',
+  CLIENT_MESSAGE_READY = 'CLIENT_MESSAGE_READY',
+  CLIENT_DISCONNECTED = 'CLIENT_DISCONNECTED',
+  ALL_STATS_UPDATED = 'ALL_STATS_UPDATED',
+  UPDATE_ALL_STATS = 'UPDATE_ALL_STATS',
+  PI_STATS_UPDATED = 'PI_STATS_UPDATED',
+  UPDATE_PI_STATS = 'UPDATE_PI_STATS',
+  PU_STATS_UPDATED = 'PU_STATS_UPDATED',
+  UPDATE_PU_STATS = 'UPDATE_PU_STATS',
+  OTHER_STATS_UPDATED = 'OTHER_STATS_UPDATED',
+  UPDATE_OTHER_STATS = 'UPDATE_OTHER_STATS',
+  CREATE = 'CREATE',
+  MODIFY = 'MODIFY',
+  MODIFIED = 'MODIFIED',
+  DELETE = 'DELETE',
+  CLIENT_STATS_UPDATED = 'CLIENT_STATS_UPDATED',
+  UPDATE_CLIENT_STATS = 'UPDATE_CLIENT_STATS',
+  ERROR = 'ERROR',
+  UNKNOWN = 'UNKNOWN',
+  STRING = 'STRING',
+  SYMBOL = 'SYMBOL',
+  OBJECT = 'OBJECT',
+  connection = 'connection',
 }
+
 export interface IEvent {
   message: string;
-  type: MAIN | SERVER | STATS | CLIENTS | EVENT | ERROR | BASIC;
+  type: SubEventTypes;
   success: boolean;
   timestamp: number;
   mainEvent?: {
@@ -74,151 +83,164 @@ export interface IEvent {
   };
   data?: any;
 }
-export type IEventMap = Map<EventType, ((...args: any[]) => void)[]>;
-export type EventMap = Map<EventType, IEvent[]>;
+type EventKeys<T> = {
+  [key in EventTypes]?: T extends IEvent ? T : never; // Mark keys as optional
+};
 
-export interface IEventRoot extends IEvent {
-  [key in EventTypes]: IEvent | any[];
+export interface IEventRoot<T> extends EventKeys<T> { }
+export class IEmptyClass implements IEventRoot<IEvent> {
+  [EventTypes.EVENT]: IEvent = {
+    success: false,
+    message: 'Where am I?',
+    type: SubEventTypes.UNKNOWN,
+    timestamp: Date.now()
+  }
+}
+export class EmptyClass implements IEventRoot<IEvent> {
+  // event: { [key: string]: IEvent } = { "BASIC": DefaultIEvent };
+  // constructor() { this.key = { "BASIC": DefaultIEvent }; }
 }
 
-export class IEmptyClass implements IEventRoot {
-  "BASIC": IEvent = {
-    type: "UNKNOWN",
+export const DefaultIEvent: IEventRoot<IEvent> = {
+  [EventTypes.BASIC]: {
+    type: SubEventTypes.UNKNOWN,
     success: false,
     message: 'Where am I?',
     timestamp: Date.now()
   }
+};
+
+export const FirstIEvent: IEventRoot<IEvent> = {
+  [EventTypes.BASIC]: {
+    success: false,
+    message: '',
+    type: SubEventTypes.UNKNOWN,
+    timestamp: Date.now(),
+    mainEvent: { pid: 0 },
+    statsEvent: { statsId: 0, newValue: null, oldValue: null, updatedFields: null },
+    serverEvent: { timerId: 0, startTime: 0, endTime: 0, duration: 0 },
+    clientsEvent: { clientId: '', message: '' },
+    errorEvent: { error: new Error(), errCode: 0 }
+  }
 }
-export const EventEmitterMixin = <T extends IEventRoot>(BaseClass: new (...args: any[]) => {}) => class extends BaseClass {
-  protected _emitter: EventEmitter;
-  private _events: Map<EventType, IEvent> = new Map();
-  private _listeners: Map<EventType, ((...args: any[]) => void)[]> = new Map();
-  private storeEvent(event: IEventRoot): void {
-    let key: EventType = "EVENT"; // Default key
+export type IEventMap = Map<EventType, ((...args: any[]) => void)[]>;
+export type EventMap = Map<EventType, IEvent[]>;
 
-    // Check if the event has a key that matches an EventType
-    for (let potentialKey in event) {
-      if (Object.values(<EventType>).includes(potentialKey)) {
-        key = potentialKey as EventType;
-        break;
-      }
-    }
 
-    const formattedEvent: IEventRoot = {
-      key: event[key] || DefaultIEvent[key], // Use the event's value if it exists, otherwise use the default
-    };
 
-    this._events.set(key, formattedEvent);
-  }
+export const EventEmitterMixin = <T extends IEventRoot<IEvent>>(BaseClass: new (...args: any[]) => {}) => class extends BaseClass {
+      protected _emitter: EventEmitter;
+    private _events: Map<keyof T, IEvent> = new Map<keyof T, IEvent>();
+    private _listeners: Map<keyof T, ((...args: any[]) => void)[]> = new Map();
 
-  constructor(...args: any[]) {
-    super(...args);
-    this._emitter = new EventEmitter();
-    this._events = new Map(); // Internal Map 
-    this._listeners = new Map(); // Map for listeners
-  }
-  async on(event: EventType, listener: (...args: any[]) => void) {
-    const eventKey: EventType = event;
-    if (!this._events.has(eventKey)) {
-      switch (true) {
-        case typeof event === 'string':
-          this.storeEvent(FirstIEvent);
-          break;
-        case typeof event === 'object':
-          this.storeEvent({ key: { "EVENT": event } });
-          break;
-        default:
-          this.storeEvent(DefaultIEvent as IEventRoot);
-          break;
-      }
-      if (typeof event === 'object' && !('type' in event)) event = { type: "OBJECT", success: false, message: '', timestamp: Date.now(), data: { blob: event } };
-      const newEvent: IEventRoot = { key: { "EVENT": event } };
-      this.storeEvent(newEvent);
-    }
-
-    if (!this._listeners.has(eventKey)) {
-      this._listeners.set(eventKey, []);
-    }
-    this._listeners.get(eventKey)?.push(listener);
-  }
-  async prepend(event: EventType, listener: (...args: any[]) => void) {
-    if (!this._events.has(event)) {
-      this.storeEvent(event);
-    }
-    if (!this._listeners.has(event)) {
-      this._listeners.set(event, []);
-    }
-    this._listeners.get(event)?.unshift(listener);
-  }
-  async off(event: EventType, listener: (...args: any[]) => void) {
-    if (this._listeners.has(event)) {
-      const listeners = this._listeners.get(event)?.filter(cb => cb !== listener);
-      if (listeners) this._listeners.set(event, listeners);
-    }
-  }
-  async emit(event: EventType, ...args: any[]) {
-    if (this._events.has(event) && Array.isArray(this._events.get(event))) {
+    private storeEvent(event: keyof T): void {
       if (this._events.has(event)) {
-        switch (event) {
-          case "SERVER":
-            // const serverEvent = args[0] as IServerConnectedEvent;
-            break;
-          // ... other cases
+        return;
+      }
+
+      const defaultEvent: IEvent = {
+        success: false,
+        message: 'Default event',
+        type: SubEventTypes.UNKNOWN,
+        timestamp: Date.now(),
+        data: event
+      };
+
+      this._events.set(event, defaultEvent);
+    }
+
+    constructor(...args: any[]) {
+      super(...args);
+      this._emitter = new EventEmitter();
+      this._events = new Map(); // Internal Map 
+      this._listeners = new Map(); // Map for listeners
+    }
+
+    async on(event: keyof T, listener: (...args: any[]) => void) {
+      this.storeEvent(event);
+      if (!this._listeners.has(event)) {
+        this._listeners.set(event, []);
+      }
+      this._listeners.get(event)?.push(listener);
+    }
+
+    async prepend(event: keyof T, listener: (...args: any[]) => void) {
+      this.storeEvent(event);
+      if (!this._listeners.has(event)) {
+        this._listeners.set(event, []);
+      }
+      this._listeners.get(event)?.unshift(listener);
+    }
+
+    async off(event: keyof T, listener: (...args: any[]) => void) {
+      if (this._listeners.has(event)) {
+        const listeners = this._listeners.get(event)?.filter(cb => cb !== listener);
+        if (listeners) this._listeners.set(event, listeners);
+      }
+    }
+
+    async emit(event: keyof T, ...args: any[]) {
+      if (this._events.has(event)) {
+        const storedEvent: IEvent | undefined = this._events.get(event);
+        if (!storedEvent) {
+          return;
         }
-        const storedEvent: IEvent = this._events.get(event) as IEvent;;
         if (this._listeners.has(event)) {
           await Promise.all(this._listeners.get(event)!.map(listener => listener(storedEvent)));
         }
       }
     }
   }
-}
-
 export class SingletonEmitter {
   private static instance: any;
 
-  public static getInstance<T extends IEventRoot>(BaseClass: new (...args: any[]) => {}): any {
+  public static getInstance<T extends IEventRoot<IEvent>>(BaseClass: new (...args: any[]) => T): T { 
     if (!SingletonEmitter.instance) {
-      const MixinClass = EventEmitterMixin<T>(BaseClass);
+      const MixinClass = EventEmitterMixin(BaseClass);
       SingletonEmitter.instance = new MixinClass();
     }
     return SingletonEmitter.instance;
   }
 }
 
-export class EventClass extends EventEmitterMixin<IEventRoot>(IEmptyClass) {
-  "EVENT": IEvent = {
+export class EventClass extends EventEmitterMixin<IEventRoot<IEvent>>(EmptyClass) {
+  [EventTypes.EVENT]: IEvent = {
     success: false,
     message: 'Where am I?',
-    type: "UNKNOWN",
-    timestamp: Date.now()
+    type: SubEventTypes.UNKNOWN,
+    timestamp: Date.now(),
   }
 
-  constructor(event: IEventRoot) {
+  constructor(event: IEventRoot<IEvent>) {
     super();
+    const eventKey: keyof IEventRoot<IEvent> = EventTypes.EVENT;
+    let eventValue: IEventRoot<IEvent> = event
     // Check if the event has the expected structure
     if (!this.isValidEvent(event)) {
       // If not, set the event to the default event
-      this["EVENT"] = DefaultIEvent["EVENT"];
+      eventValue = { ...DefaultIEvent };
+      this[EventTypes.EVENT].data = event;
       // } else {
-      //   // If it is valid, use the provided event
+      //   // If it is valid, use the provided event3we24
       //   this[event.key] = event.key[EventType];
     }
+    return this;
   }
 
-  private isValidEvent(event: IEventRoot): boolean {
-    // Add your validation logic here
-    // For example, check if the event has a certain property
-    return event && event ? Object.values(event).includes(event as unknown as EventType) : false;
-  }
+  private isValidEvent(event: IEventRoot<IEvent>): boolean {
+    console.log("Event: ", event); // Inspect the event object
+    console.log("EventTypes: ", EventTypes); // Check if EventTypes is accessible 
+    if (event.hasOwnProperty(typeof EventTypes)) {
+    // Your refined validation logic:
+      return true; // Event has at least one validEventType key
+    }
 
+    return false; // No valid EventType found 
+  }
 }
 // Define a marker to use with Inversify
 export const EVENT_MANAGER_FACTORY_TOKEN = Symbol('EventManager');
 
-export class EmptyClass {
-  // event: { [key: string]: IEvent } = { "BASIC": DefaultIEvent };
-  // constructor() { this.key = { "BASIC": DefaultIEvent }; }
-}
+
 
 
