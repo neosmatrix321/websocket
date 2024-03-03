@@ -45,6 +45,9 @@ var __importStar = (this && this.__importStar) || function (mod) {
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -90,34 +93,128 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
         if (v !== undefined) module.exports = v;
     }
     else if (typeof define === "function" && define.amd) {
-        define(["require", "exports", "reflect-metadata", "node:fs/promises", "inversify", "../global/globalEventHandling", "pidusage", "systeminformation", "../settings/settingsInstance"], factory);
+        define(["require", "exports", "reflect-metadata", "node:fs/promises", "inversify", "pidusage", "systeminformation", "../global/EventHandlingMixin", "../stats/statsInstance", "../settings/settingsInstance"], factory);
     }
 })(function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
+    exports.statsType = exports.GLOBAL_STATS_TOKEN = void 0;
     require("reflect-metadata");
     var promises_1 = require("node:fs/promises");
     var inversify_1 = require("inversify");
-    var globalEventHandling_1 = require("../global/globalEventHandling");
     var pidusage_1 = __importDefault(require("pidusage"));
     var systeminformation_1 = __importDefault(require("systeminformation"));
-    var settings = __importStar(require("../settings/settingsInstance")); // Import settings interface/class
-    var MyClass = /** @class */ (function () {
-        function MyClass() {
-        }
-        return MyClass;
-    }());
-    var MyClassWithMixin = (0, globalEventHandling_1.EventEmitterMixin)(MyClass);
-    var globalEventEmitter = new MyClassWithMixin();
+    var eH = __importStar(require("../global/EventHandlingMixin"));
+    var S = __importStar(require("../stats/statsInstance"));
+    var pS = __importStar(require("../settings/settingsInstance"));
     var PRIVATE_SETTINGS_TOKEN = Symbol('PrivateSettings');
-    var GLOBAL_STATS_TOKEN = Symbol('GlobalStats');
+    exports.GLOBAL_STATS_TOKEN = Symbol('GlobalStats');
+    var statsType;
+    (function (statsType) {
+        statsType[statsType["update"] = 0] = "update";
+        statsType[statsType["updated"] = 1] = "updated";
+    })(statsType = exports.statsType || (exports.statsType = {}));
+    var BaseStatsEvent = /** @class */ (function () {
+        function BaseStatsEvent() {
+            this["cat"] = eH.catType.stats;
+        }
+        return BaseStatsEvent;
+    }());
     var Stats = /** @class */ (function (_super) {
         __extends(Stats, _super);
-        function Stats() {
+        function Stats(statsInstance, settingsInstance) {
             var _this = _super.call(this) || this;
+            _this.stats = statsInstance || {
+                webHandle: { isAlive: false, hasConnection: false, connectedClients: 0 },
+                fileHandle: { isAlive: false, hasConnection: false, connectedClients: 0 },
+                clientsCounter: 0,
+                activeClients: 0,
+                latencyGoogle: null,
+                si: { cpu: null, memory: null, ppid: null, pid: null, ctime: null, elapsed: null, timestamp: null },
+                pu: { proc: null, pid: null, pids: null, cpu: null, mem: null },
+                rcon: {},
+                lastUpdates: {},
+                clients: {},
+                interval_sendinfo: false
+            };
+            _this._settings = settingsInstance;
             _this.updateAllStats();
             return _this;
         }
+        Stats.prototype.updateAllStats = function () {
+            return __awaiter(this, void 0, void 0, function () {
+                var error_1;
+                return __generator(this, function (_a) {
+                    switch (_a.label) {
+                        case 0:
+                            _a.trys.push([0, 6, , 7]);
+                            this.stats.lastUpdates["createstatContainer"] = Date.now();
+                            return [4 /*yield*/, this.updateAndGetPidIfNecessary()];
+                        case 1:
+                            _a.sent(); // Fetch PID if needed
+                            return [4 /*yield*/, this.comparePids()];
+                        case 2:
+                            _a.sent();
+                            return [4 /*yield*/, this.getLatencyGoogle()];
+                        case 3:
+                            _a.sent();
+                            return [4 /*yield*/, this.getSI()];
+                        case 4:
+                            _a.sent();
+                            return [4 /*yield*/, this.getPU()];
+                        case 5:
+                            _a.sent();
+                            this.emit('statsUpdated', {
+                                type: statsType.update,
+                                message: 'All stats updated',
+                                data: { errCode: 0 } // Success
+                            });
+                            return [3 /*break*/, 7];
+                        case 6:
+                            error_1 = _a.sent();
+                            this.emit('statsUpdated', {
+                                type: statsType.update,
+                                message: 'Error updating stats',
+                                data: { errCode: 1, blob: { error: error_1 } }
+                            });
+                            console.error("Error fetching google ping:", error_1);
+                            this.stats.latencyGoogle = null;
+                            return [3 /*break*/, 7];
+                        case 7: return [2 /*return*/];
+                    }
+                });
+            });
+        };
+        Stats.prototype.getLatencyGoogle = function () {
+            return __awaiter(this, void 0, void 0, function () {
+                var latency, error_2;
+                return __generator(this, function (_a) {
+                    switch (_a.label) {
+                        case 0:
+                            _a.trys.push([0, 2, , 3]);
+                            return [4 /*yield*/, systeminformation_1.default.inetLatency()];
+                        case 1:
+                            latency = _a.sent();
+                            this.stats.latencyGoogle = latency;
+                            this.emit('latencyUpdated', {
+                                type: statsType.update,
+                                message: 'Google latency updated',
+                                data: { errCode: 0, blob: { latency: latency } }
+                            });
+                            return [3 /*break*/, 3];
+                        case 2:
+                            error_2 = _a.sent();
+                            this.emit('latencyUpdated', {
+                                type: statsType.update,
+                                message: 'Error fetching Google latency',
+                                data: { errCode: 1, blob: { error: error_2 } }
+                            });
+                            return [3 /*break*/, 3];
+                        case 3: return [2 /*return*/];
+                    }
+                });
+            });
+        };
         Stats.prototype.createstatContainer = function () {
             return __awaiter(this, void 0, void 0, function () {
                 return __generator(this, function (_a) {
@@ -128,7 +225,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
         };
         Stats.prototype.getPid = function () {
             return __awaiter(this, void 0, void 0, function () {
-                var data, pid, err_1;
+                var data, pid, err_1, errorData;
                 return __generator(this, function (_a) {
                     switch (_a.label) {
                         case 0:
@@ -140,23 +237,14 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
                             this._settings.pid = pid;
                             this._settings.pidFileExists = true;
                             this._settings.pidFileReadable = true;
-                            this.emit('pidAvailable ' + pid);
+                            this.emit('pidAvailable', "PID: ".concat(pid));
                             return [3 /*break*/, 3];
                         case 2:
                             err_1 = _a.sent();
-                            // TODO node-specific types:  Über @types/node importieren ? npm install @types/node
-                            // TODO: Typanpassung für weitere Fehlerbehandlung
-                            // TODO const nodeError = err as NodeJS.ErrnoException;
-                            // TODO if (nodeError.code === 'ENOENT')
-                            // TODO && err.code === 'ENOENT'
-                            if (err_1 instanceof Error) {
-                                this._settings.pidFileExists = false;
-                            }
-                            else {
-                                console.error('Fehler beim Öffnen der Datei:', err_1);
-                                this._settings.pidFileExists = true;
-                            }
+                            this._settings.pidFileExists = false;
                             this._settings.pidFileReadable = false;
+                            errorData = (err_1 instanceof Error) ? { errCode: 999, message: err_1.message } : null;
+                            this.emit("getPid error PID retrieval error", errorData);
                             return [3 /*break*/, 3];
                         case 3: return [2 /*return*/];
                     }
@@ -166,35 +254,16 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
         Stats.prototype.updateAndGetPidIfNecessary = function () {
             return __awaiter(this, void 0, void 0, function () {
                 return __generator(this, function (_a) {
-                    if (!this._settings.pid || typeof this._settings.pid !== "number") {
-                        this.stats.lastUpdates.getpid = Date.now();
-                        console.log("getPid found " + this._settings.pidFile);
-                        // this.emit("getPid", "pid: " + this._settings.pid);
+                    switch (_a.label) {
+                        case 0:
+                            if (!(!this._settings.pid || typeof this._settings.pid !== "number")) return [3 /*break*/, 2];
+                            this.stats.lastUpdates.getpid = Date.now();
+                            return [4 /*yield*/, this.getPid()];
+                        case 1:
+                            _a.sent();
+                            _a.label = 2;
+                        case 2: return [2 /*return*/];
                     }
-                    return [2 /*return*/];
-                });
-            });
-        };
-        Stats.prototype.updateAllStats = function () {
-            return __awaiter(this, void 0, void 0, function () {
-                var _this = this;
-                return __generator(this, function (_a) {
-                    try {
-                        this.getPid().then(function () {
-                            _this.comparePids();
-                        }).then(function () {
-                            _this.getLatencyGoogle();
-                            _this.getSI();
-                            _this.getPU();
-                        }).then(function () {
-                            // EventEmitterMixin.emit('updateAllStats', Date.now());
-                        });
-                    }
-                    catch (e) {
-                        console.error("Error fetching google ping:", e);
-                        this.stats.latencyGoogle = null;
-                    }
-                    return [2 /*return*/];
                 });
             });
         };
@@ -223,35 +292,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
                 });
             });
         };
-        Stats.prototype.getLatencyGoogle = function () {
-            return __awaiter(this, void 0, void 0, function () {
-                var _a, e_1;
-                return __generator(this, function (_b) {
-                    switch (_b.label) {
-                        case 0:
-                            this.stats.lastUpdates = { "getLatencyGoogle": Date.now() };
-                            _b.label = 1;
-                        case 1:
-                            _b.trys.push([1, 3, , 4]);
-                            _a = this.stats;
-                            return [4 /*yield*/, systeminformation_1.default.inetLatency()];
-                        case 2:
-                            _a.latencyGoogle = _b.sent();
-                            this.emit("getLatencyGoogle" + this.stats.latencyGoogle);
-                            return [3 /*break*/, 4];
-                        case 3:
-                            e_1 = _b.sent();
-                            console.error("Error fetching google ping:", e_1);
-                            this.stats.latencyGoogle = null;
-                            return [3 /*break*/, 4];
-                        case 4: return [2 /*return*/];
-                    }
-                });
-            });
-        };
         Stats.prototype.getSI = function () {
             return __awaiter(this, void 0, void 0, function () {
-                var targetProcess, e_2;
+                var targetProcess, e_1;
                 var _this = this;
                 return __generator(this, function (_a) {
                     switch (_a.label) {
@@ -265,8 +308,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
                             }
                             return [3 /*break*/, 3];
                         case 2:
-                            e_2 = _a.sent();
-                            console.error("Error fetching system information:", e_2);
+                            e_1 = _a.sent();
+                            console.error("Error fetching system information:", e_1);
                             return [3 /*break*/, 3];
                         case 3:
                             this.stats.lastUpdates = { "getLatencyGoogle": Date.now() };
@@ -277,7 +320,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
         };
         Stats.prototype.getPU = function () {
             return __awaiter(this, void 0, void 0, function () {
-                var usage, e_3;
+                var usage, e_2;
                 return __generator(this, function (_a) {
                     switch (_a.label) {
                         case 0:
@@ -291,27 +334,42 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
                             this.stats.pu = { cpu: usage.cpu, memory: usage.memory, pid: usage.pid, ctime: usage.ctime, elapsed: usage.elapsed, timestamp: usage.timestamp }; // Map relevant properties
                             return [3 /*break*/, 4];
                         case 3:
-                            e_3 = _a.sent();
-                            console.error("Error fetching pid usage:", e_3);
+                            e_2 = _a.sent();
+                            console.error("Error fetching pid usage:", e_2);
                             return [3 /*break*/, 4];
                         case 4: return [2 /*return*/];
                     }
                 });
             });
         };
-        __decorate([
-            (0, inversify_1.inject)(GLOBAL_STATS_TOKEN),
-            __metadata("design:type", Object)
-        ], Stats.prototype, "stats", void 0);
-        __decorate([
-            (0, inversify_1.inject)(PRIVATE_SETTINGS_TOKEN),
-            __metadata("design:type", Object)
-        ], Stats.prototype, "_settings", void 0);
+        Stats.prototype.setupGlobalEventListeners = function () {
+            // Event handling for client connections, messages, errors
+        };
         Stats = __decorate([
             (0, inversify_1.injectable)(),
-            __metadata("design:paramtypes", [])
+            __param(0, (0, inversify_1.inject)(exports.GLOBAL_STATS_TOKEN)),
+            __param(1, (0, inversify_1.inject)(PRIVATE_SETTINGS_TOKEN)),
+            __metadata("design:paramtypes", [Object, Object])
         ], Stats);
         return Stats;
-    }((0, globalEventHandling_1.EventEmitterMixin)(MyClass)));
+    }(eH.EventEmitterMixin(BaseStatsEvent)));
     exports.default = Stats;
 });
+/*
+import { inject, injectable } from 'inversify';
+import { Stats } from './stats';
+
+@injectable()
+export class StatsMonitor {
+    @inject(Stats) private statsService!: Stats;
+
+    startMonitoring() {
+        this.statsService.on('latencyUpdated', (event: IStatsEvent) => {
+            // Handle latency updates
+        });
+
+        this.statsService.on('statsUpdated', (event: IStatsEvent) => {
+            // Handle comprehensive stats updates
+        });
+    }
+} */ 

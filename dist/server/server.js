@@ -13,6 +13,38 @@ var __extends = (this && this.__extends) || (function () {
         d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
     };
 })();
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -49,66 +81,94 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
         if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
     }
 };
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 (function (factory) {
     if (typeof module === "object" && typeof module.exports === "object") {
         var v = factory(require, exports);
         if (v !== undefined) module.exports = v;
     }
     else if (typeof define === "function" && define.amd) {
-        define(["require", "exports", "https", "fs", "../global/globalEventHandling", "ws", "../main"], factory);
+        define(["require", "exports", "https", "fs", "../global/EventHandlingMixin", "ws", "../clients/clientInstance", "inversify", "./serverInstance", "../settings/settingsInstance", "../global/EventHandlingMixin", "../global/EventHandlingManager", "../clients/clients"], factory);
     }
 })(function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
+    exports.serverType = void 0;
     var https_1 = require("https");
     var fs_1 = require("fs");
-    var globalEventHandling_1 = require("../global/globalEventHandling");
+    var EventHandlingMixin_1 = require("../global/EventHandlingMixin");
     var ws_1 = require("ws");
-    var main_1 = __importDefault(require("../main"));
-    var MyClass = /** @class */ (function () {
-        function MyClass() {
+    var clientInstance_1 = require("../clients/clientInstance");
+    var inversify_1 = require("inversify");
+    var serverInstance_1 = require("./serverInstance");
+    var settingsInstance_1 = require("../settings/settingsInstance");
+    var eH = __importStar(require("../global/EventHandlingMixin"));
+    var eM = __importStar(require("../global/EventHandlingManager"));
+    var clients_1 = require("../clients/clients");
+    var serverType;
+    (function (serverType) {
+        serverType[serverType["listen"] = 0] = "listen";
+        serverType[serverType["clientConnected"] = 1] = "clientConnected";
+        serverType[serverType["clientMessageReady"] = 2] = "clientMessageReady";
+        serverType[serverType["clientDisconnected"] = 3] = "clientDisconnected";
+    })(serverType = exports.serverType || (exports.serverType = {}));
+    var BaseServerEvent = /** @class */ (function () {
+        function BaseServerEvent() {
+            this["cat"] = eH.catType.server;
         }
-        return MyClass;
+        return BaseServerEvent;
     }());
-    var MyClassWithMixin = (0, globalEventHandling_1.EventEmitterMixin)(MyClass);
-    var globalEventEmitter = new MyClassWithMixin();
+    function isMyWebSocketWithId(ws) {
+        return 'id' in ws;
+    }
     var Server = /** @class */ (function (_super) {
         __extends(Server, _super);
         function Server() {
-            return _super.call(this) || this;
+            var _this = _super.call(this) || this;
+            _this._server._handle.web = ;
+            _this._server._handle.file = new ws_1.WebSocketServer({ noServer: true });
+            _this.setupWebSocketListeners();
+            return _this;
         }
-        Server.prototype.create = function () {
+        Server.prototype.setupWebSocketListeners = function () {
+            this._server._handle.web.on('connection', this.handleConnection.bind(this));
+            this._server._handle.web.on('close', this.handleClose.bind(this));
+            // ... Add listeners for other WebSocketServer events if needed
+        };
+        Server.prototype.createServer = function () {
             return __awaiter(this, void 0, void 0, function () {
-                var newStreamServer, streamFile, _serverCert;
+                var _serverCert;
                 var _this = this;
                 return __generator(this, function (_a) {
-                    newStreamServer = new ws_1.WebSocketServer({ noServer: true });
-                    streamFile = new ws_1.WebSocketServer({ noServer: true });
-                    this.stats.lastUpdates = { "web": Date.now() };
-                    this._server._handle.web = newStreamServer;
-                    this._server._handle.file = streamFile;
-                    _serverCert = (0, https_1.createServer)({
-                        cert: (0, fs_1.readFileSync)(this._settings.certPath),
-                        key: (0, fs_1.readFileSync)(this._settings.keyPath)
-                    });
-                    _serverCert.on('upgrade', function (request, socket, head) {
-                        switch (true) {
-                            case _this.stats.webHandle.isAlive:
-                                _this.handleUpgrade(request, socket, head, function (ws) {
-                                    _this.emitConnection(ws, request);
+                    try {
+                        _serverCert = (0, https_1.createServer)({
+                            cert: (0, fs_1.readFileSync)(this._server._settings.certPath),
+                            key: (0, fs_1.readFileSync)(this._server._settings.keyPath)
+                        });
+                        _serverCert.on('upgrade', function (request, socket, head) {
+                            //  ... adjust upgrade handling as needed ...
+                            _this._server._handle.web.handleUpgrade(request, socket, head, function (client, request) {
+                                var webSocketStream = (0, ws_1.createWebSocketStream)(client);
+                                webSocketStream.on('data', function (data) {
+                                    try {
+                                        var message = JSON.parse(data.toString());
+                                        console.log("connected:", message);
+                                    }
+                                    catch (error) {
+                                        console.error("Error parsing message:", error);
+                                    }
                                 });
-                                break;
-                            default:
-                                socket.destroy();
-                        }
-                    });
-                    _serverCert.listen(this._settings.streamServerPort, this._settings.ip, function () {
-                        console.log("HTTPS server ".concat(_this._settings.ip, " listening on ").concat(_this._settings.streamServerPort));
-                        globalEventEmitter.emitCustomEvent('server_created');
-                    });
+                                _this.emitConnection(webSocketStream, request); // Adapt emitConnection if needed 
+                            });
+                        });
+                        _serverCert.listen(this._server._settings.streamServerPort, this._server._settings.ip, function () {
+                            console.log("HTTPS server ".concat(_this._server._settings.ip, " listening on ").concat(_this._server._settings.streamServerPort));
+                            _this.emit('serverCreated');
+                        });
+                    }
+                    catch (err) {
+                        console.error("Error creating server:", err);
+                        this.emit('serverCreated', { 'err': err });
+                    }
                     return [2 /*return*/];
                 });
             });
@@ -117,25 +177,39 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
             return __awaiter(this, void 0, void 0, function () {
                 var _this = this;
                 return __generator(this, function (_a) {
-                    // Interval function moved here
-                    // this.stats.updateAndGetPidIfNecessary();
-                    this.emitCustomEvent('createTimer', 'Global Timer started');
-                    this._server._handle.web._clients.forEach(function (ws_client) {
-                        if (ws_client.admin === true) {
-                            console.log(ws_client.admin);
-                        }
-                        if (ws_client.readyState === ws_client.OPEN) {
-                            if (_this._clients.has[ws_client.id]) {
-                                console.error("No Client with ID: ".concat(ws_client.id, " known"));
-                            }
-                            var time_diff = (Date.now() - ws_client.now);
-                            console.log("admin(" + ws_client.admin + ") sending to ip(" + ws_client.ip + ") alive(" + ws_client.readyState + ") count(" + _this.stats.clientsCounter + ") connected(" + main_1.default.stats.connectedClients + ") latency_user(" + ws_client.latency_user + ") latency_google(" + _this.stats.latency_google + ") connected since(" + main_1.default.stats.lastUpdates.web + ") diff(" + time_diff + ")");
-                            if (time_diff > 20000) {
-                                var dummy = true;
-                            }
-                        }
-                    });
-                    return [2 /*return*/];
+                    switch (_a.label) {
+                        case 0:
+                            // Interval function moved here
+                            // this.stats.updateAndGetPidIfNecessary();
+                            this.emit('createTimer');
+                            this._server._handle.web.clients.forEach(function (ws_client) {
+                                if (isMyWebSocketWithId(ws_client)) {
+                                    var client = _this._clients[ws_client.id];
+                                    if (client._config.type === clientInstance_1.ClientType.Admin) {
+                                        console.log(client._config.type);
+                                    }
+                                    if (ws_client.readyState === ws_client.OPEN) {
+                                        if (_this._clients[ws_client.id]) {
+                                            console.error("No Client with ID: ".concat(ws_client.id, " known"));
+                                        }
+                                        var time_diff = (Date.now() - ws_client.now);
+                                        console.log("admin(" + ws_client.admin + ") sending to ip(" + _this._clients[ws_client.id].info.ip + ") alive(" + ws_client.readyState + ") count(" + _this._clients[ws_client.id]._stats.clientsCounter + ") connected(" + _this.stats.connectedClients + ") latency_user(" + _this._clients[ws_client.id]._stats.latency_user + ") latency_google(" + _this.stats.latencyGoogle + ") connected since(" + _this.stats.lastUpdates.web + ") diff(" + time_diff + ")");
+                                        if (time_diff > 20000) {
+                                            _this.eM.emit(clients_1.clientsType.statsUpdated, {
+                                                clientId: ws_client.id,
+                                                latency: time_diff,
+                                                // ... more data 
+                                            });
+                                        }
+                                    }
+                                }
+                            });
+                            return [4 /*yield*/, this.statsService.updateAllStats()];
+                        case 1:
+                            _a.sent(); // Get updated stats
+                            this.eM.emit('statsUpdated', this.statsService.stats);
+                            return [2 /*return*/];
+                    }
                 });
             });
         };
@@ -149,7 +223,23 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
         Server.prototype.destroyClient = function (ip) {
             // Implement the logic to destroy a client
         };
+        __decorate([
+            (0, inversify_1.inject)(serverInstance_1.SERVER_WRAPPER_TOKEN),
+            __metadata("design:type", Object)
+        ], Server.prototype, "_server", void 0);
+        __decorate([
+            (0, inversify_1.inject)(settingsInstance_1.PRIVATE_SETTINGS_TOKEN),
+            __metadata("design:type", Object)
+        ], Server.prototype, "_settings", void 0);
+        __decorate([
+            (0, inversify_1.inject)(eM.EVENT_MANAGER_TOKEN),
+            __metadata("design:type", eM.eventManager)
+        ], Server.prototype, "eM", void 0);
+        Server = __decorate([
+            (0, inversify_1.injectable)(),
+            __metadata("design:paramtypes", [])
+        ], Server);
         return Server;
-    }(main_1.default));
+    }((0, EventHandlingMixin_1.EventEmitterMixin)(BaseServerEvent)));
     exports.default = Server;
 });

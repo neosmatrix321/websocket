@@ -33,11 +33,6 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
                 pidFileExists: false,
                 pidFileReadable: false,
                 debug: false,
-                certPath: '/etc/letsencrypt/live/neo.dnsfor.me/cert.pem',
-                keyPath: '/etc/letsencrypt/live/neo.dnsfor.me/privkey.pem',
-                ip: "192.168.228.7",
-                rconPort: 25575,
-                streamServerPort: 8080
             };
         }
         privateSettings.prototype.getSettings = function () {

@@ -8,29 +8,28 @@ import * as statsI from "../stats/statsInstance";
 // import * as serverC from "../server/server";
 // import * as clientsC from "../clients/clients";
 import * as eH from "./EventHandlingMixin";
+import Main from "../main";
+import { FirstEvent } from './EventHandlingMixin';
 
 export const EVENT_MANAGER_TOKEN = Symbol('eventManager');
 
 
-class BaseClass {
-
-}
+class BaseClass { }
 @injectable()
-export class eventManager extends eH.EventEmitterMixin<eH.IEventRoot<eH.IEvent>>(BaseClass) {
+export class eventManager extends eH.EventEmitterMixin<eH.IEvent> {
   private webServer: WebSocketServer;
   public constructor(
     @inject(EVENT_MANAGER_TOKEN) webServer: WebSocketServer
   ) {
     super();
     this.webServer = webServer || new WebSocketServer({ noServer: true });
-    // this.setupEventListeners();
     this.setupEventHandlers();
-    this.emit(eH.EventTypes.STATS, new eH.EventClass(eH.FirstIEvent));
+    const FirstEvent: eH.FirstEvent = new eH.BaseEvent(eH.MainEventTypes.BASIC, eH.EventTypes.BASIC.FIRST);
+    this.emit(`${eH.MainEventTypes.BASIC}.${eH.EventTypes.BASIC.FIRST}`, FirstEvent);
   }
   private setupEventHandlers() {
-
     // Client Event Handlers
-    this.on(eH.EventTypes.STATS, (event: eH.IEventRoot<eH.IEvent>) => {
+    this.on(eH.EventTypes.STATS, (event: IEventRoot<IEvent>) => {
       if (!event) {
         console.error('Event is undefined');
         return;
@@ -38,22 +37,21 @@ export class eventManager extends eH.EventEmitterMixin<eH.IEventRoot<eH.IEvent>>
       // Access properties safely (assuming your IStatsEvent interface is correct)
       if (event[eH.EventTypes.STATS]) {
         switch (event[eH.EventTypes.STATS].type) {
-          case eH.SubEventTypes.UPDATE_ALL_STATS:
+          case SubEventTypes.UPDATE_ALL_STATS:
             this.handleStatsUpdate(event);
             break;
-          case eH.SubEventTypes.ALL_STATS_UPDATED: // Or any other relevant type that might be emitted
+          case SubEventTypes.ALL_STATS_UPDATED: // Or any other relevant type that might be emitted
             this.handleStatsUpdated(event);
             break;        // ... other 'stats' event types
         }
       }
-    });
-    this.on(eH.EventTypes.CLIENTS, (event: eH.IEventRoot<eH.IEvent>) => {
+    }); this.on(eH.eH.EventTypes.CLIENTS, (event: eH.IEventRoot<eH.IEvent>) => {
       if (!event) {
         console.error('Event is undefined');
         return;
       }
-      if (event[eH.EventTypes.CLIENTS]) {
-        switch (event[eH.EventTypes.CLIENTS].type) {
+      if (event[eH.eH.EventTypes.CLIENTS]) {
+        switch (event[eH.eH.EventTypes.CLIENTS].type) {
           case eH.SubEventTypes.CREATE:
             break;
           case eH.SubEventTypes.MODIFY:
@@ -71,13 +69,13 @@ export class eventManager extends eH.EventEmitterMixin<eH.IEventRoot<eH.IEvent>>
     });
     // rest of the class
 
-    this.on(eH.EventTypes.SERVER, (event: eH.IEventRoot<eH.IEvent>) => {
+    this.on(eH.eH.EventTypes.SERVER, (event: eH.IEventRoot<eH.IEvent>) => {
       if (!event) {
         console.error('Event is undefined');
         return;
       }
-      if (event[eH.EventTypes.SERVER]) {
-        switch (event[eH.EventTypes.SERVER].type) {
+      if (event[eH.eH.EventTypes.SERVER]) {
+        switch (event[eH.eH.EventTypes.SERVER].type) {
           case eH.SubEventTypes.LISTEN:
             this.serverActive(event);
             break;
@@ -95,13 +93,13 @@ export class eventManager extends eH.EventEmitterMixin<eH.IEventRoot<eH.IEvent>>
         }
       }
     });
-    this.on(eH.EventTypes.MAIN, (event: eH.IEventRoot<eH.IEvent>) => {
+    this.on(eH.eH.EventTypes.MAIN, (event: eH.IEventRoot<eH.IEvent>) => {
       if (!event) {
         console.error('Event is undefined');
         return;
       }
-      if (event[eH.EventTypes.MAIN]) {
-        switch (event[eH.EventTypes.MAIN].type) {
+      if (event[eH.eH.EventTypes.MAIN]) {
+        switch (event[eH.eH.EventTypes.MAIN].type) {
           case eH.SubEventTypes.START_TIMER:
             this.handleStartTimer(event);
             break;
@@ -121,178 +119,176 @@ export class eventManager extends eH.EventEmitterMixin<eH.IEventRoot<eH.IEvent>>
   }
 
   private handleStatsUpdate(event: eH.IEventRoot<eH.IEvent>): void {
-    throw new Error("Method not implemented.");
+    this.gatherAndSendStats.bind(this)
+    console.log('Latency:', event);
+    // } else {
+    //   this.handleError(new Error(event.message)); // Or a custom error type
+    // }
+  }
+  private gatherAndSendStats(): void {
+    // 1. Gather stats (replace with your actual logic)
+    const statsData: StatsEvent = {
+      type: eH.EventTypes.STATS.ALL_STATS_UPDATED,
+      success: true,
+      timestamp: Date.now(),
+      statsEvent: {
+        statsId: 1,
+        // newValue: statsI.calculateSystemLoad(), // Example system load calculation
+        // oldValue: null, // Store previous value if needed 
+        updatedFields: ['systemLoad']
+      }
+    };
+
+    // 2. Send stats to all connected clients
+    this.webServer.clients.forEach(client => {
+      // Note: You might add error handling for WebSocket send failures
+      client.send(JSON.stringify(statsData));
+    });
+  }
+  private handleStatsUpdated(event: eH.IEventRoot<eH.IEvent>): void {
+    try {
+      this.clientMessageReady(event);
+      //  this.on(eH.eH.EventTypes.PID_AVAILABLE, this.handleStatsUpdated.bind(this));
+    } catch (error) {
+      this.handleError(new Error('statsUpdated'), error); // Or a custom error type
+    }
   }
 
   private handleStartTimer(event: eH.IEventRoot<eH.IEvent>): void {
-    throw new Error("Method not implemented.");
-  }
-
-  private clientSettingsUpdated(event: eH.IEventRoot<eH.IEvent>): void {
-    throw new Error("Method not implemented.");
-  }
-
-  private clientBye(event: eH.IEventRoot<eH.IEvent>): void {
-    throw new Error("Method not implemented.");
+    console.log('Start timer event received:', event);
+    // You can start a timer here
+    const timerId = setTimeout(() => {
+      console.log('Timer ended');
+      // Emit timer ended event
+      this.emit(eH.eH.EventTypes.MAIN, { type: eH.SubEventTypes.TIMER_STOPPED, timestamp: Date.now() });
+    }, 1000); // For example, wait for 1 second
+    // Store timerId if you need to clear it later
   }
 
   private serverActive(event: eH.IEventRoot<eH.IEvent>): void {
-    throw new Error("Method not implemented.");
+    console.error("Method not implemented.");
   }
 
   private handleTimerStarted(event: eH.IEventRoot<eH.IEvent>): void {
-    throw new Error("Method not implemented.");
+    if (!event[eH.EventTypes.MAIN]) return;
+
+    const timerEvent = event[eH.EventTypes.MAIN] as MainEvent;
+
+    // 1. Store timer information (you might use a database or in-memory structure)
+    this.activeTimers.set(timerEvent.mainEvent.pid, {
+      startTime: timerEvent.timestamp
+    });
   }
-
-  public handleClientConnected(event: eH.IEventRoot<eH.IEvent>): void {
-    throw new Error("Method not implemented.");
-  }
-
-  public handleClientMessage(event: eH.IEventRoot<eH.IEvent>): void {
-    throw new Error("Method not implemented.");
-  }
-
-  public handleClientDisconnected(event: eH.IEventRoot<eH.IEvent>): void {
-    throw new Error("Method not implemented.");
-  }
-
-  private handleStatsUpdated(event: eH.IEventRoot<eH.IEvent>): void {
-    throw new Error("Method not implemented.");
-  }
-
-  public clientMessageReady(event: eH.IEventRoot<eH.IEvent>): void {
-    throw new Error("Method not implemented.");
-  }
-  // this.on('clientConnected', this.handleClientConnected.bind(this));
-  // this.on('clientDisconnected', this.handleClientDisconnected.bind(this));
-
-  handleLatencyStopped(event: any) {
-    throw new Error("Method not implemented.");
-  }
-  handleTimerCreated(event: any) {
-    throw new Error("Method not implemented.");
-  }
-
-  // private setupWebSocketListeners() {
-  //   this.webServer.on(eH.SubEventTypes.connection, (ws: WebSocket, request: IncomingMessage): void => {
-  //     this.emit(eH.SubEventTypes.CLIENT_CONNECTED, { ...ws });
-  //   });
-  // }
-  private clientSettingsUpdated(event: eH.IEventRoot<eH.IEvent>): void {
-    // implement this method
-  }
-
-  private clientBye(event: eH.IEventRoot<eH.IEvent>): void {
-    if (event[eH.EventTypes.CLIENTS]) {
-      // Example logic - you'll need to replace with your specific functionality
-      console.log(eH.EventTypes.CLIENTS, `Client disconnected: ${event[eH.EventTypes.CLIENTS]}`);
-    } else {
-      console.error("Client disconnection event missing clientId");
-    }
-  }  // ... other event listeners for 'close', 'message', etc.
-
-  private serverActive(event: eH.IEventRoot<eH.IEvent>): void {
-    // implement this method
-  }
-
-  private gatherAndSendStats(): void {
-    // implement this method
-  }
-  // private handleStatsUpdate(event: eH.IEventRoot<eH.IEvent>): void {
-  //   if (event.success === true) {
-  //     this.on(eH.EventTypes.PID_AVAILABLE, this.handleStatsUpdated.bind(this));
-  //     console.log('Latency:', event.data.blob);
-  //   } else {
-  //     this.handleError(new Error(event.data.message)); // Or a custom error type
-  //   }
-  // }
-
-  // private handleClientstats(event: eH.IEventRoot<eH.IEvent>) {
-  //   console.log('Client Latency Exceeded:', event.data);
-  //   // ... React to client latency (e.g., send warning, log data)
-  // }
-
-  private handleTimerStarted(event: statsI.IStatsEvent): void {
-    if (event.data && event.data.errCode === 0) {
-      this.gatherAndSendStats.bind(this)
-      console.log('Latency:', event.data.blob);
-    } else {
-      this.handleError(new Error(event.message)); // Or a custom error type
-    }
-  }
-
-  public handleClientConnected(_ws: WebSocket): void {
-    const event: eH.IEvent = {
+  public async handleClientConnected(event: eH.IEventRoot<eH.IEvent>): void {
+    Main.startIntervalIfNeeded();
+    const newEvent: eH.IEvent = {
       type: eH.SubEventTypes.CLIENT_CONNECTED, // or another appropriate type
       message: 'Client connected',
       success: false,
       timestamp: Date.now(),
       data: {
         errCode: 0, // or another appropriate code
-        blob: _ws
+        blob: event
       }
     };
-    this.emit(eH.EventTypes.SERVER, event);
+    this.emit(eH.eH.EventTypes.SERVER, newEvent);
   }
+  public clientMessageReady(event: eH.IEventRoot<eH.IEvent>): void {
+    if (!event[eH.EventTypes.CLIENTS]) return; // Safety check
 
-  public handleClientMessage(_ws: WebSocket): void {
-    const event: eH.IEvent = {
-      message: 'Client message ready',
-      type: eH.SubEventTypes.CLIENT_MESSAGE_READY,
-      success: true,
-      timestamp: Date.now(),
-      data: {
-        errCode: 0, // or another appropriate code
-        blob: _ws
+    const clientEvent = event[eH.EventTypes.CLIENTS] as ClientsEvent;
+
+    // 1. Process message (replace with your application logic)
+    const processedData = this.processClientMessage(clientEvent.message);
+
+    // 2. Trigger other events based on the processed message
+    if (processedData.type === 'settings_update') {
+      this.emit(eH.EventTypes.CLIENTS.MODIFY, {
+        ...clientEvent,
+        clientsEvent: {
+          ...clientEvent.clientsEvent,
+          settings: processedData.settings // Assume settings are part of processedData
+        }
+      });
+    } // Add more conditional event emissions as needed
+  }
+  private processClientMessage(message: string): any {
+    // Implement your message parsing and processing logic here
+    // Example - assume a simple JSON format
+    try {
+      return JSON.parse(message);
+    } catch (error) {
+      this.handleError(error);
+      return { type: 'unknown' }; // Default to unknown type 
+    }
+  }
+  public handleClientMessage(event: eH.IEventRoot<eH.IEvent>): void {
+    if (event[eH.EventTypes.CLIENTS] && event[eH.EventTypes.CLIENTS].clientId) {
+      const clientId = event[eH.EventTypes.CLIENTS].clientId;
+
+      // Example 1: Update stats based on message
+      if (event.data && event.data.type === 'update_stats') {
+        statsI.updateClientStats(clientId, event.data.stats);
       }
-    };
-    this.emit(eH.EventTypes.SERVER, event);
-  }
 
-  public handleClientDisconnected(_ws: WebSocket): void {
-    const event: eH.IEvent = {
+      // Example 2: Forward message to other clients (hypothetical)
+      if (event.data && event.data.type === 'broadcast') {
+        this.broadcastMessage(clientId, event.data.message);
+      }
+    } else {
+      console.warn('Invalid client message format');
+    }
+  }
+  // public handleClientMessage(event: eH.IEventRoot<eH.IEvent>): void {
+  //   const newEvent: eH.IEvent = {
+  //     message: 'Client message ready',
+  //     type: eH.SubEventTypes.CLIENT_MESSAGE_READY,
+  //     success: true,
+  //     timestamp: Date.now(),
+  //     data: {
+  //       errCode: 0, // or another appropriate code
+  //       blob: event
+  //     }
+  //   };
+  //   this.emit(eH.eH.EventTypes.SERVER, newEvent);
+  // }
+
+  public handleClientDisconnected(event: eH.IEventRoot<eH.IEvent>): void {
+    const newEvent: eH.IEvent = {
       type: eH.SubEventTypes.CLIENT_DISCONNECTED, // or another appropriate type
       message: 'Client disconnected',
       success: true,
       timestamp: Date.now(),
       data: {
         errCode: 0, // or another appropriate code
-        blob: _ws
+        blob: event
       }
     };
-    this.handleError(new Error(event.data.message)); // Or a custom error type
+    this.handleError(new Error(newEvent.message)); // Or a custom error type
   }
 
-  private handleStatsUpdated(event: statsI.IStatsEvent): void { // Assuming IStats exists
-    try {
-      this.clientMessageReady(event);
-    } catch (error) {
-      this.handleError(new Error('statsUpdated'), error); // Or a custom error type
+  public clientMessageReady(event: eH.IEventRoot<eH.IEvent>): void {
+    console.error("Method not implemented.");
+  }
+  handleLatencyStopped(event: any) {
+    console.error("Method not implemented.");
+  }
+  handleTimerCreated(event: any) {
+    console.error("Method not implemented.");
+  }
+
+
+  private clientBye(event: eH.IEventRoot<eH.IEvent>): void {
+    if (event[eH.eH.EventTypes.CLIENTS]) {
+      // Example logic - you'll need to replace with your specific functionality
+      console.log(eH.eH.EventTypes.CLIENTS, `Client disconnected: ${event[eH.eH.EventTypes.CLIENTS]}`);
+    } else {
+      console.error("Client disconnection event missing clientId");
     }
   }
-  clientMessageReady(event: statsI.IStatsEvent) {
-    throw new Error("Method not implemented.");
-  }
-  public emitError(error: any): void {
-    const event: eH.IEvent = {
-      type: eH.SubEventTypes.ERROR, // Or other relevant type
-      message: 'An error occurred',
-      success: false,
-      timestamp: Date.now(),
-      data: {
-        errCode: -1, // Replace with suitable error code if you have them
-        message: error.message,
-        blob: error // Include the entire error object for analysis
-      }
-    };
 
-    this.emit(eH.EventTypes.ERROR, event);
-  }
-
-  public handleError(error: any, errorBlob?: any): void {
-    const errorData: any = { ...errorBlob || error };
-    console.error('Error from eventManager:', error);
-    this.emitError(errorData); // Emit the error for wider handling
+  private clientSettingsUpdated(event: eH.IEventRoot<eH.IEvent>): void {
+    console.error("Method not implemented.");
   }
 }
 

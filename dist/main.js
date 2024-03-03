@@ -13,11 +13,34 @@ var __extends = (this && this.__extends) || (function () {
         d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
     };
 })();
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
     else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
     return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
 };
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
@@ -64,32 +87,38 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
         if (v !== undefined) module.exports = v;
     }
     else if (typeof define === "function" && define.amd) {
-        define(["require", "exports", "reflect-metadata", "inversify", "./global/globalEventHandling.js"], factory);
+        define(["require", "exports", "reflect-metadata", "inversify", "./settings/settingsInstance.js", "https", "./global/EventHandlingManager", "./global/EventHandlingMixin", "./stats/stats", "./stats/statsInstance"], factory);
     }
 })(function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.MAIN_SERVICE_TOKEN = void 0;
+    exports.MainType = void 0;
     require("reflect-metadata");
     var inversify_1 = require("inversify");
-    var globalEventHandling_js_1 = require("./global/globalEventHandling.js");
-    var GLOBAL_STATS_TOKEN = Symbol('GlobalStats');
-    var SERVER_WRAPPER_TOKEN = Symbol('ServerWrapper');
-    var PRIVATE_SETTINGS_TOKEN = Symbol('PrivateSettings');
-    var CLIENTS_WRAPPER_TOKEN = Symbol('ClientsWrapper');
-    exports.MAIN_SERVICE_TOKEN = Symbol('Main');
-    var MyClass = /** @class */ (function () {
-        function MyClass() {
+    var settingsInstance_js_1 = require("./settings/settingsInstance.js");
+    var https_1 = require("https");
+    var eM = __importStar(require("./global/EventHandlingManager"));
+    var eH = __importStar(require("./global/EventHandlingMixin"));
+    var statsMain = __importStar(require("./stats/stats"));
+    var statsI = __importStar(require("./stats/statsInstance"));
+    var MainType;
+    (function (MainType) {
+        MainType[MainType["timerCreated"] = 0] = "timerCreated";
+        MainType[MainType["timerStarted"] = 1] = "timerStarted";
+        MainType[MainType["timerStopped"] = 2] = "timerStopped";
+    })(MainType = exports.MainType || (exports.MainType = {}));
+    var BaseMainEvent = /** @class */ (function () {
+        function BaseMainEvent() {
+            this["cat"] = eH.catType.main;
         }
-        return MyClass;
+        return BaseMainEvent;
     }());
-    var MyClassWithMixin = (0, globalEventHandling_js_1.EventEmitterMixin)(MyClass);
-    var globalEventEmitter = new MyClassWithMixin();
     var Main = /** @class */ (function (_super) {
         __extends(Main, _super);
         function Main() {
             var _this = _super.call(this) || this;
             _this.initialize();
+            _this.on('serverCreated', _this.gatherAndSendStats);
             return _this;
         }
         Main.prototype.initialize = function () {
@@ -102,12 +131,11 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
                             _a.label = 1;
                         case 1:
                             _a.trys.push([1, 3, , 4]);
-                            return [4 /*yield*/, this._server.create()];
+                            return [4 /*yield*/, https_1.Server.createServer()];
                         case 2:
                             _a.sent();
                             this._server.on('connection', this.handleConnection.bind(this));
                             this.setupGlobalEventListeners();
-                            this.gatherAndSendStats();
                             return [3 /*break*/, 4];
                         case 3:
                             err_1 = _a.sent();
@@ -118,34 +146,17 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
                 });
             });
         };
-        Main.prototype.setupGlobalEventListeners = function () {
-            // Event handling for client connections, messages, errors
-            globalEventEmitter.on('clientConnected', this.handleConnection.bind(this));
-            globalEventEmitter.on('close', this.handleClose.bind(this));
-            globalEventEmitter.on('message', this.handleMessage.bind(this));
-            globalEventEmitter.on('error', console.error);
-            // this.main._server.on('message', this.handleMessage.bind(this)); // Assuming ServerWrapper emits 'message'
-            // this.main._server.on('close', this.handleClose.bind(this));
-        };
         Main.prototype.handleConnection = function (ws) {
             return __awaiter(this, void 0, void 0, function () {
                 return __generator(this, function (_a) {
-                    switch (_a.label) {
-                        case 0:
-                            this.stats.clientsCounter++;
-                            // const client1 = new Client({ /* Client Data */ });
-                            // // Add clients to the container
-                            // clientsContainer.addClient(client1);
-                            return [4 /*yield*/, this._clients.addClient(ws)];
-                        case 1:
-                            // const client1 = new Client({ /* Client Data */ });
-                            // // Add clients to the container
-                            // clientsContainer.addClient(client1);
-                            _a.sent(); // Integrate with your client management 
-                            this.setupWebSocketEvents(ws);
-                            this.startIntervalIfNeeded();
-                            return [2 /*return*/];
-                    }
+                    this.stats.clientsCounter++;
+                    // const client1 = new Client({ /* Client Data */ });
+                    // // Add clients to the container
+                    // clientsContainer.addClient(client1);
+                    this.handleGreeting(ws, 'greeting'); // Integrate with your client management 
+                    this.setupWebSocketEvents(ws);
+                    this.startIntervalIfNeeded();
+                    return [2 /*return*/];
                 });
             });
         };
@@ -169,27 +180,33 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
                 });
             });
         };
-        Main.prototype.setupWebSocketEvents = function (ws) {
-            return __awaiter(this, void 0, void 0, function () {
-                return __generator(this, function (_a) {
-                    ws.on('close', this.handleClose.bind(this, ws));
-                    ws.on('message', this.handleMessage.bind(this, ws));
-                    ws.on('greeting', this.handleGreeting.bind(this, ws));
-                    this.startIntervalIfNeeded();
-                    return [2 /*return*/];
-                });
-            });
-        };
         Main.prototype.handleGreeting = function (client, obj) {
             return __awaiter(this, void 0, void 0, function () {
+                var newIP, type, newIP_1, newID, type_1, ID;
                 return __generator(this, function (_a) {
                     switch (_a.label) {
                         case 0:
-                            this._clients[client.info.id].isAdmin = !!obj.admin; // Update isAdmin
-                            return [4 /*yield*/, this._clients.updateClientStats(this._clients[client.info.id])];
+                            newIP = client.socket.remoteAddress;
+                            type = 'basic';
+                            if (!isMyWebSocketWithId(client)) {
+                                this.stats.clientsCounter++;
+                                newIP_1 = client.socket.remoteAddress;
+                                newID = this.stats.clientsCounter;
+                                type_1 = 'basic';
+                                this._clients.addClient(newIP_1, newID, type_1);
+                            }
+                            if (!isMyWebSocketWithId(client)) return [3 /*break*/, 2];
+                            ID = client.id;
+                            // this._clients[client.info.id]._config.type = ClientType.Admin; // Update isAdmin
+                            return [4 /*yield*/, this._clients.updateClientStats(this._clients[ID])];
                         case 1:
+                            // this._clients[client.info.id]._config.type = ClientType.Admin; // Update isAdmin
                             _a.sent();
-                            return [2 /*return*/];
+                            return [3 /*break*/, 3];
+                        case 2:
+                            console.error("Could not create Client " + newIP);
+                            _a.label = 3;
+                        case 3: return [2 /*return*/];
                     }
                 });
             });
@@ -207,13 +224,13 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
                 return __generator(this, function (_a) {
                     switch (_a.label) {
                         case 0:
-                            console.log("dead ip(" + ws.ip + ") alive(" + ws.readyState + ") code(" + code + ") count(" + this.main.stats.clientsCounter + ")");
-                            return [4 /*yield*/, this.main._clients.removeClient(ws.id)];
+                            console.log("dead ip(" + ws.ip + ") alive(" + ws.readyState + ") code(" + code + ") count(" + this.stats.clientsCounter + ")");
+                            return [4 /*yield*/, this._clients.removeClient(ws.id)];
                         case 1:
                             _a.sent(); // Assuming you have removeClient
-                            this.main._server._handle.web.destroyClient(ws.ip); // If applicable
+                            this._server._handle.web.destroyClient(ws.ip); // If applicable
                             ws.terminate();
-                            this.clearIntervalIfNeeded();
+                            this.startIntervalIfNeeded();
                             return [2 /*return*/];
                     }
                 });
@@ -221,16 +238,10 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
         };
         Main.prototype.startIntervalIfNeeded = function () {
             var _this = this;
-            if (this.main.stats.clientsCounter > 0 && !this.main.stats._interval_sendInfo) {
-                this.main.stats._interval_sendInfo = setInterval(function () {
+            if (this.stats.clientsCounter > 0 && !this.stats.interval_sendinfo) {
+                this.stats.interval_sendinfo = setInterval(function () {
                     _this.gatherAndSendStats();
                 }, 1000);
-            }
-        };
-        Main.prototype.clearIntervalIfNeeded = function () {
-            if (this.main.stats._interval_sendInfo) {
-                clearInterval(this.main.stats._interval_sendInfo);
-                this.main.stats._interval_sendInfo = undefined;
             }
         };
         Main.prototype.gatherAndSendStats = function () {
@@ -238,13 +249,13 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
                 var updatedStats;
                 return __generator(this, function (_a) {
                     switch (_a.label) {
-                        case 0: return [4 /*yield*/, this.main._systemMonitor.getUpdatedStats()];
+                        case 0: return [4 /*yield*/, this._systemMonitor.getUpdatedStats()];
                         case 1:
                             updatedStats = _a.sent();
-                            this.main.updateGlobalStats(updatedStats);
-                            this.main._clients.forEach(function (client) {
+                            this.updateGlobalStats(updatedStats);
+                            this._clients.forEach(function (client) {
                                 if (client.readyState === client.OPEN) {
-                                    // ... detailed logic to build and send the stats payload...
+                                    // . detailed logic to build and send the stats payload.
                                     client.send('client aagdssdaf');
                                 }
                             });
@@ -254,27 +265,23 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
             });
         };
         __decorate([
-            (0, inversify_1.inject)(GLOBAL_STATS_TOKEN),
+            (0, inversify_1.inject)(statsMain.GLOBAL_STATS_TOKEN),
             __metadata("design:type", Object)
         ], Main.prototype, "stats", void 0);
         __decorate([
-            (0, inversify_1.inject)(SERVER_WRAPPER_TOKEN),
-            __metadata("design:type", Object)
-        ], Main.prototype, "_server", void 0);
-        __decorate([
-            (0, inversify_1.inject)(PRIVATE_SETTINGS_TOKEN),
+            (0, inversify_1.inject)(settingsInstance_js_1.PRIVATE_SETTINGS_TOKEN),
             __metadata("design:type", Object)
         ], Main.prototype, "_settings", void 0);
         __decorate([
-            (0, inversify_1.inject)(CLIENTS_WRAPPER_TOKEN),
-            __metadata("design:type", Object)
-        ], Main.prototype, "_clients", void 0);
+            (0, inversify_1.inject)(eM.EVENT_MANAGER_TOKEN),
+            __metadata("design:type", eM.eventManager)
+        ], Main.prototype, "eM", void 0);
         Main = __decorate([
             (0, inversify_1.injectable)(),
             __metadata("design:paramtypes", [])
         ], Main);
         return Main;
-    }((0, globalEventHandling_js_1.EventEmitterMixin)(MyClass)));
+    }(eH.EventEmitterMixin(BaseMainEvent)));
     exports.default = Main;
 });
 // Instantiate the main object to start your application

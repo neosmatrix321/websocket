@@ -8,11 +8,10 @@ import * as eH from "./global/EventHandlingMixin";
 import * as statsC from "./stats/stats";
 import * as statsI from "./stats/statsInstance";
 import * as settingsI from "./settings/settingsInstance";
-
+class BaseClass { }
 @injectable()
-export default class Main {
+export default class Main extends eH.EventEmitterMixin<eH.IEventRoot<eH.IEvent>>(BaseClass) {
   @inject(settingsI.PRIVATE_SETTINGS_TOKEN) private _settings!: settingsI.ISettings;
-  @inject(eM.EVENT_MANAGER_TOKEN) private eM!: eM.eventManager;
   @inject(statsI.GLOBAL_STATS_TOKEN) private stats!: statsI.IStats;
   public constructor() {
     super();
@@ -21,7 +20,7 @@ export default class Main {
 
   private async gatherAndSendStats() {
     const updatedStats = await this._systemMonitor.getUpdatedStats();
-    this.updateGlobalStats(updatedStats);
+    await this.stats.updateAllStats(updatedStats);
 
     this._clients.forEach((client: any) => {
       if (client.readyState === client.OPEN) {
@@ -89,7 +88,7 @@ export default class Main {
     }
   }
 
-  private startIntervalIfNeeded() {
+  public startIntervalIfNeeded() {
     if (this.stats.clientsCounter > 0 && !this.stats.interval_sendinfo) {
       this.stats.interval_sendinfo = setInterval(() => {
         this.gatherAndSendStats();

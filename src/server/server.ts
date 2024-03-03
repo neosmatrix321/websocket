@@ -9,10 +9,11 @@ import * as eH from "../global/EventHandlingMixin";
 import * as eM from "../global/EventHandlingManager";
 import * as serverC from "../server/server";
 import * as serverI from "../server/serverInstance";
+import * as mainC from "../main";
 
 
 @injectable()
-export default class Server {
+export default class Server extends eH.EventEmitterMixin<eH.IEventRoot<eH.IEvent>>(eM.BaseClass) {
   @inject(serverI.SERVER_WRAPPER_TOKEN) _server!: serverI.IHandleWrapper;
   @inject(eM.EVENT_MANAGER_TOKEN) eM!: eM.eventManager;
   constructor() {
@@ -21,9 +22,9 @@ export default class Server {
     this.setupWebSocketListeners();
   }
   private setupWebSocketListeners() {
-    this.eM.webServer.on('connection',  this.eM.handleClientConnected.bind(this));
-    this.eM.webServer.on('message',  this.eM.handleClientMessage.bind(this));
-    this.eM.webServer.on('close',  this.eM.handleClientDisconnected.bind(this));
+    this.on(eH.WSIEvent, this.eM.handleClientConnected.bind(this));
+    this.on('message', this.eM.handleClientMessage.bind(this));
+    this.on('close', this.eM.handleClientDisconnected.bind(this));
     // ... Add listeners for other WebSocketServer events if needed
   }
   public async createServer() {
@@ -36,7 +37,7 @@ export default class Server {
       _serverCert.on('upgrade', (request, socket, head) => {
         //  ... adjust upgrade handling as needed ...
         this._server._handle.web.handleUpgrade(request, socket, head, (client: WebSocket, request: IncomingMessage) => { // ws is a WebSocket object
-          const webSocketStream = createWebSocketStream(client as MyWebSocket);
+          const webSocketStream = createWebSocketStream(client as serverI.MyWebSocket);
 
           webSocketStream.on('data', (data: Buffer) => { // Buffer type for data
             try {
@@ -73,8 +74,8 @@ export default class Server {
           if (!ws_client.id) {
             console.error(`No Client with ID: ${ws_client.id} known`);
           }
-          const time_diff = (Date.now() - ws_client.now);
-          console.log("admin(" + ws_client.admin + ") sending to ip(" + this._clients[ws_client.id].info.ip + ") alive(" + ws_client.readyState + ") count(" + this._clients[ws_client.id]._stats.clientsCounter + ") connected(" + this.stats.connectedClients + ") latency_user(" + this._clients[ws_client.id]._stats.latency_user + ") latency_google(" + this.stats.latencyGoogle + ") connected since(" + this.stats.lastUpdates.web + ") diff(" + time_diff + ")");
+          const time_diff = (Date.now());
+          console.log("admin(" + ") sending to ip(" + ") alive(" + ws_client.readyState + ") count(" + mainC.Main.stats.clientsCounter + ") connected(" + this.stats.connectedClients + ") latency_user(" + this._clients[ws_client.id]._stats.latency_user + ") latency_google(" + this.stats.latencyGoogle + ") connected since(" + this.stats.lastUpdates.web + ") diff(" + time_diff + ")");
 
           if (time_diff > 20000) {
             this.eM.emit(serverType.updateClientStats, ws_client.id);

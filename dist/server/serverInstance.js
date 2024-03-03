@@ -31,7 +31,16 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
                     web: null,
                     file: null
                 },
-                _stats: null
+                _stats: {
+                    dummy: 0
+                },
+                _settings: {
+                    certPath: '/etc/letsencrypt/live/neo.dnsfor.me/cert.pem',
+                    keyPath: '/etc/letsencrypt/live/neo.dnsfor.me/privkey.pem',
+                    ip: "192.168.228.7",
+                    rconPort: 25575,
+                    streamServerPort: 8080
+                }
             };
         }
         serverWrapper.prototype.killAll = function () {

@@ -27,7 +27,7 @@ export interface IHandleWrapper {
   _stats: IHandleStats;
   _settings: IHandleSettings;
 }
-interface MyWebSocket extends WebSocket {
+export interface MyWebSocket extends WebSocket {
   id: string
 }
 
