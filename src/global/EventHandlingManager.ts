@@ -9,14 +9,13 @@ import * as statsI from "../stats/statsInstance";
 // import * as clientsC from "../clients/clients";
 import * as eH from "./EventHandlingMixin";
 import Main from "../main";
-import { FirstEvent } from './EventHandlingMixin';
 
 export const EVENT_MANAGER_TOKEN = Symbol('eventManager');
 
 
-class BaseClass { }
+export class BaseClass { }
 @injectable()
-export class eventManager extends eH.EventEmitterMixin<eH.IEvent> {
+export class eventManager extends eH.EventEmitterMixin<eH.IEventTypes> {
   private webServer: WebSocketServer;
   public constructor(
     @inject(EVENT_MANAGER_TOKEN) webServer: WebSocketServer
@@ -24,101 +23,110 @@ export class eventManager extends eH.EventEmitterMixin<eH.IEvent> {
     super();
     this.webServer = webServer || new WebSocketServer({ noServer: true });
     this.setupEventHandlers();
-    const FirstEvent: eH.FirstEvent = new eH.BaseEvent(eH.MainEventTypes.BASIC, eH.EventTypes.BASIC.FIRST);
-    this.emit(`${eH.MainEventTypes.BASIC}.${eH.EventTypes.BASIC.FIRST}`, FirstEvent);
+    this.emit('someEvent', { debug: { enabled: true } });
   }
   private setupEventHandlers() {
-    // Client Event Handlers
-    this.on(eH.EventTypes.STATS, (event: IEventRoot<IEvent>) => {
+    this.on(`${eH.MainEventTypes.STATS}`, (event: eH.IEventTypes) => {
       if (!event) {
-        console.error('Event is undefined');
-        return;
+      console.error('Event is undefined');
+      return;
       }
       // Access properties safely (assuming your IStatsEvent interface is correct)
-      if (event[eH.EventTypes.STATS]) {
-        switch (event[eH.EventTypes.STATS].type) {
-          case SubEventTypes.UPDATE_ALL_STATS:
-            this.handleStatsUpdate(event);
-            break;
-          case SubEventTypes.ALL_STATS_UPDATED: // Or any other relevant type that might be emitted
-            this.handleStatsUpdated(event);
-            break;        // ... other 'stats' event types
-        }
+      if (event.statsEvent) {
+      switch (event.statsEvent.subType) {
+        case eH.EventTypes.STATS.UPDATE_ALL_STATS:
+        this.handleStatsUpdate(event);
+        break;
+        case eH.EventTypes.STATS.ALL_STATS_UPDATED: // Or any other relevant type that might be emitted
+        this.handleStatsUpdated(event);
+        break;        // ... other 'stats' event types
       }
-    }); this.on(eH.eH.EventTypes.CLIENTS, (event: eH.IEventRoot<eH.IEvent>) => {
-      if (!event) {
-        console.error('Event is undefined');
-        return;
-      }
-      if (event[eH.eH.EventTypes.CLIENTS]) {
-        switch (event[eH.eH.EventTypes.CLIENTS].type) {
-          case eH.SubEventTypes.CREATE:
-            break;
-          case eH.SubEventTypes.MODIFY:
-            this.clientSettingsUpdated(event);
-            break;
-          case eH.SubEventTypes.DELETE:
-            this.clientBye(event);
-            break;
-          case eH.SubEventTypes.ALL_STATS_UPDATED:
-            this.clientMessageReady(event);
-            break;
-          // ... other 'client' event types
-        }
       }
     });
-    // rest of the class
 
-    this.on(eH.eH.EventTypes.SERVER, (event: eH.IEventRoot<eH.IEvent>) => {
+    this.on(`${eH.MainEventTypes.CLIENTS}`, (event: eH.IClientsEvent) => {
       if (!event) {
-        console.error('Event is undefined');
-        return;
+      console.error('Event is undefined');
+      return;
       }
-      if (event[eH.eH.EventTypes.SERVER]) {
-        switch (event[eH.eH.EventTypes.SERVER].type) {
-          case eH.SubEventTypes.LISTEN:
-            this.serverActive(event);
-            break;
-          case eH.SubEventTypes.CLIENT_CONNECTED:
-            this.handleClientConnected(event);
-            break;
-          case eH.SubEventTypes.CLIENT_MESSAGE_READY:
-            this.handleClientMessage(event);
-            break;
-          case eH.SubEventTypes.CLIENT_DISCONNECTED:
-            this.clientBye(event);
-            this.handleClientConnected(event);
-            break;
-          // ... other 'client' event types
-        }
+      if (event.type) {
+      switch (event.clientsEvent.subType) {
+        case eH.EventTypes.CLIENTS.CREATE:
+        break;
+        case eH.EventTypes.CLIENTS.MODIFY:
+        this.clientSettingsUpdated(event);
+        break;
+        case eH.EventTypes.CLIENTS.DELETE:
+        this.clientBye(event);
+        break;
+        case eH.EventTypes.CLIENTS.UPDATE_CLIENT_STATS:
+        this.updateClientStats(event.clientsEvent.clientId); // Fix: Pass clientId and stats as arguments
+        break;
+        case eH.EventTypes.CLIENTS.CLIENT_STATS_UPDATED:
+        this.clientMessageReady(event);
+        break;
+        // ... other 'client' event types
+      }
       }
     });
-    this.on(eH.eH.EventTypes.MAIN, (event: eH.IEventRoot<eH.IEvent>) => {
+
+    this.on(`${eH.MainEventTypes.SERVER}`, (event: eH.IServerEvent) => {
       if (!event) {
-        console.error('Event is undefined');
-        return;
+      console.error('Event is undefined');
+      return;
       }
-      if (event[eH.eH.EventTypes.MAIN]) {
-        switch (event[eH.eH.EventTypes.MAIN].type) {
-          case eH.SubEventTypes.START_TIMER:
-            this.handleStartTimer(event);
-            break;
-          case eH.SubEventTypes.TIMER_CREATED:
-            this.handleTimerCreated(event);
-            break;
-          case eH.SubEventTypes.TIMER_STARTED:
-            this.handleTimerStarted(event);
-            break;
-          case eH.SubEventTypes.TIMER_STOPPED:
-            this.handleLatencyStopped(event);
-            break;
-          // ... other 'client' event types
-        }
+      if (event.serverEvent) {
+      switch (event.serverEvent.subType) {
+        case eH.EventTypes.SERVER.LISTEN:
+        this.serverActive(event);
+        break;
+        case eH.EventTypes.SERVER.CLIENT_CONNECTED:
+        this.handleClientConnected(event);
+        break;
+        case eH.EventTypes.SERVER.CLIENT_MESSAGE_READY:
+        this.handleClientMessage(event);
+        break;
+        case eH.EventTypes.SERVER.CLIENT_DISCONNECTED:
+        this.clientBye(event);
+        this.handleClientConnected(event);
+        break;
+        // ... other 'client' event types
+      }
+      }
+    });
+
+    this.on(`${eH.MainEventTypes.MAIN}`, (event: eH.IMainEvent) => {
+      if (!event) {
+      console.error('Event is undefined');
+      return;
+      }
+      if (event.mainEvent) {
+      switch (event.mainEvent.subType) {
+        case eH.EventTypes.MAIN.START_TIMER:
+        this.handleStartTimer(event);
+        break;
+        case eH.EventTypes.MAIN.TIMER_CREATED:
+        this.handleTimerCreated(event);
+        break;
+        case eH.EventTypes.MAIN.TIMER_STARTED:
+        this.handleTimerStarted(event);
+        break;
+        case eH.EventTypes.MAIN.TIMER_STOPPED:
+        this.handleLatencyStopped(event);
+        break;
+        // ... other 'client' event types
+      }
+      }
+    });
+    this.on(eH.MainEventTypes.DEBUG, (event: eH.IDebugEvent) => {
+      if (event.debug.endTime) { // Check if timing completed
+        const duration = event.debug.endTime - event.debug.startTime;
+        console.log(`Debug Event '${event.debug.eventName}' took ${duration}ms`);
       }
     });
   }
 
-  private handleStatsUpdate(event: eH.IEventRoot<eH.IEvent>): void {
+  private handleStatsUpdate(event: eH.IEvent): void {
     this.gatherAndSendStats.bind(this)
     console.log('Latency:', event);
     // } else {
@@ -127,10 +135,9 @@ export class eventManager extends eH.EventEmitterMixin<eH.IEvent> {
   }
   private gatherAndSendStats(): void {
     // 1. Gather stats (replace with your actual logic)
-    const statsData: StatsEvent = {
+    const statsData: eH.StatsEvent = {
       type: eH.EventTypes.STATS.ALL_STATS_UPDATED,
       success: true,
-      timestamp: Date.now(),
       statsEvent: {
         statsId: 1,
         // newValue: statsI.calculateSystemLoad(), // Example system load calculation
@@ -145,31 +152,31 @@ export class eventManager extends eH.EventEmitterMixin<eH.IEvent> {
       client.send(JSON.stringify(statsData));
     });
   }
-  private handleStatsUpdated(event: eH.IEventRoot<eH.IEvent>): void {
+  private handleStatsUpdated(event: eH.IEvent): void {
     try {
       this.clientMessageReady(event);
-      //  this.on(eH.eH.EventTypes.PID_AVAILABLE, this.handleStatsUpdated.bind(this));
+      //  this.on(eH.EventTypes.PID_AVAILABLE, this.handleStatsUpdated.bind(this));
     } catch (error) {
       this.handleError(new Error('statsUpdated'), error); // Or a custom error type
     }
   }
 
-  private handleStartTimer(event: eH.IEventRoot<eH.IEvent>): void {
+  private handleStartTimer(event: eH.IEvent): void {
     console.log('Start timer event received:', event);
     // You can start a timer here
     const timerId = setTimeout(() => {
       console.log('Timer ended');
       // Emit timer ended event
-      this.emit(eH.eH.EventTypes.MAIN, { type: eH.SubEventTypes.TIMER_STOPPED, timestamp: Date.now() });
+      this.emit(eH.EventTypes.MAIN, { type: eH.SubEventTypes.TIMER_STOPPED, timestamp: Date.now() });
     }, 1000); // For example, wait for 1 second
     // Store timerId if you need to clear it later
   }
 
-  private serverActive(event: eH.IEventRoot<eH.IEvent>): void {
+  private serverActive(event: eH.IEvent): void {
     console.error("Method not implemented.");
   }
 
-  private handleTimerStarted(event: eH.IEventRoot<eH.IEvent>): void {
+  private handleTimerStarted(event: eH.IEvent): void {
     if (!event[eH.EventTypes.MAIN]) return;
 
     const timerEvent = event[eH.EventTypes.MAIN] as MainEvent;
@@ -179,7 +186,7 @@ export class eventManager extends eH.EventEmitterMixin<eH.IEvent> {
       startTime: timerEvent.timestamp
     });
   }
-  public async handleClientConnected(event: eH.IEventRoot<eH.IEvent>): void {
+  public async handleClientConnected(event: eH.IEvent): void {
     Main.startIntervalIfNeeded();
     const newEvent: eH.IEvent = {
       type: eH.SubEventTypes.CLIENT_CONNECTED, // or another appropriate type
@@ -191,9 +198,9 @@ export class eventManager extends eH.EventEmitterMixin<eH.IEvent> {
         blob: event
       }
     };
-    this.emit(eH.eH.EventTypes.SERVER, newEvent);
+    this.emit(eH.EventTypes.SERVER, newEvent);
   }
-  public clientMessageReady(event: eH.IEventRoot<eH.IEvent>): void {
+  public clientMessageReady(event: eH.IEvent): void {
     if (!event[eH.EventTypes.CLIENTS]) return; // Safety check
 
     const clientEvent = event[eH.EventTypes.CLIENTS] as ClientsEvent;
@@ -222,13 +229,13 @@ export class eventManager extends eH.EventEmitterMixin<eH.IEvent> {
       return { type: 'unknown' }; // Default to unknown type 
     }
   }
-  public handleClientMessage(event: eH.IEventRoot<eH.IEvent>): void {
+  public handleClientMessage(event: eH.IEvent): void {
     if (event[eH.EventTypes.CLIENTS] && event[eH.EventTypes.CLIENTS].clientId) {
       const clientId = event[eH.EventTypes.CLIENTS].clientId;
 
       // Example 1: Update stats based on message
       if (event.data && event.data.type === 'update_stats') {
-        statsI.updateClientStats(clientId, event.data.stats);
+        Main.clients._clients.updateClientStats(clientId, event.data.stats);
       }
 
       // Example 2: Forward message to other clients (hypothetical)
@@ -238,22 +245,15 @@ export class eventManager extends eH.EventEmitterMixin<eH.IEvent> {
     } else {
       console.warn('Invalid client message format');
     }
+    this.emit(eH.EventTypes.SERVER, newEvent);
   }
-  // public handleClientMessage(event: eH.IEventRoot<eH.IEvent>): void {
-  //   const newEvent: eH.IEvent = {
-  //     message: 'Client message ready',
-  //     type: eH.SubEventTypes.CLIENT_MESSAGE_READY,
-  //     success: true,
-  //     timestamp: Date.now(),
-  //     data: {
-  //       errCode: 0, // or another appropriate code
-  //       blob: event
-  //     }
-  //   };
-  //   this.emit(eH.eH.EventTypes.SERVER, newEvent);
-  // }
-
-  public handleClientDisconnected(event: eH.IEventRoot<eH.IEvent>): void {
+  public updateClientStats(clientId: string, stats?: any) {
+    console.error("Method not implemented.");
+  }
+  public broadcastMessage(clientId: string, message?: string) {
+    console.error("Method not implemented.");
+  }
+  public handleClientDisconnected(event: eH.IEvent): void {
     const newEvent: eH.IEvent = {
       type: eH.SubEventTypes.CLIENT_DISCONNECTED, // or another appropriate type
       message: 'Client disconnected',
@@ -267,7 +267,7 @@ export class eventManager extends eH.EventEmitterMixin<eH.IEvent> {
     this.handleError(new Error(newEvent.message)); // Or a custom error type
   }
 
-  public clientMessageReady(event: eH.IEventRoot<eH.IEvent>): void {
+  public clientMessageReady(event: eH.IEvent): void {
     console.error("Method not implemented.");
   }
   handleLatencyStopped(event: any) {
@@ -278,16 +278,16 @@ export class eventManager extends eH.EventEmitterMixin<eH.IEvent> {
   }
 
 
-  private clientBye(event: eH.IEventRoot<eH.IEvent>): void {
-    if (event[eH.eH.EventTypes.CLIENTS]) {
+  private clientBye(event: eH.IEvent): void {
+    if (event[eH.EventTypes.CLIENTS]) {
       // Example logic - you'll need to replace with your specific functionality
-      console.log(eH.eH.EventTypes.CLIENTS, `Client disconnected: ${event[eH.eH.EventTypes.CLIENTS]}`);
+      console.log(eH.EventTypes.CLIENTS, `Client disconnected: ${event[eH.EventTypes.CLIENTS]}`);
     } else {
       console.error("Client disconnection event missing clientId");
     }
   }
 
-  private clientSettingsUpdated(event: eH.IEventRoot<eH.IEvent>): void {
+  private clientSettingsUpdated(event: eH.IEvent): void {
     console.error("Method not implemented.");
   }
 }
