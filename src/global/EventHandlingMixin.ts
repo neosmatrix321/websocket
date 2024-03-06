@@ -2,17 +2,15 @@
 
 import { EventEmitter } from "events";
 import * as eM from "./EventHandlingManager";
-
-export const MainEventTypes = { BASIC: 'BASIC', MAIN: 'MAIN', STATS: 'STATS', SERVER: 'SERVER', CLIENTS: 'CLIENTS', ERROR: 'ERROR', EVENT: 'EVENT', WS: 'WS', DEBUG: 'DEBUG', UNKNOWN: 'UNKNOWN', STRING: 'STRING', SYMBOL: 'SYMBOL', OBJECT: 'OBJECT', TIMER: 'TIMER' };
+import * as clientI from "../clients/clientInstance";
+export const MainEventTypes = { BASIC: 'BASIC', MAIN: 'MAIN', STATS: 'STATS', SERVER: 'SERVER', CLIENTS: 'CLIENTS', ERROR: 'ERROR', EVENT: 'EVENT', WS: 'WS', DEBUG: 'DEBUG', UNKNOWN: 'UNKNOWN', STRING: 'STRING', SYMBOL: 'SYMBOL', OBJECT: 'OBJECT', TIMER: 'TIMER', GENERIC: 'GENERIC', FATAL: 'FATAL', DEFAULT: 'DEFAULT' };
 
 export const SubEventTypes = {
-  BASIC: { FIRST: 'FIRST', LAST: 'LAST' },
+  BASIC: { FIRST: 'FIRST', LAST: 'LAST', DEFAULT: 'DEFAULT' },
   MAIN: { TIMER_CREATED: 'TIMER_CREATED', START_TIMER: 'START_TIMER', TIMER_STARTED: 'TIMER_STARTED', TIMER_STOPPED: 'TIMER_STOPPED', STOP_TIMER: 'STOP_TIMER', PID_AVAILABLE: 'PID_AVAILABLE' },
   STATS: { UPDATE_ALL_STATS: 'UPDATE_ALL_STATS', ALL_STATS_UPDATED: 'ALL_STATS_UPDATED', PI_STATS_UPDATED: 'PI_STATS_UPDATED', UPDATE_PI_STATS: 'UPDATE_PI_STATS', PU_STATS_UPDATED: 'PU_STATS_UPDATED', UPDATE_PU_STATS: 'UPDATE_PU_STATS', OTHER_STATS_UPDATED: 'OTHER_STATS_UPDATED', UPDATE_OTHER_STATS: 'UPDATE_OTHER_STATS' },
   SERVER: { LISTEN: 'LISTEN', CLIENT_CONNECTED: 'CLIENT_CONNECTED', CLIENT_MESSAGE_READY: 'CLIENT_MESSAGE_READY', CLIENT_DISCONNECTED: 'CLIENT_DISCONNECTED' },
-  CLIENTS: { CREATE: 'CREATE', MODIFY: 'MODIFY', MODIFIED: 'MODIFIED', DELETE: 'DELETE', CLIENT_STATS_UPDATED: 'CLIENT_STATS_UPDATED', UPDATE_CLIENT_STATS: 'UPDATE_CLIENT_STATS' },
-  ERROR: { ERROR: 'ERROR', UNKNOWN: 'UNKNOWN', STRING: 'STRING', SYMBOL: 'SYMBOL', OBJECT: 'OBJECT' },
-  EVENT: { ERROR: 'ERROR', UNKNOWN: 'UNKNOWN', STRING: 'STRING', SYMBOL: 'SYMBOL', OBJECT: 'OBJECT' },
+  CLIENTS: { CREATE: 'CREATE', CREATED: 'CREATED', MODIFY: 'MODIFY', MODIFIED: 'MODIFIED', DELETE: 'DELETE', CLIENT_STATS_UPDATED: 'CLIENT_STATS_UPDATED', UPDATE_CLIENT_STATS: 'UPDATE_CLIENT_STATS' },
   WS: { CONNECT: 'CONNECT', DISCONNECT: 'DISCONNECT', MESSAGE: 'MESSAGE' }
 };
 export const DEFAULT_VALUE_CALLBACKS = {
@@ -23,52 +21,54 @@ export const DEFAULT_VALUE_CALLBACKS = {
 };
 
 export interface IBaseEvent {
-  types?: string[];
+  mainTypes?: string[];
+  subTypes?: string[];
   success?: boolean;
   message?: string;
   data?: any;
-  statsEvent?: { subTypes: string[], statsId?: number, newValue?: any, oldValue?: any, updatedFields?: any };
-  mainEvent?: { subTypes: string[], pid?: number };
-  serverEvent?: { subTypes: string[], timerId?: number, startTime?: number, endTime?: number, duration?: number };
-  clientsEvent?: { subTypes: string[], clientId?: string, message?: string };
-  errorEvent?: { subTypes: string[], error?: Error, errCode?: number, data?: any };
-  wsEvent?: { subTypes: string[], message?: string, connectionId?: string };
+  statsEvent?: { statsId?: number, newValue?: any, oldValue?: any, updatedFields?: any };
+  mainEvent?: { pid?: number };
+  serverEvent?: { timerId?: number, startTime?: number, endTime?: number, duration?: number };
+  clientsEvent?: { id?: string, ip?: string, clientType: clientI.ClientType, message?: string };
+  errorEvent?: { errCode: number, error?: Error, message?: string, data?: any };
+  wsEvent?: { message?: string, connectionId?: string };
 }
 
 export class BaseEvent implements IBaseEvent {
-  types: string[] = [MainEventTypes.BASIC];
+  mainTypes: string[] = [MainEventTypes.BASIC];
+  subTypes: string[] = [SubEventTypes.BASIC.DEFAULT];
   success: boolean = true;
   message: string = "";
   data?: any;
   statsEvent?: {
-    subTypes: string[], statsId?: number, newValue?: any, oldValue?: any, updatedFields?: any
+    statsId?: number, newValue?: any, oldValue?: any, updatedFields?: any
   } = {
-      subTypes: [MainEventTypes.STATS], statsId: -1, newValue: -1, oldValue: -1, updatedFields: {}
+      statsId: -1, newValue: -1, oldValue: -1, updatedFields: {}
     };
   mainEvent?: {
-    subTypes: string[], pid?: number
+    pid?: number
   } = {
-      subTypes: [MainEventTypes.MAIN], pid: -1
+      pid: -1
     };
   serverEvent?: {
-    subTypes: string[], timerId?: number, startTime?: number, endTime?: number, duration?: number
+    timerId?: number, startTime?: number, endTime?: number, duration?: number
   } = {
-      subTypes: [MainEventTypes.SERVER], timerId: -1, startTime: -1, endTime: -1, duration: -1
+      timerId: -1, startTime: -1, endTime: -1, duration: -1
     };
   clientsEvent?: {
-    subTypes: string[], clientId?: string, message?: string
+    id: string, ip: string, clientType: clientI.ClientType, message?: string
   } = {
-      subTypes: [MainEventTypes.CLIENTS], clientId: "", message: ""
+      id: "", ip: "", clientType: clientI.ClientType.Unknown, message: ""
     };
   errorEvent?: {
-    subTypes: string[], error?: Error, errCode?: number, data?: any
+    errCode: number, error?: Error, data?: any, message?: string
   } = {
-      subTypes: [MainEventTypes.ERROR], error: new Error(), errCode: -1, data: {}
+      error: new Error(), errCode: -1
     };
   wsEvent?: {
-    subTypes: string[], message?: string, connectionId?: string
+    message?: string, connectionId?: string
   } = {
-      subTypes: [MainEventTypes.WS], message: "", connectionId: ""
+      message: "", connectionId: ""
     };
 
   constructor(data?: Partial<IBaseEvent>) {
@@ -78,21 +78,19 @@ export class BaseEvent implements IBaseEvent {
 
 interface IDebugEvent extends IBaseEvent {
   debugEvent: {
-    subTypes: string[];
-    timestamp: number;
+    timestamp?: number;
     success: boolean;
     eventName?: string;
-    enabled: boolean;
-    startTime: number;
-    endTime: number;
-    duration: number;
-    activeEvents: number;
-    eventCounter: number;
+    enabled?: boolean;
+    startTime?: number;
+    endTime?: number;
+    duration?: number;
+    activeEvents?: number;
+    eventCounter?: number;
   };
 }
 export class DebugEvent extends BaseEvent implements IDebugEvent {
   debugEvent: {
-    subTypes: string[];
     timestamp: number;
     success: boolean;
     eventName: string;
@@ -103,7 +101,6 @@ export class DebugEvent extends BaseEvent implements IDebugEvent {
     activeEvents: number;
     eventCounter: number;
   } = {
-      subTypes: [MainEventTypes.DEBUG],
       timestamp: DEFAULT_VALUE_CALLBACKS.timestamp(),
       success: false,
       eventName: "Debug Event",
@@ -128,15 +125,41 @@ export class DebugEvent extends BaseEvent implements IDebugEvent {
   }
 }
 
+const FirstEvent = new DebugEvent( {
+  mainTypes: [MainEventTypes.BASIC],
+  subTypes: [SubEventTypes.BASIC.FIRST],
+  message: "First event",
+  success: true,
+  data: "First event data",
+  statsEvent: {
+    statsId: 1,
+    newValue: 100,
+    updatedFields: ["newValue"]
+  },
+  mainEvent: {
+    pid: 100
+  },
+  serverEvent: {
+    timerId: 1,
+    startTime: Date.now(),
+    endTime: 0,
+    duration: 0
+  },
+  clientsEvent: { id: "", ip: "", clientType: clientI.ClientType.Unknown },
+  errorEvent: { errCode: 0, error: new Error("First event error") },
+  wsEvent: { message: "First event message", connectionId: "First event connection" },
+  debugEvent: { success: true }
+});
+
 export type IEventTypes = BaseEvent | DebugEvent;
 
 export interface IEventRoot<T> { [key: string]: T; }
 //  getStoredEvent: (event: string) => IEventTypes;
 // , getStoredEvent: (event: string) => { return new BaseEvent(); }
-export class EventEmitterMixin<IEventTypes> {
+export class EventEmitterMixin {
   static stats: { eventCounter: number; activeEvents: number; } = { eventCounter: 0, activeEvents: 0 };
   private _emitter: EventEmitter;
-  private _events: Map<string, IEventTypes> = new Map(); // Store default events
+  private _events: Map<string, any> = new Map(); // Store default events
   // private _listeners: Map<string, ((...args: any[]) => void)[]> = new Map();
 
   constructor() {
@@ -149,20 +172,32 @@ export class EventEmitterMixin<IEventTypes> {
     }
   }
 
-  private generateEventIndex(eventData: any): any {
-    if (typeof eventData === 'object') {
-      if (typeof eventData.message === 'string') {
-        return eventData.message; // Use message as index
+  private generateEventIndex(eventData: any): IEventTypes {
+    let eventDataResult: IEventTypes;
+    if (typeof eventData === 'object' && eventData as string === typeof MainEventTypes) {
+      return eventData as IEventTypes;
+    }
+    try {
+      eventDataResult = this.createEvent(eventData);
+      return eventDataResult;
+    } catch (error) {
+      let eventDataResult: IEventTypes = { mainTypes: [MainEventTypes.ERROR], subTypes: [MainEventTypes.UNKNOWN], success: false, message: 'Fatal: Failed to create event', errorEvent: { errCode: 5, error: new Error("Fatal: Failed to create event"), data: error } };
+      if (typeof eventData === 'object') {
+        if (typeof eventData.message === 'string') {
+          eventDataResult = new BaseEvent({ message: eventData.message });
+          return eventDataResult; // Use message as index
+        } else {
+          return new BaseEvent({ data: JSON.stringify(eventData) }); //  Fallback
+        }
+      } else if (typeof eventData === 'string') {
+        return eventDataResult = new BaseEvent({ message: eventData });
       } else {
-        return JSON.stringify(eventData); //  Fallback 
+        return new BaseEvent({ data: JSON.stringify(eventData) }); // Handle other data types
       }
-    } else if (typeof eventData === 'string') {
-      return eventData;
-    } else {
-      return JSON.stringify(eventData); // Handle other data types
     }
   }
-  private createEvent(event: string, ...args: any[]): IEventTypes | null {
+  private createEvent(event: string, ...args: any[]): IEventTypes {
+    let eventResultData: IEventTypes = {mainTypes: [MainEventTypes.ERROR], subTypes: [MainEventTypes.UNKNOWN], success: false, message: '' };
     try {
       // Ensure args[0] conforms to the expected event interface
       if (args[0] && !this.isValidEvent(event, args[0])) {
@@ -170,8 +205,10 @@ export class EventEmitterMixin<IEventTypes> {
       }
       const originalEvent = this._events.get(event);
       if (!originalEvent) {
-        console.error('Event not found:', event);
-        return null;
+
+        this.emitError(MainEventTypes.EVENT, new BaseEvent());
+        eventResultData.errorEvent = { errCode: 6, data: { event, args } };
+        return new BaseEvent( );
       }
       if (args[0] && args[0].debugEvent && args[0].debugEvent.enabled) {
         let debugData;
@@ -185,15 +222,16 @@ export class EventEmitterMixin<IEventTypes> {
             eventName: event,
           };
           this._events.set(event, originalEvent); // Replace with a DebugEvent
-        } else
+        } else {
           return { ...originalEvent, debug: debugData } as IEventTypes;
+        }
       };
       // Get the stored event (could be BaseEvent for unknown ones) and merge
       return { ...this._events.get(event), ...args[0] };
     } catch (error) {
-      console.error('Failed to create event:', event, error);
-      return null;
-    }
+      this.emitError(MainEventTypes.EVENT, new BaseEvent({mainTypes: [MainEventTypes.ERROR], subTypes: [MainEventTypes.FATAL], message: 'Fatal: Failed to create event', errorEvent: { errCode: 3, data: error } }));
+      return new BaseEvent({ data: JSON.stringify(event) })
+      }
   }
   private isValidEvent(event: string, eventData: any): boolean {
     switch (event) {
@@ -213,11 +251,10 @@ export class EventEmitterMixin<IEventTypes> {
   }
   public emitError(event: string, error?: any): void {
     const newEvent: BaseEvent = {
-      ...(new BaseEvent({types: [MainEventTypes.ERROR]}) as BaseEvent),
+      ...(new BaseEvent({mainTypes: [MainEventTypes.ERROR]}) as BaseEvent),
       errorEvent: {
-        subTypes: [SubEventTypes.ERROR.UNKNOWN],
-        error: new Error('Something went wrong'), // A sample error
         errCode: 2, // A sample error code
+        error: new Error('Something went wrong'), // A sample error
         data: error
       }
     };
@@ -259,7 +296,7 @@ export class EventEmitterMixin<IEventTypes> {
   // Method to process the event queue (you'll need to call this)
 }
 
-export class SingletonEventManager extends EventEmitterMixin<IEventTypes> {
+export class SingletonEventManager extends EventEmitterMixin {
   private static _instance: any;
   private constructor() {
     super();

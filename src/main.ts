@@ -5,33 +5,54 @@ import { WebSocket } from 'ws'
 import { Server as httpsServer } from "http";
 import * as eM from "./global/EventHandlingManager";
 import * as eH from "./global/EventHandlingMixin";
+// import Stats from "./stats/stats";
+// import Server from "./server/server";
+// import Clients from "./clients/clients";
+import * as statsI from "./stats/statsInstance";
+import * as serverI from "./server/serverInstance";
+import * as clientsI from "./clients/clientInstance";
+import * as settingsI from "./settings/settingsInstance";
 import Stats from "./stats/stats";
 import Server from "./server/server";
 import Clients from "./clients/clients";
-import * as statsI from "./stats/statsInstance";
-import * as serverI from "./settings/settingsInstance";
-import * as clientsI from "./settings/settingsInstance";
-import * as settingsI from "./settings/settingsInstance";
-class BaseClass { }
+
+
+
+const EventMixin = eH.SingletonEventManager.getInstance();
+
 @injectable()
-export default class Main extends eH.EventEmitterMixin<eH.IEventTypes> {
-  static startIntervalIfNeeded() {
-    throw new Error("Method not implemented.");
-  }
+export class Main {
+  private eV: typeof EventMixin;
+  private stats!: statsI.IStats;
+  private server!: serverI.IHandleWrapper;
+  private clients!: clientsI.IClientsWrapper;
+  private settings!: settingsI.ISettings;
+
   public constructor(
-    @inject(eM.EVENT_MANAGER_TOKEN) eV: eM.eventManager,
-    @inject(statsI.GLOBAL_STATS_TOKEN) stats: statsI.IStats,
-    @inject(settingsI.PRIVATE_SETTINGS_TOKEN) settings: settingsI.ISettings
-    ) {
-    super();
+    @inject(statsI.STATS_WRAPPER_TOKEN) statsInstance: statsI.IStats,
+    @inject(serverI.SERVER_WRAPPER_TOKEN) serverInstance: serverI.IHandleWrapper,
+    @inject(clientsI.CLIENTS_WRAPPER_TOKEN) clientsInstance: clientsI.IClientsWrapper,
+    @inject(settingsI.PRIVATE_SETTINGS_TOKEN) settingsInstance: settingsI.ISettings,
+    @inject(Stats) private statsService: Stats,
+    @inject(Server) private serverService: Server,
+    @inject(Clients) private clientsService: Clients
+  ) {
+    this.eV = EventMixin;
+    this.stats = statsInstance;
+    this.server = serverInstance;
+    this.clients = clientsInstance;
+    this.settings = settingsInstance;
     this.initialize();
   }
 
-  private async gatherAndSendStats() {
-    const updatedStats = await this._systemMonitor.getUpdatedStats();
-    await this.stats.updateAllStats(updatedStats);
+  static startIntervalIfNeeded() {
+    throw new Error("Method not implemented.");
+  }
 
-    this._clients.forEach((client: any) => {
+  private async gatherAndSendStats() {
+    await this.statsService.updateAllStats(updatedStats);
+
+    this.clients.forEach((client: any) => {
       if (client.readyState === client.OPEN) {
         // . detailed logic to build and send the stats payload.
         client.send('client aagdssdaf');
@@ -39,10 +60,14 @@ export default class Main extends eH.EventEmitterMixin<eH.IEventTypes> {
     });
   }
 
+  private async updateStats() {
+    await this.stats.updateAllStats();
+    this.eV.emit('statsUpdated', this.stats.stats);
+  }
   private async handleClose(ws: any, code: any) {
     console.log("dead ip(" + ws.ip + ") alive(" + ws.readyState + ") code(" + code + ") count(" + this.stats.clientsCounter + ")");
-    await this._clients.removeClient(ws.id); // Assuming you have removeClient
-    this._server._handle.web.destroyClient(ws.ip); // If applicable
+    await this.clients.removeClient(ws.id); // Assuming you have removeClient
+    this.server._handle.web.destroyClient(ws.ip); // If applicable
     ws.terminate();
     this.startIntervalIfNeeded();
   }
@@ -66,12 +91,12 @@ export default class Main extends eH.EventEmitterMixin<eH.IEventTypes> {
       const newIP = client.socket.remoteAddress;
       const newID = this.stats.clientsCounter;
       const type = 'basic'
-      this._clients.addClient(newIP, newID, type);
+      this.clients.addClient(newIP, newID, type);
     }
     if (isMyWebSocketWithId(client)) {
       const ID = client.id;
-      // this._clients[client.info.id]._config.type = ClientType.Admin; // Update isAdmin
-      await this._clients.updateClientStats(this._clients[ID]);
+      // this.clients[client.info.id]._config.type = ClientType.Admin; // Update isAdmin
+      await this.clients.updateClientStats(this.clients[ID]);
     } else {
       console.error("Could not create Client " + newIP)
     }

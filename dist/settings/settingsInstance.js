@@ -21,7 +21,7 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 })(function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.PRIVATE_SETTINGS_TOKEN = exports.privateSettings = void 0;
+    exports.PRIVATE_SETTINGS_TOKEN = void 0;
     require("reflect-metadata");
     var inversify_1 = require("inversify");
     var privateSettings = /** @class */ (function () {
@@ -50,6 +50,6 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
         ], privateSettings);
         return privateSettings;
     }());
-    exports.privateSettings = privateSettings;
+    exports.default = privateSettings;
     exports.PRIVATE_SETTINGS_TOKEN = Symbol('privateSettings');
 });

@@ -9,143 +9,183 @@ import * as eH from "../global/EventHandlingMixin";
 import * as eM from "../global/EventHandlingManager";
 import * as settingsI from '../settings/settingsInstance'; // Import settings interface/class
 import * as statsI from "./statsInstance";
-import Main from '../main';
+import { Main } from '../main';
 
+const EventMixin = eH.SingletonEventManager.getInstance();
 
 @injectable()
-export default class Stats extends eH.EventEmitterMixin<eH.IEventTypes>{
-  public stats!: statsI.IStats;
-  private _settings!: settingsI.ISettings
-  constructor(@inject(eM.EVENT_MANAGER_TOKEN) eV: eM.eventManager,
-  @inject(statsI.GLOBAL_STATS_TOKEN) statsInstance: statsI.IStats,
-    @inject(settingsI.PRIVATE_SETTINGS_TOKEN) settingsInstance: settingsI.ISettings) {
-    super();
-    this.stats = statsInstance || {
-      webHandle: { isAlive: false, hasConnection: false, connectedClients: 0 },
-      fileHandle: { isAlive: false, hasConnection: false, connectedClients: 0 },
-      clientsCounter: 0,
-      activeClients: 0,
-      latencyGoogle: null,
-      si: { cpu: null, memory: null, ppid: null, pid: null, ctime: null, elapsed: null, timestamp: null },
-      pu: { proc: null, pid: null, pids: null, cpu: null, mem: null },
-      rcon: {},
-      lastUpdates: {},
-      clients: {},
-      interval_sendinfo: false
-    };
-    this._settings = settingsInstance;
+export default class Stats {
+  private eV: typeof EventMixin;
+  private stats!: statsI.IStats;
+  private settings!: settingsI.ISettings;
+  constructor(
+    @inject(statsI.STATS_WRAPPER_TOKEN) statsInstance: statsI.IStats,
+    @inject(settingsI.PRIVATE_SETTINGS_TOKEN) settingsInstance: settingsI.ISettings
+  ) {
+    this.eV = EventMixin;
+    this.stats = statsInstance;
+    this.settings = settingsInstance;
     this.updateAllStats();
   }
   public async updateAllStats() {
-    let statsUpdated: eH.IBaseEvent;
+    let statsUpdated: eH.IBaseEvent = {
+      mainTypes: [eH.MainEventTypes.STATS],
+      subTypes: [eH.SubEventTypes.STATS.ALL_STATS_UPDATED],
+      message: '',
+      success: false,
+    };
+    let result: boolean = false;
     try {
       this.stats.lastUpdates["createstatContainer"] = Date.now();
-      await this.updateAndGetPidIfNecessary(); // Fetch PID if needed
-      await this.comparePids();
-      await this.getLatencyGoogle();
-      await this.getSI();
-      await this.getPU();
+      result = await this.updateAndGetPidIfNecessary(); // Fetch PID if needed
+      result = await this.comparePids();
+      result = await this.getLatencyGoogle();
+      result = await this.getSI();
+      result = await this.getPU();
       statsUpdated = {
-        types: [eH.SubEventTypes.STATS.ALL_STATS_UPDATED],
-        message: 'Error updating stats',
-        success: false,
-        data: { errCode: 1, blob: { error } }
+        message: 'all stats updated',
+        success: result,
       };
     } catch (error) {
       statsUpdated = {
-        types: [eH.SubEventTypes.STATS.ALL_STATS_UPDATED],
+        subTypes: [eH.SubEventTypes.STATS.ALL_STATS_UPDATED, eH.MainEventTypes.GENERIC],
         message: 'Error updating stats',
         success: false,
-        data: { errCode: 1, blob: { error } }
+        errorEvent: { errCode: 2, data: { error } }
       };
       console.error("Error fetching google ping:", error);
       this.stats.latencyGoogle = null;
     }
-    this.emit('statsUpdated', statsUpdated);
+    this.eV.emit(eH.MainEventTypes.STATS, statsUpdated);
   }
-  async getLatencyGoogle(): Promise<void> {
+  async getLatencyGoogle(): Promise<boolean> {
     try {
       const latency = await si.inetLatency();
       this.stats.latencyGoogle = latency;
-
-      this.emit('latencyUpdated', {
-          type: statsType.update,
-          message: 'Google latency updated',
-          data: { errCode: 0, blob: { latency } }
+      return true;
+    } catch (error) {
+      this.eV.emit(eH.MainEventTypes.ERROR, {
+        mainTypes: [eH.MainEventTypes.STATS],
+        subTypes: [eH.MainEventTypes.GENERIC],
+        message: '',
+        success: false,
+        errorEvent: { errCode: 2, data: { error } }
       });
-
-  } catch (error) {
-      this.emit('latencyUpdated', {
-          type: statsType.update,
-          message: 'Error fetching Google latency',
-          data: { errCode: 1, blob: { error } }
-      });
+    }
+    return false;
   }
-}
   public async createstatContainer(): Promise<void> {
     this.stats.lastUpdates = { "createstatContainer": Date.now() };
   }
 
-  public async getPid(): Promise<void> {
+  public async getPid(): Promise<boolean> {
+    this.stats.lastUpdates = { "getPid": Date.now() };
+    let resultData: eH.IBaseEvent = {
+      mainTypes: [eH.MainEventTypes.MAIN],
+      subTypes: ["getPid"],
+      message: '',
+      success: false,
+    };
     try {
-      const data = await readFile(this._settings.pidFile, 'utf-8' as BufferEncoding);
+      const data = await readFile(this.settings.pidFile, 'utf-8' as BufferEncoding);
       const pid = parseInt(data, 10);
 
-      this._settings.pid = pid;
-      this._settings.pidFileExists = true;
-      this._settings.pidFileReadable = true;
-      this.emit(statsType.pidAvailable, `PID: ${pid}`);
+      this.settings.pid = pid;
+      this.settings.pidFileExists = true;
+      this.settings.pidFileReadable = true;
+      resultData = { success: true };
+      this.eV.emit(eH.MainEventTypes.MAIN, resultData);
+      return true;
 
-    } catch (err) {
-      this._settings.pidFileExists = false;
-      this._settings.pidFileReadable = false;
+    } catch (error) {
+      this.settings.pidFileExists = false;
+      this.settings.pidFileReadable = false;
+      resultData = { errorEvent: { errCode: 2, data: { error } } };
 
-      const errorData = (err instanceof Error) ? { errCode: 999, message: err.message } : null;
-      this.emit("getPid error PID retrieval error", errorData);
+      this.eV.emit(eH.MainEventTypes.ERROR, resultData);
     }
+    return false;
   }
-  public async updateAndGetPidIfNecessary(): Promise<void> {
-    if (!this._settings.pid || typeof this._settings.pid !== "number") {
-      this.stats.lastUpdates.getpid = Date.now();
-      await this.getPid(); 
+  public async updateAndGetPidIfNecessary(): Promise<boolean> {
+    this.stats.lastUpdates = { "updateAndGetPidIfNecessary": Date.now() };
+    try {
+      if (!this.settings.pid || typeof this.settings.pid !== "number") {
+        this.stats.lastUpdates = { getpid: Date.now() };
+        await this.getPid();
+        return true;
+      }
+      return false;
+    } catch (error) {
+      this.eV.emit(eH.MainEventTypes.ERROR, {
+        mainTypes: [eH.MainEventTypes.MAIN],
+        subTypes: ["updateAndGetPidIfNecessary"],
+        message: '',
+        success: false,
+        errorEvent: { errCode: 2, data: { error } }
+      });
     }
+    return false;
   }
-  async comparePids(): Promise<void> {
+  async comparePids(): Promise<boolean> {
     this.stats.lastUpdates['comparePids'] = Date.now();
-    if (this._settings.pid) {
-      try {
+    try {
+      if (this.settings.pid) {
         this.getSI().then(() => {
-          if (this.stats.si.pid == this._settings.pid) this.getPU();
+          if (this.stats.si.pid == this.settings.pid) this.getPU();
         }).then(() => {
           return true;
-        }).catch((e) => {
-          console.error('Error fetching pid: ' + this._settings.pid, ' si_pid: ' + this.stats.si.pid, ' pu_pid: ' + this.stats.pu.pid, e);
-          return false;
         });
-      } catch (e) {
-        console.error('Error fetching pid: ' + this._settings.pid, ' si_pid: ' + this.stats.si.pid, ' pu_pid: ' + this.stats.pu.pid, e);
       }
+      return false;
+    } catch (error) {
+      this.eV.emit(eH.MainEventTypes.ERROR, {
+        mainTypes: [eH.MainEventTypes.MAIN],
+        subTypes: ["comparePids"],
+        message: '',
+        success: false,
+        errorEvent: { errCode: 2, data: { error } }
+      });
     }
+    return false;
   }
-  async getSI(): Promise<void> {
+  async getSI(): Promise<boolean> {
+    this.stats.lastUpdates = { "getLatencyGoogle": Date.now() };
     try {
-      const targetProcess = (await si.processLoad("PalServer-Linux")).find((p) => p.pid === this._settings.pid);
+      const targetProcess = (await si.processLoad("PalServer-Linux")).find((p) => p.pid === this.settings.pid);
       if (targetProcess) {
         this.stats.si = { proc: targetProcess.proc, pid: targetProcess.mem, cpu: targetProcess.pid, mem: targetProcess.mem };
+        return true;
       }
-    } catch (e) {
-      console.error("Error fetching system information:", e);
+      return false;
+    } catch (error) {
+      this.eV.emit(eH.MainEventTypes.ERROR, {
+        mainTypes: [eH.MainEventTypes.STATS],
+        subTypes: ["getSI"],
+        message: '',
+        success: false,
+        errorEvent: { errCode: 2, data: { error } }
+      });
     }
-    this.stats.lastUpdates = { "getLatencyGoogle": Date.now() };
+    return false;
   }
-  async getPU(): Promise<void> {
-    this.stats.lastUpdates['getPU'] = Date.now();
+  async getPU(): Promise<boolean> {
+    this.stats.lastUpdates = { 'getPU': Date.now() };
     try {
-      const usage = await pidusage(this._settings.pid);
-      this.stats.pu = { cpu: usage.cpu, memory: usage.memory, pid: usage.pid, ctime: usage.ctime, elapsed: usage.elapsed, timestamp: usage.timestamp }; // Map relevant properties
-    } catch (e) {
-      console.error("Error fetching pid usage:", e);
+      const usage = await pidusage(this.settings.pid);
+      if (usage) {
+        this.stats.pu = { cpu: usage.cpu, memory: usage.memory, pid: usage.pid, ctime: usage.ctime, elapsed: usage.elapsed, timestamp: usage.timestamp }; // Map relevant properties
+        return true;
+      }
+    } catch (error) {
+      this.eV.emit(eH.MainEventTypes.ERROR, {
+        mainTypes: [eH.MainEventTypes.STATS],
+        subTypes: ["getSI"],
+        message: '',
+        success: false,
+        errorEvent: { errCode: 2, data: { error } }
+      });
     }
+    return false;
   }
   private setupGlobalEventListeners() {
     // Event handling for client connections, messages, errors

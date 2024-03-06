@@ -1,18 +1,3 @@
-var __extends = (this && this.__extends) || (function () {
-    var extendStatics = function (d, b) {
-        extendStatics = Object.setPrototypeOf ||
-            ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
-            function (d, b) { for (var p in b) if (Object.prototype.hasOwnProperty.call(b, p)) d[p] = b[p]; };
-        return extendStatics(d, b);
-    };
-    return function (d, b) {
-        if (typeof b !== "function" && b !== null)
-            throw new TypeError("Class extends value " + String(b) + " is not a constructor or null");
-        extendStatics(d, b);
-        function __() { this.constructor = d; }
-        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
-    };
-})();
 var __assign = (this && this.__assign) || function () {
     __assign = Object.assign || function(t) {
         for (var s, i = 1, n = arguments.length; i < n; i++) {
@@ -104,68 +89,52 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
         if (v !== undefined) module.exports = v;
     }
     else if (typeof define === "function" && define.amd) {
-        define(["require", "exports", "inversify", "../global/EventHandlingMixin", "./clientInstance", "systeminformation"], factory);
+        define(["require", "exports", "inversify", "./clientInstance", "systeminformation", "../global/EventHandlingMixin", "../global/EventHandlingManager"], factory);
     }
 })(function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.clientsType = void 0;
     var inversify_1 = require("inversify");
-    var eH = __importStar(require("../global/EventHandlingMixin"));
-    var C = __importStar(require("./clientInstance"));
+    var clientI = __importStar(require("./clientInstance"));
     var systeminformation_1 = __importDefault(require("systeminformation"));
-    var CLIENTS_WRAPPER_TOKEN = Symbol('ClientsService');
-    var clientsType;
-    (function (clientsType) {
-        clientsType[clientsType["create"] = 0] = "create";
-        clientsType[clientsType["update"] = 1] = "update";
-        clientsType[clientsType["delete"] = 2] = "delete";
-        clientsType[clientsType["statsUpdated"] = 3] = "statsUpdated";
-    })(clientsType = exports.clientsType || (exports.clientsType = {}));
-    var BaseClientsEvent = /** @class */ (function () {
-        function BaseClientsEvent() {
-            this["cat"] = eH.catType.clients;
-        }
-        return BaseClientsEvent;
-    }());
-    var MyClassWithMixin = eH.EventEmitterMixin(BaseClientsEvent);
-    var globalEventEmitter = new MyClassWithMixin();
-    var Clients = /** @class */ (function (_super) {
-        __extends(Clients, _super);
-        function Clients(clientsInstance) {
-            var _this = _super.call(this) || this;
-            _this._clients = clientsInstance || {}; // Initialize if needed
-            return _this;
+    var eH = __importStar(require("../global/EventHandlingMixin"));
+    var eM = __importStar(require("../global/EventHandlingManager"));
+    var Clients = /** @class */ (function () {
+        function Clients(clientsInstance, eMInstance) {
+            this._clients = clientsInstance || {}; // Initialize if needed
+            this.eM = eMInstance;
         }
         Clients.prototype.addClient = function (id, ip, type) {
             var typeFinal;
             switch (type) {
                 case 'admin':
-                    typeFinal = C.ClientType.Admin;
+                    typeFinal = clientI.ClientType.Admin;
                     break;
                 case 'server':
-                    typeFinal = C.ClientType.Server;
+                    typeFinal = clientI.ClientType.Server;
                     break;
                 default:
-                    typeFinal = C.ClientType.Basic;
+                    typeFinal = clientI.ClientType.Basic;
             }
             //public create(newID: string, newIP: string, type: ClientType): void {
             var newClientInfo = { id: id, ip: ip, type: typeFinal };
-            var newResult = { errCode: 1 };
+            var newResult = { errCode: -1 };
             try {
-                var newClient = C.clientWrapper.createClient(newClientInfo);
+                var newClient = clientI.clientWrapper.createClient(newClientInfo);
                 this._clients[id] = newClient;
                 newResult = { errCode: 0 };
             }
             catch (e) {
-                newResult = { errCode: 2, message: 'create client failed', blob: e };
+                newResult = { errCode: 2, message: 'create client failed', data: e };
             }
             var newEvent = {
-                type: clientsType.create,
-                client: newClientInfo,
-                data: newResult
+                types: [eH.MainEventTypes.CLIENTS],
+                message: 'Create client event',
+                success: newResult.errCode == 0 ? true : false,
+                data: newClientInfo,
+                clientsEvent: { subTypes: [eH.SubEventTypes.CLIENTS.CREATED], id: newClientInfo.id, ip: newClientInfo.ip, clientType: newClientInfo.type }
             };
-            this.emit('clientAdded', newEvent);
+            this.eM.emit(eH.SubEventTypes.CLIENTS.CREATE, newEvent);
         };
         // public updateClientConfig(id: string, info: IClientInfo): void {
         //   const newClientInfo: IClientInfo = { id: id, ip: ip, type: typeFinal };
@@ -198,7 +167,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
                             _a.latency = _b.sent();
                             client._stats.eventCount++;
                             client._stats.lastUpdates['getClientLatency'] = Date.now();
-                            globalEventEmitter.emit("updateClientStats" + id);
+                            this.eM.emit("updateClientStats" + id);
                             _b.label = 2;
                         case 2: return [2 /*return*/];
                     }
@@ -213,10 +182,11 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
         };
         Clients = __decorate([
             (0, inversify_1.injectable)(),
-            __param(0, (0, inversify_1.inject)(CLIENTS_WRAPPER_TOKEN)),
-            __metadata("design:paramtypes", [Object])
+            __param(0, (0, inversify_1.inject)(clientI.CLIENTS_WRAPPER_TOKEN)),
+            __param(1, (0, inversify_1.inject)(eM.EVENT_MANAGER_TOKEN)),
+            __metadata("design:paramtypes", [Object, eM.eventManager])
         ], Clients);
         return Clients;
-    }(eH.EventEmitterMixin(BaseClientsEvent)));
+    }());
     exports.default = Clients;
 });

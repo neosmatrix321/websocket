@@ -1,9 +1,8 @@
 "use strict";
 import "reflect-metadata";
-import { Container, inject, injectable, optional } from 'inversify';
+import { inject, injectable, optional } from 'inversify';
 import * as eM from "../global/EventHandlingManager";
 import * as eH from "../global/EventHandlingMixin";
-import * as serverI from "../server/serverInstance";
 
 // Interfaces (potentially in a separate file, interfaces.ts)
 import { WebSocketServer, WebSocket } from 'ws'
@@ -31,34 +30,16 @@ export interface MyWebSocket extends WebSocket {
   id: string
 }
 
-
-export interface IServerEvent {
-  cat: eH.catType.server;
-  type?: serverType;
-  message?: string;
-  data?: {
-    errCode: number;
-    message?: string;
-    blob?: any;
-  };
-}
-
-
-class BaseServerEvent {
-  "cat": eH.catType = eH.catType.server;
-}
-
 export interface IserverWrapper {
   killAll(): void;
   isMyWebSocketWithId(ws: WebSocket): ws is MyWebSocket
 }
 
 @injectable()
-export default class serverWrapper extends eH.EventEmitterMixin<IServerEvent>(BaseServerEvent) {
-  protected _server: IHandleWrapper;
+export default class serverWrapper {
+  protected server: IHandleWrapper;
   public constructor(@inject(SERVER_WRAPPER_TOKEN) @optional() server: IHandleWrapper) {
-    super();
-    this._server = server || {
+    this.server = server || {
       _handle: {
         web: null,
         file: null
@@ -75,19 +56,17 @@ export default class serverWrapper extends eH.EventEmitterMixin<IServerEvent>(Ba
       }
     };
   }
-  public isMyWebSocketWithId(ws: WebSocket): ws is MyWebSocket {
-    return 'id' in ws;
-  }
+
   
   public killAll() {
     console.log('no please!');
   }
   // getHandleProperty(property: string): any {
-  //    return this._server.getHandleProperty(property);
+  //    return this.server.getHandleProperty(property);
   // }
 
   // setHandleProperty(property: string, value: any): void {
-  //   this._server.setHandleProperty(property, value);
+  //   this.server.setHandleProperty(property, value);
   // }
 }
-export const SERVER_WRAPPER_TOKEN = Symbol('ServerService');
+export const SERVER_WRAPPER_TOKEN = Symbol('serverWrapper');

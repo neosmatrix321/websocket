@@ -1,38 +1,36 @@
-(function (factory) {
-    if (typeof module === "object" && typeof module.exports === "object") {
-        var v = factory(require, exports);
-        if (v !== undefined) module.exports = v;
-    }
-    else if (typeof define === "function" && define.amd) {
-        define(["require", "exports", "reflect-metadata"], factory);
-    }
-})(function (require, exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.Inject = exports.Injectable = void 0;
-    require("reflect-metadata");
-    // Injectable Decorator
-    function Injectable() {
-        return function (target) {
-            // Store metadata for dependencies
-            var paramTypes = Reflect.getMetadata('design:paramtypes', target) || [];
-            var dependencies = paramTypes.map(function (paramType, index) { return ({
-                index: index,
-                token: paramType, // Assuming dependencies are classes with unique tokens
-            }); });
-            Reflect.defineMetadata('Injectable:dependencies', dependencies, target);
-        };
-    }
-    exports.Injectable = Injectable;
-    // Inject Decorator
-    function Inject(token) {
-        return function (target, key, index) {
-            // Create or get array of dependencies
-            var dependencies = Reflect.getMetadata('Injectable:dependencies', target) || [];
-            // Update dependency with provided token
-            dependencies[index] = { index: index, token: token };
-            Reflect.defineMetadata('Injectable:dependencies', dependencies, target);
-        };
-    }
-    exports.Inject = Inject;
-});
+"use strict";
+/*
+"use strict";
+import 'reflect-metadata';
+
+// Simplified interface for injections
+interface InjectableDependency {
+  token: any | symbol;
+}
+
+// Injectable Decorator
+export function Injectable(): Function {
+  return (target: any) => {
+    // Store metadata for dependencies
+    const paramTypes = Reflect.getMetadata('design:paramtypes', target) || [];
+    const dependencies: InjectableDependency[] = paramTypes.map((paramType: any, index: number) => ({
+      index,
+      token: paramType, // Assuming dependencies are classes with unique tokens
+    }));
+    Reflect.defineMetadata('Injectable:dependencies', dependencies, target);
+  };
+}
+
+// Inject Decorator
+export function Inject(token: any | symbol): any {
+  return (target: any, key: string, index: number) => {
+    // Create or get array of dependencies
+    const dependencies = Reflect.getMetadata('Injectable:dependencies', target) || [];
+
+    // Update dependency with provided token
+    dependencies[index] = { index, token };
+    Reflect.defineMetadata('Injectable:dependencies', dependencies, target);
+  };
+}
+
+*/ 

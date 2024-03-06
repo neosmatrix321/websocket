@@ -45,6 +45,9 @@ var __importStar = (this && this.__importStar) || function (mod) {
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -81,67 +84,76 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
         if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
     }
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 (function (factory) {
     if (typeof module === "object" && typeof module.exports === "object") {
         var v = factory(require, exports);
         if (v !== undefined) module.exports = v;
     }
     else if (typeof define === "function" && define.amd) {
-        define(["require", "exports", "reflect-metadata", "inversify", "./settings/settingsInstance.js", "https", "./global/EventHandlingManager", "./global/EventHandlingMixin", "./stats/stats", "./stats/statsInstance"], factory);
+        define(["require", "exports", "reflect-metadata", "inversify", "./global/EventHandlingManager", "./global/EventHandlingMixin", "./server/server", "./settings/settingsInstance"], factory);
     }
 })(function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.MainType = void 0;
     require("reflect-metadata");
     var inversify_1 = require("inversify");
-    var settingsInstance_js_1 = require("./settings/settingsInstance.js");
-    var https_1 = require("https");
     var eM = __importStar(require("./global/EventHandlingManager"));
     var eH = __importStar(require("./global/EventHandlingMixin"));
-    var statsMain = __importStar(require("./stats/stats"));
-    var statsI = __importStar(require("./stats/statsInstance"));
-    var MainType;
-    (function (MainType) {
-        MainType[MainType["timerCreated"] = 0] = "timerCreated";
-        MainType[MainType["timerStarted"] = 1] = "timerStarted";
-        MainType[MainType["timerStopped"] = 2] = "timerStopped";
-    })(MainType = exports.MainType || (exports.MainType = {}));
-    var BaseMainEvent = /** @class */ (function () {
-        function BaseMainEvent() {
-            this["cat"] = eH.catType.main;
+    var server_1 = __importDefault(require("./server/server"));
+    var settingsI = __importStar(require("./settings/settingsInstance"));
+    var BaseClass = /** @class */ (function () {
+        function BaseClass() {
         }
-        return BaseMainEvent;
+        return BaseClass;
     }());
     var Main = /** @class */ (function (_super) {
         __extends(Main, _super);
-        function Main() {
+        function Main(eV, settings) {
             var _this = _super.call(this) || this;
             _this.initialize();
-            _this.on('serverCreated', _this.gatherAndSendStats);
             return _this;
         }
-        Main.prototype.initialize = function () {
+        Main.startIntervalIfNeeded = function () {
+            throw new Error("Method not implemented.");
+        };
+        Main.prototype.gatherAndSendStats = function () {
             return __awaiter(this, void 0, void 0, function () {
-                var err_1;
+                var updatedStats;
+                return __generator(this, function (_a) {
+                    switch (_a.label) {
+                        case 0: return [4 /*yield*/, this._systemMonitor.getUpdatedStats()];
+                        case 1:
+                            updatedStats = _a.sent();
+                            return [4 /*yield*/, this.stats.updateAllStats(updatedStats)];
+                        case 2:
+                            _a.sent();
+                            this._clients.forEach(function (client) {
+                                if (client.readyState === client.OPEN) {
+                                    // . detailed logic to build and send the stats payload.
+                                    client.send('client aagdssdaf');
+                                }
+                            });
+                            return [2 /*return*/];
+                    }
+                });
+            });
+        };
+        Main.prototype.handleClose = function (ws, code) {
+            return __awaiter(this, void 0, void 0, function () {
                 return __generator(this, function (_a) {
                     switch (_a.label) {
                         case 0:
-                            console.log(this);
-                            _a.label = 1;
+                            console.log("dead ip(" + ws.ip + ") alive(" + ws.readyState + ") code(" + code + ") count(" + this.stats.clientsCounter + ")");
+                            return [4 /*yield*/, this._clients.removeClient(ws.id)];
                         case 1:
-                            _a.trys.push([1, 3, , 4]);
-                            return [4 /*yield*/, https_1.Server.createServer()];
-                        case 2:
-                            _a.sent();
-                            this._server.on('connection', this.handleConnection.bind(this));
-                            this.setupGlobalEventListeners();
-                            return [3 /*break*/, 4];
-                        case 3:
-                            err_1 = _a.sent();
-                            console.error("Main Initialization Error: ", err_1);
-                            return [3 /*break*/, 4];
-                        case 4: return [2 /*return*/];
+                            _a.sent(); // Assuming you have removeClient
+                            this._server._handle.web.destroyClient(ws.ip); // If applicable
+                            ws.terminate();
+                            this.startIntervalIfNeeded();
+                            return [2 /*return*/];
                     }
                 });
             });
@@ -156,26 +168,6 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
                     this.handleGreeting(ws, 'greeting'); // Integrate with your client management 
                     this.setupWebSocketEvents(ws);
                     this.startIntervalIfNeeded();
-                    return [2 /*return*/];
-                });
-            });
-        };
-        Main.prototype.handleWebSocketMessage = function (ws, data, isBinary) {
-            return __awaiter(this, void 0, void 0, function () {
-                var decodedData, messageObject;
-                return __generator(this, function (_a) {
-                    decodedData = Buffer.from(data, 'base64').toString();
-                    messageObject = JSON.parse(decodedData);
-                    if (messageObject.type) {
-                        switch (messageObject.type) {
-                            case 'greeting':
-                                this.handleGreeting(ws, messageObject);
-                                break;
-                            // Add other cases for message types 
-                            default:
-                                console.log("Unknown message type");
-                        }
-                    }
                     return [2 /*return*/];
                 });
             });
@@ -219,20 +211,23 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
                 });
             });
         };
-        Main.prototype.handleClose = function (ws, code) {
+        Main.prototype.handleWebSocketMessage = function (ws, data, isBinary) {
             return __awaiter(this, void 0, void 0, function () {
+                var decodedData, messageObject;
                 return __generator(this, function (_a) {
-                    switch (_a.label) {
-                        case 0:
-                            console.log("dead ip(" + ws.ip + ") alive(" + ws.readyState + ") code(" + code + ") count(" + this.stats.clientsCounter + ")");
-                            return [4 /*yield*/, this._clients.removeClient(ws.id)];
-                        case 1:
-                            _a.sent(); // Assuming you have removeClient
-                            this._server._handle.web.destroyClient(ws.ip); // If applicable
-                            ws.terminate();
-                            this.startIntervalIfNeeded();
-                            return [2 /*return*/];
+                    decodedData = Buffer.from(data, 'base64').toString();
+                    messageObject = JSON.parse(decodedData);
+                    if (messageObject.type) {
+                        switch (messageObject.type) {
+                            case 'greeting':
+                                this.handleGreeting(ws, messageObject);
+                                break;
+                            // Add other cases for message types 
+                            default:
+                                console.log("Unknown message type");
+                        }
                     }
+                    return [2 /*return*/];
                 });
             });
         };
@@ -244,44 +239,37 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
                 }, 1000);
             }
         };
-        Main.prototype.gatherAndSendStats = function () {
+        Main.prototype.initialize = function () {
             return __awaiter(this, void 0, void 0, function () {
-                var updatedStats;
+                var err_1;
                 return __generator(this, function (_a) {
                     switch (_a.label) {
-                        case 0: return [4 /*yield*/, this._systemMonitor.getUpdatedStats()];
+                        case 0:
+                            console.log(this);
+                            _a.label = 1;
                         case 1:
-                            updatedStats = _a.sent();
-                            this.updateGlobalStats(updatedStats);
-                            this._clients.forEach(function (client) {
-                                if (client.readyState === client.OPEN) {
-                                    // . detailed logic to build and send the stats payload.
-                                    client.send('client aagdssdaf');
-                                }
-                            });
-                            return [2 /*return*/];
+                            _a.trys.push([1, 3, , 4]);
+                            return [4 /*yield*/, server_1.default.createServer()];
+                        case 2:
+                            _a.sent();
+                            return [3 /*break*/, 4];
+                        case 3:
+                            err_1 = _a.sent();
+                            console.error("Main Initialization Error: ", err_1);
+                            return [3 /*break*/, 4];
+                        case 4: return [2 /*return*/];
                     }
                 });
             });
         };
-        __decorate([
-            (0, inversify_1.inject)(statsMain.GLOBAL_STATS_TOKEN),
-            __metadata("design:type", Object)
-        ], Main.prototype, "stats", void 0);
-        __decorate([
-            (0, inversify_1.inject)(settingsInstance_js_1.PRIVATE_SETTINGS_TOKEN),
-            __metadata("design:type", Object)
-        ], Main.prototype, "_settings", void 0);
-        __decorate([
-            (0, inversify_1.inject)(eM.EVENT_MANAGER_TOKEN),
-            __metadata("design:type", eM.eventManager)
-        ], Main.prototype, "eM", void 0);
         Main = __decorate([
             (0, inversify_1.injectable)(),
-            __metadata("design:paramtypes", [])
+            __param(0, (0, inversify_1.inject)(eM.EVENT_MANAGER_TOKEN)),
+            __param(1, (0, inversify_1.inject)(settingsI.PRIVATE_SETTINGS_TOKEN)),
+            __metadata("design:paramtypes", [eM.eventManager, Object])
         ], Main);
         return Main;
-    }(eH.EventEmitterMixin(BaseMainEvent)));
+    }(eH.EventEmitterMixin));
     exports.default = Main;
 });
 // Instantiate the main object to start your application

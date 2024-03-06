@@ -1,18 +1,3 @@
-var __extends = (this && this.__extends) || (function () {
-    var extendStatics = function (d, b) {
-        extendStatics = Object.setPrototypeOf ||
-            ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
-            function (d, b) { for (var p in b) if (Object.prototype.hasOwnProperty.call(b, p)) d[p] = b[p]; };
-        return extendStatics(d, b);
-    };
-    return function (d, b) {
-        if (typeof b !== "function" && b !== null)
-            throw new TypeError("Class extends value " + String(b) + " is not a constructor or null");
-        extendStatics(d, b);
-        function __() { this.constructor = d; }
-        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
-    };
-})();
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
     var desc = Object.getOwnPropertyDescriptor(m, k);
@@ -93,57 +78,30 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
         if (v !== undefined) module.exports = v;
     }
     else if (typeof define === "function" && define.amd) {
-        define(["require", "exports", "reflect-metadata", "node:fs/promises", "inversify", "pidusage", "systeminformation", "../global/EventHandlingMixin", "../stats/statsInstance", "../settings/settingsInstance"], factory);
+        define(["require", "exports", "reflect-metadata", "node:fs/promises", "inversify", "pidusage", "systeminformation", "../global/EventHandlingMixin", "../global/EventHandlingManager", "../settings/settingsInstance", "./statsInstance"], factory);
     }
 })(function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.statsType = exports.GLOBAL_STATS_TOKEN = void 0;
     require("reflect-metadata");
     var promises_1 = require("node:fs/promises");
     var inversify_1 = require("inversify");
     var pidusage_1 = __importDefault(require("pidusage"));
     var systeminformation_1 = __importDefault(require("systeminformation"));
     var eH = __importStar(require("../global/EventHandlingMixin"));
-    var S = __importStar(require("../stats/statsInstance"));
-    var pS = __importStar(require("../settings/settingsInstance"));
-    var PRIVATE_SETTINGS_TOKEN = Symbol('PrivateSettings');
-    exports.GLOBAL_STATS_TOKEN = Symbol('GlobalStats');
-    var statsType;
-    (function (statsType) {
-        statsType[statsType["update"] = 0] = "update";
-        statsType[statsType["updated"] = 1] = "updated";
-    })(statsType = exports.statsType || (exports.statsType = {}));
-    var BaseStatsEvent = /** @class */ (function () {
-        function BaseStatsEvent() {
-            this["cat"] = eH.catType.stats;
-        }
-        return BaseStatsEvent;
-    }());
-    var Stats = /** @class */ (function (_super) {
-        __extends(Stats, _super);
-        function Stats(statsInstance, settingsInstance) {
-            var _this = _super.call(this) || this;
-            _this.stats = statsInstance || {
-                webHandle: { isAlive: false, hasConnection: false, connectedClients: 0 },
-                fileHandle: { isAlive: false, hasConnection: false, connectedClients: 0 },
-                clientsCounter: 0,
-                activeClients: 0,
-                latencyGoogle: null,
-                si: { cpu: null, memory: null, ppid: null, pid: null, ctime: null, elapsed: null, timestamp: null },
-                pu: { proc: null, pid: null, pids: null, cpu: null, mem: null },
-                rcon: {},
-                lastUpdates: {},
-                clients: {},
-                interval_sendinfo: false
-            };
-            _this._settings = settingsInstance;
-            _this.updateAllStats();
-            return _this;
+    var eM = __importStar(require("../global/EventHandlingManager"));
+    var settingsI = __importStar(require("../settings/settingsInstance")); // Import settings interface/class
+    var statsI = __importStar(require("./statsInstance"));
+    var Stats = /** @class */ (function () {
+        function Stats(eV, statsInstance, settingsInstance) {
+            this.eV = eV;
+            this.stats = statsInstance;
+            this._settings = settingsInstance;
+            this.updateAllStats();
         }
         Stats.prototype.updateAllStats = function () {
             return __awaiter(this, void 0, void 0, function () {
-                var error_1;
+                var statsUpdated, error_1;
                 return __generator(this, function (_a) {
                     switch (_a.label) {
                         case 0:
@@ -164,23 +122,27 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
                             return [4 /*yield*/, this.getPU()];
                         case 5:
                             _a.sent();
-                            this.emit('statsUpdated', {
-                                type: statsType.update,
-                                message: 'All stats updated',
-                                data: { errCode: 0 } // Success
-                            });
+                            statsUpdated = {
+                                types: [eH.SubEventTypes.STATS.ALL_STATS_UPDATED],
+                                message: 'Error updating stats',
+                                success: false,
+                                data: { errCode: 1, blob: { error: error } }
+                            };
                             return [3 /*break*/, 7];
                         case 6:
                             error_1 = _a.sent();
-                            this.emit('statsUpdated', {
-                                type: statsType.update,
+                            statsUpdated = {
+                                types: [eH.SubEventTypes.STATS.ALL_STATS_UPDATED],
                                 message: 'Error updating stats',
+                                success: false,
                                 data: { errCode: 1, blob: { error: error_1 } }
-                            });
+                            };
                             console.error("Error fetching google ping:", error_1);
                             this.stats.latencyGoogle = null;
                             return [3 /*break*/, 7];
-                        case 7: return [2 /*return*/];
+                        case 7:
+                            this.eV.emit('statsUpdated', statsUpdated);
+                            return [2 /*return*/];
                     }
                 });
             });
@@ -196,7 +158,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
                         case 1:
                             latency = _a.sent();
                             this.stats.latencyGoogle = latency;
-                            this.emit('latencyUpdated', {
+                            this.eV.emit('latencyUpdated', {
                                 type: statsType.update,
                                 message: 'Google latency updated',
                                 data: { errCode: 0, blob: { latency: latency } }
@@ -204,7 +166,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
                             return [3 /*break*/, 3];
                         case 2:
                             error_2 = _a.sent();
-                            this.emit('latencyUpdated', {
+                            this.eV.emit('latencyUpdated', {
                                 type: statsType.update,
                                 message: 'Error fetching Google latency',
                                 data: { errCode: 1, blob: { error: error_2 } }
@@ -237,14 +199,14 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
                             this._settings.pid = pid;
                             this._settings.pidFileExists = true;
                             this._settings.pidFileReadable = true;
-                            this.emit('pidAvailable', "PID: ".concat(pid));
+                            this.eV.emit(statsType.pidAvailable, "PID: ".concat(pid));
                             return [3 /*break*/, 3];
                         case 2:
                             err_1 = _a.sent();
                             this._settings.pidFileExists = false;
                             this._settings.pidFileReadable = false;
                             errorData = (err_1 instanceof Error) ? { errCode: 999, message: err_1.message } : null;
-                            this.emit("getPid error PID retrieval error", errorData);
+                            this.eV.emit("getPid error PID retrieval error", errorData);
                             return [3 /*break*/, 3];
                         case 3: return [2 /*return*/];
                     }
@@ -347,12 +309,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
         };
         Stats = __decorate([
             (0, inversify_1.injectable)(),
-            __param(0, (0, inversify_1.inject)(exports.GLOBAL_STATS_TOKEN)),
-            __param(1, (0, inversify_1.inject)(PRIVATE_SETTINGS_TOKEN)),
-            __metadata("design:paramtypes", [Object, Object])
+            __param(0, (0, inversify_1.inject)(eM.EVENT_MANAGER_TOKEN)),
+            __param(1, (0, inversify_1.inject)(statsI.STATS_WRAPPER_TOKEN)),
+            __param(2, (0, inversify_1.inject)(settingsI.PRIVATE_SETTINGS_TOKEN)),
+            __metadata("design:paramtypes", [eM.eventManager, Object, Object])
         ], Stats);
         return Stats;
-    }(eH.EventEmitterMixin(BaseStatsEvent)));
+    }());
     exports.default = Stats;
 });
 /*

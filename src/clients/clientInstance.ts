@@ -1,13 +1,12 @@
 "use strict";
-import { Injectable } from "@angular/core";
-import * as eM from "../global/EventHandlingManager";
-import * as eH from "../global/EventHandlingMixin";
+import 'reflect-metadata';
 import { inject, injectable } from "inversify";
 
 export enum ClientType {
   Basic,
   Admin,
-  Server
+  Server,
+  Unknown
   // ...
 }
 
@@ -30,45 +29,31 @@ export interface IClientSuper {
   customIntervallTime: number | false;
 }
 
-export interface IClient {
-  info: IClientInfo;
-  _stats: IClientStats;
-  _clientSettings: IClientSettings;
-  _super: IClientSuper;
+export interface IWS {
+  id: string;
+  ws: WebSocket;
 }
 
-export enum clientsType {
-  create,
-  update,
-  delete,
-  statsUpdated
-}
-export interface IClientsEvent extends eH.IEventMap{
-  message?: string;
-  type?: clientsType;
-  client: IClientInfo;
-  data?: {
-    errCode: number;
-    message?: string;
-    blob?: any;
-  };
-}
-export class BaseClientsEvent {
-  "cat": eH.catType = eH.catType.clients;
+export interface IClient {
+  info: IClientInfo;
+  stats: IClientStats;
+  clientSettings: IClientSettings;
+  super: IClientSuper;
+  ws?: IWS;
 }
 
 // client.ts
-@Injectable()
 export class clientWrapper {
   info: IClientInfo;
-  _stats: IClientStats;
-  _clientSettings: IClientSettings;
-  _super: IClientSuper;
+  stats: IClientStats;
+  clientSettings: IClientSettings;
+  super: IClientSuper;
+  ws: IWS | undefined;
   protected constructor(clientInfo: IClientInfo) {
     this.info = { id: clientInfo.id, ip: clientInfo.ip, type: clientInfo.type },
-    this._stats = { eventCount: 0, lastUpdates: { 'create': Date.now() }, messagesReceived: [], messagesToSend: [], latency: undefined },
-    this._clientSettings = { pw_hash: null },
-    this._super = { customIntervallTime: false }
+    this.stats = { eventCount: 0, lastUpdates: { 'create': Date.now() }, messagesReceived: [], messagesToSend: [], latency: undefined },
+    this.clientSettings = { pw_hash: null },
+    this.super = { customIntervallTime: false }
   }
   static createClient(clientInfo: IClientInfo):IClient {
     return new clientWrapper(clientInfo);
@@ -79,11 +64,15 @@ export interface IClients {
   id: IClient;
 }
 
+export interface IClientsWrapper {
+  clients: Record<string, IClient>;
+}
+
 @injectable()
-export default class clientsWrapper {
-  protected _clients: Record<string, IClient>;
-  constructor(@inject(CLIENTS_WRAPPER_TOKEN) clientsInstance: Record<string, IClient>) {
-    this._clients = clientsInstance || {};  // Initialize if needed
+export class clientsWrapper {
+  protected clients: IClientsWrapper;
+  constructor(@inject(CLIENTS_WRAPPER_TOKEN) clientsInstance: IClientsWrapper) {
+    this.clients = clientsInstance || {};  // Initialize if needed
   }
 }
 

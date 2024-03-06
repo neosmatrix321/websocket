@@ -3,40 +3,44 @@
 import { createServer } from 'https';
 import { readFileSync } from 'fs';
 import { IncomingMessage } from 'http';
+import { Duplex } from 'stream';
 import { WebSocket, WebSocketServer, createWebSocketStream } from 'ws';
 import { inject, injectable } from 'inversify';
 import * as eH from "../global/EventHandlingMixin";
 import * as eM from "../global/EventHandlingManager";
-import * as serverC from "../server/server";
 import * as serverI from "../server/serverInstance";
-import * as mainC from "../main";
 
 
 @injectable()
-export default class Server extends eH.EventEmitterMixin<eH.IEventTypes> {
-  @inject(serverI.SERVER_WRAPPER_TOKEN) _server!: serverI.IHandleWrapper;
-  @inject(eM.EVENT_MANAGER_TOKEN) eV!: eM.eventManager;
+export default class Server  {
+  private eV: typeof EventMixin;
+  @inject(serverI.SERVER_WRAPPER_TOKEN) server!: serverI.IHandleWrapper;
   constructor() {
-    super();
-    this._server._handle.file = new WebSocketServer({ noServer: true });
+    this.eV = EventMixin;
+    this.server._handle.web = new WebSocketServer({ noServer: true });
+    this.server._handle.file = new WebSocketServer({ noServer: true });
     this.setupWebSocketListeners();
   }
+
   private setupWebSocketListeners() {
-    this.on('connection', this.eV.handleClientConnected.bind(this));
-    this.on('message', this.eV.handleClientMessage.bind(this));
-    this.on('close', this.eV.handleClientDisconnected.bind(this));
+    this.server._handle.web.on('connection', this.eV.handleClientConnected.bind(this));
+    this.server._handle.web.on('message', this.eV.handleClientMessage.bind(this));
+    this.server._handle.web.on('close', this.eV.handleClientDisconnected.bind(this));
     // ... Add listeners for other WebSocketServer events if needed
+  }
+  public isMyWebSocketWithId(ws: WebSocket): ws is serverI.MyWebSocket {
+    return 'id' in ws;
   }
   public async createServer() {
     try {
       const _serverCert = createServer({
-        cert: readFileSync(this._server._settings.certPath),
-        key: readFileSync(this._server._settings.keyPath)
+        cert: readFileSync(this.server._settings.certPath),
+        key: readFileSync(this.server._settings.keyPath)
       });
 
       _serverCert.on('upgrade', (request, socket, head) => {
         //  ... adjust upgrade handling as needed ...
-        this._server._handle.web.handleUpgrade(request, socket, head, (client: WebSocket, request: IncomingMessage) => { // ws is a WebSocket object
+        this.server._handle.web.handleUpgrade(request, socket, head, (client: WebSocket, request: IncomingMessage) => { // ws is a WebSocket object
           const webSocketStream = createWebSocketStream(client as serverI.MyWebSocket);
 
           webSocketStream.on('data', (data: Buffer) => { // Buffer type for data
@@ -48,13 +52,12 @@ export default class Server extends eH.EventEmitterMixin<eH.IEventTypes> {
             }
           });
 
-          this.emitConnection(webSocketStream, request); // Adapt emitConnection if needed 
         });
       });
 
-      _serverCert.listen(this._server._settings.streamServerPort, this._server._settings.ip, () => {
-        console.log(`HTTPS server ${this._server._settings.ip} listening on ${this._server._settings.streamServerPort}`);
-        this.emit('serverCreated');
+      _serverCert.listen(this.server._settings.streamServerPort, this.server._settings.ip, () => {
+        console.log(`HTTPS server ${this.server._settings.ip} listening on ${this.server._settings.streamServerPort}`);
+        this.eV.emit('serverCreated');
       });
     } catch (error) {
       console.error("Error creating server:", error);
@@ -65,35 +68,34 @@ export default class Server extends eH.EventEmitterMixin<eH.IEventTypes> {
     // Interval function moved here
     // this.stats.updateAndGetPidIfNecessary();
     this.eV.emit('createTimer');
-    this._server._handle.web.clients.forEach((ws_client: WebSocket) => {
-      if (!isMyWebSocketWithId(ws_client)) {
+    this.server._handle.web.clients.forEach((ws_client: WebSocket) => {
+      if (!this.isMyWebSocketWithId(ws_client)) {
         this.eV.emit(eH.MainEventTypes.WS, ws_client);
+        Main.stats.lastUpdates = { "timerUpdated": Date.now() };
       }
-      if (isMyWebSocketWithId(ws_client)) {
+      if (this.isMyWebSocketWithId(ws_client)) {
         if (ws_client.readyState === ws_client.OPEN) {
           if (!ws_client.id) {
             console.error(`No Client with ID: ${ws_client.id} known`);
           }
-          const time_diff = (Date.now());
-          console.log("admin(" + ") sending to ip(" + ") alive(" + ws_client.readyState + ") count(" + mainC.Main.stats.clientsCounter + ") connected(" + this.stats.connectedClients + ") latency_user(" + this._clients[ws_client.id]._stats.latency_user + ") latency_google(" + this.stats.latencyGoogle + ") connected since(" + this.stats.lastUpdates.web + ") diff(" + time_diff + ")");
-
+          const time_diff = Date.now() - Main.stats.lastUpdates.timerUpdated;
           if (time_diff > 20000) {
-            this.eV.emit(serverType.updateClientStats, ws_client.id);
+            this.eV.emit(eH.SubEventTypes.CLIENTS.UPDATE_CLIENT_STATS, ws_client.id);
           }
         }
       }
     });
-    await this.statsService.updateAllStats(); // Get updated stats
-    this.eV.emit('statsUpdated', this.statsService.stats);
+    await Main.stats.updateAllStats(); // Get updated stats
+    this.eV.emit('statsUpdated', Main.stats.stats);
   }
 
   handleUpgrade(request: IncomingMessage, socket: Duplex, head: Buffer, callback: (ws: any) => void) {
-    this._server._handle.web.handleUpgrade(request, socket, head, callback);
+    this.server._handle.web.handleUpgrade(request, socket, head, callback);
   }
 
   emitConnection(ws: any, request: IncomingMessage) {
-    this._server._handle.web.emit('connection', ws, request);
-    globalEventEmitter.emit('clientConnected', ws);
+    this.server._handle.web.emit('connection', ws, request);
+    this.eV.emit('clientConnected', ws);
   }
 
   destroyClient(ip: string) {
