@@ -12,7 +12,6 @@ export default class Clients {
   eM: eM.eventManager;
   constructor(@inject(clientsI.CLIENTS_WRAPPER_TOKEN) clientsInstance: Record<string, clientsI.IClient>,
   @inject(eM.EVENT_MANAGER_TOKEN) eMInstance: eM.eventManager) {
-    super();
     this._clients = clientsInstance || {};  // Initialize if needed
     this.eM = eMInstance;
   }

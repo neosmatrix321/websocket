@@ -2,18 +2,27 @@
 import "reflect-metadata";
 import { inject, injectable } from "inversify";
 import { WebSocket } from 'ws'
-import { Server } from "https";
+import { Server as httpsServer } from "http";
 import * as eM from "./global/EventHandlingManager";
 import * as eH from "./global/EventHandlingMixin";
-import * as statsC from "./stats/stats";
+import Stats from "./stats/stats";
+import Server from "./server/server";
+import Clients from "./clients/clients";
 import * as statsI from "./stats/statsInstance";
+import * as serverI from "./settings/settingsInstance";
+import * as clientsI from "./settings/settingsInstance";
 import * as settingsI from "./settings/settingsInstance";
 class BaseClass { }
 @injectable()
-export default class Main extends eH.EventEmitterMixin<eH.IEventRoot<eH.IEvent>>(BaseClass) {
-  @inject(settingsI.PRIVATE_SETTINGS_TOKEN) private _settings!: settingsI.ISettings;
-  @inject(statsI.GLOBAL_STATS_TOKEN) private stats!: statsI.IStats;
-  public constructor() {
+export default class Main extends eH.EventEmitterMixin<eH.IEventTypes> {
+  static startIntervalIfNeeded() {
+    throw new Error("Method not implemented.");
+  }
+  public constructor(
+    @inject(eM.EVENT_MANAGER_TOKEN) eV: eM.eventManager,
+    @inject(statsI.GLOBAL_STATS_TOKEN) stats: statsI.IStats,
+    @inject(settingsI.PRIVATE_SETTINGS_TOKEN) settings: settingsI.ISettings
+    ) {
     super();
     this.initialize();
   }

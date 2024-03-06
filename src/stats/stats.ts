@@ -6,16 +6,19 @@ import { inject, injectable } from 'inversify';
 import pidusage from 'pidusage';
 import si from 'systeminformation';
 import * as eH from "../global/EventHandlingMixin";
+import * as eM from "../global/EventHandlingManager";
 import * as settingsI from '../settings/settingsInstance'; // Import settings interface/class
-import * as statsI from "../stats/statsInstance";
+import * as statsI from "./statsInstance";
+import Main from '../main';
 
 
 @injectable()
-export default class Stats {
+export default class Stats extends eH.EventEmitterMixin<eH.IEventTypes>{
   public stats!: statsI.IStats;
   private _settings!: settingsI.ISettings
-  constructor(@inject(GLOBAL_STATS_TOKEN) statsInstance: statsI.IStats,
-    @inject(PRIVATE_SETTINGS_TOKEN) settingsInstance: settingsI.ISettings) {
+  constructor(@inject(eM.EVENT_MANAGER_TOKEN) eV: eM.eventManager,
+  @inject(statsI.GLOBAL_STATS_TOKEN) statsInstance: statsI.IStats,
+    @inject(settingsI.PRIVATE_SETTINGS_TOKEN) settingsInstance: settingsI.ISettings) {
     super();
     this.stats = statsInstance || {
       webHandle: { isAlive: false, hasConnection: false, connectedClients: 0 },
@@ -34,6 +37,7 @@ export default class Stats {
     this.updateAllStats();
   }
   public async updateAllStats() {
+    let statsUpdated: eH.IBaseEvent;
     try {
       this.stats.lastUpdates["createstatContainer"] = Date.now();
       await this.updateAndGetPidIfNecessary(); // Fetch PID if needed
@@ -41,20 +45,23 @@ export default class Stats {
       await this.getLatencyGoogle();
       await this.getSI();
       await this.getPU();
-      this.emit('statsUpdated', {
-        type: statsType.update,
-        message: 'All stats updated',
-        data: { errCode: 0 } // Success
-      });
-    } catch (error) {
-      this.emit('statsUpdated', {
-        type: statsType.update,
+      statsUpdated = {
+        types: [eH.SubEventTypes.STATS.ALL_STATS_UPDATED],
         message: 'Error updating stats',
+        success: false,
         data: { errCode: 1, blob: { error } }
-      });
+      };
+    } catch (error) {
+      statsUpdated = {
+        types: [eH.SubEventTypes.STATS.ALL_STATS_UPDATED],
+        message: 'Error updating stats',
+        success: false,
+        data: { errCode: 1, blob: { error } }
+      };
       console.error("Error fetching google ping:", error);
       this.stats.latencyGoogle = null;
     }
+    this.emit('statsUpdated', statsUpdated);
   }
   async getLatencyGoogle(): Promise<void> {
     try {

@@ -13,18 +13,18 @@ import * as mainC from "../main";
 
 
 @injectable()
-export default class Server extends eH.EventEmitterMixin<eH.IEventRoot<eH.IEvent>>(eM.BaseClass) {
+export default class Server extends eH.EventEmitterMixin<eH.IEventTypes> {
   @inject(serverI.SERVER_WRAPPER_TOKEN) _server!: serverI.IHandleWrapper;
-  @inject(eM.EVENT_MANAGER_TOKEN) eM!: eM.eventManager;
+  @inject(eM.EVENT_MANAGER_TOKEN) eV!: eM.eventManager;
   constructor() {
     super();
     this._server._handle.file = new WebSocketServer({ noServer: true });
     this.setupWebSocketListeners();
   }
   private setupWebSocketListeners() {
-    this.on(eH.WSIEvent, this.eM.handleClientConnected.bind(this));
-    this.on('message', this.eM.handleClientMessage.bind(this));
-    this.on('close', this.eM.handleClientDisconnected.bind(this));
+    this.on('connection', this.eV.handleClientConnected.bind(this));
+    this.on('message', this.eV.handleClientMessage.bind(this));
+    this.on('close', this.eV.handleClientDisconnected.bind(this));
     // ... Add listeners for other WebSocketServer events if needed
   }
   public async createServer() {
@@ -58,16 +58,16 @@ export default class Server extends eH.EventEmitterMixin<eH.IEventRoot<eH.IEvent
       });
     } catch (error) {
       console.error("Error creating server:", error);
-      this.eM.handleError(new Error('Error creating server'), error);
+      this.eV.handleError(new Error('Error creating server'), error);
     }
   }
   public async createTimer() {
     // Interval function moved here
     // this.stats.updateAndGetPidIfNecessary();
-    this.eM.emit('createTimer');
+    this.eV.emit('createTimer');
     this._server._handle.web.clients.forEach((ws_client: WebSocket) => {
       if (!isMyWebSocketWithId(ws_client)) {
-        this.eM.emit(serverC.serverType.clientConnected, ws_client);
+        this.eV.emit(eH.MainEventTypes.WS, ws_client);
       }
       if (isMyWebSocketWithId(ws_client)) {
         if (ws_client.readyState === ws_client.OPEN) {
@@ -78,13 +78,13 @@ export default class Server extends eH.EventEmitterMixin<eH.IEventRoot<eH.IEvent
           console.log("admin(" + ") sending to ip(" + ") alive(" + ws_client.readyState + ") count(" + mainC.Main.stats.clientsCounter + ") connected(" + this.stats.connectedClients + ") latency_user(" + this._clients[ws_client.id]._stats.latency_user + ") latency_google(" + this.stats.latencyGoogle + ") connected since(" + this.stats.lastUpdates.web + ") diff(" + time_diff + ")");
 
           if (time_diff > 20000) {
-            this.eM.emit(serverType.updateClientStats, ws_client.id);
+            this.eV.emit(serverType.updateClientStats, ws_client.id);
           }
         }
       }
     });
     await this.statsService.updateAllStats(); // Get updated stats
-    this.eM.emit('statsUpdated', this.statsService.stats);
+    this.eV.emit('statsUpdated', this.statsService.stats);
   }
 
   handleUpgrade(request: IncomingMessage, socket: Duplex, head: Buffer, callback: (ws: any) => void) {

@@ -7,7 +7,7 @@ export const MainEventTypes = { BASIC: 'BASIC', MAIN: 'MAIN', STATS: 'STATS', SE
 
 export const SubEventTypes = {
   BASIC: { FIRST: 'FIRST', LAST: 'LAST' },
-  MAIN: { TIMER_CREATED: 'TIMER_CREATED', TIMER_STARTED: 'TIMER_STARTED', TIMER_STOPPED: 'TIMER_STOPPED', START_TIMER: 'START_TIMER', STOP_TIMER: 'STOP_TIMER', PID_AVAILABLE: 'PID_AVAILABLE' },
+  MAIN: { TIMER_CREATED: 'TIMER_CREATED', START_TIMER: 'START_TIMER', TIMER_STARTED: 'TIMER_STARTED', TIMER_STOPPED: 'TIMER_STOPPED', STOP_TIMER: 'STOP_TIMER', PID_AVAILABLE: 'PID_AVAILABLE' },
   STATS: { UPDATE_ALL_STATS: 'UPDATE_ALL_STATS', ALL_STATS_UPDATED: 'ALL_STATS_UPDATED', PI_STATS_UPDATED: 'PI_STATS_UPDATED', UPDATE_PI_STATS: 'UPDATE_PI_STATS', PU_STATS_UPDATED: 'PU_STATS_UPDATED', UPDATE_PU_STATS: 'UPDATE_PU_STATS', OTHER_STATS_UPDATED: 'OTHER_STATS_UPDATED', UPDATE_OTHER_STATS: 'UPDATE_OTHER_STATS' },
   SERVER: { LISTEN: 'LISTEN', CLIENT_CONNECTED: 'CLIENT_CONNECTED', CLIENT_MESSAGE_READY: 'CLIENT_MESSAGE_READY', CLIENT_DISCONNECTED: 'CLIENT_DISCONNECTED' },
   CLIENTS: { CREATE: 'CREATE', MODIFY: 'MODIFY', MODIFIED: 'MODIFIED', DELETE: 'DELETE', CLIENT_STATS_UPDATED: 'CLIENT_STATS_UPDATED', UPDATE_CLIENT_STATS: 'UPDATE_CLIENT_STATS' },
@@ -23,52 +23,105 @@ export const DEFAULT_VALUE_CALLBACKS = {
 };
 
 export interface IBaseEvent {
-  type?: string = MainEventTypes.BASIC;
-  success?: boolean = true;
-  message?: string = "";
+  types?: string[];
+  success?: boolean;
+  message?: string;
   data?: any;
-  statsEvent?: { subType: string, statsId?: number, newValue?: any, oldValue?: any, updatedFields?: any };
-  mainEvent?: { subType: string, pid?: number };
-  serverEvent?: { subType: string, timerId?: number, startTime?: number, endTime?: number, duration?: number };
-  clientsEvent?: { subType: string, clientId?: string, message?: string };
-  errorEvent?: { subType: string, error?: Error, errCode?: number };
-  wsEvent?: { subType: string, message?: string, connectionId?: string };
+  statsEvent?: { subTypes: string[], statsId?: number, newValue?: any, oldValue?: any, updatedFields?: any };
+  mainEvent?: { subTypes: string[], pid?: number };
+  serverEvent?: { subTypes: string[], timerId?: number, startTime?: number, endTime?: number, duration?: number };
+  clientsEvent?: { subTypes: string[], clientId?: string, message?: string };
+  errorEvent?: { subTypes: string[], error?: Error, errCode?: number, data?: any };
+  wsEvent?: { subTypes: string[], message?: string, connectionId?: string };
 }
 
 export class BaseEvent implements IBaseEvent {
-  constructor(
-    _type?: string = MainEventTypes.BASIC,
-    _success?: boolean = true,
-    _message?: string = "",
-    _data?: any,
-    _statsEvent?: { subType: string, statsId?: number, newValue?: any, oldValue?: any, updatedFields?: any },
-    _mainEvent?: { subType: string, pid?: number },
-    _serverEvent?: { subType: string, timerId?: number, startTime?: number, endTime?: number, duration?: number },
-    _clientsEvent?: { subType: string, clientId?: string, message?: string },
-    _errorEvent?: { subType: string, error?: Error, errCode?: number },
-    _wsEvent?: { subType: string, message?: string, connectionId?: string },
-  ) {
+  types: string[] = [MainEventTypes.BASIC];
+  success: boolean = true;
+  message: string = "";
+  data?: any;
+  statsEvent?: {
+    subTypes: string[], statsId?: number, newValue?: any, oldValue?: any, updatedFields?: any
+  } = {
+      subTypes: [MainEventTypes.STATS], statsId: -1, newValue: -1, oldValue: -1, updatedFields: {}
+    };
+  mainEvent?: {
+    subTypes: string[], pid?: number
+  } = {
+      subTypes: [MainEventTypes.MAIN], pid: -1
+    };
+  serverEvent?: {
+    subTypes: string[], timerId?: number, startTime?: number, endTime?: number, duration?: number
+  } = {
+      subTypes: [MainEventTypes.SERVER], timerId: -1, startTime: -1, endTime: -1, duration: -1
+    };
+  clientsEvent?: {
+    subTypes: string[], clientId?: string, message?: string
+  } = {
+      subTypes: [MainEventTypes.CLIENTS], clientId: "", message: ""
+    };
+  errorEvent?: {
+    subTypes: string[], error?: Error, errCode?: number, data?: any
+  } = {
+      subTypes: [MainEventTypes.ERROR], error: new Error(), errCode: -1, data: {}
+    };
+  wsEvent?: {
+    subTypes: string[], message?: string, connectionId?: string
+  } = {
+      subTypes: [MainEventTypes.WS], message: "", connectionId: ""
+    };
+
+  constructor(data?: Partial<IBaseEvent>) {
+    Object.assign(this, data);
   }
 }
 
-export class DebugEvent extends BaseEvent {
-  public debugEvent: { subType: string, timestamp: number, success: boolean, eventName: ?string, enabled: boolean, startTime: number, endTime: number, duration: number, activeEvents: number, eventCounter: number } = {
-    subType!: MainEventTypes.DEBUG,
-    timestamp!: DEFAULT_VALUE_CALLBACKS.timestamp(),
-    success!: false,
-    eventName!: "Debug Event",
-    enabled!: true,
-    startTime!: Date.now(),
-    endTime!: 0,
-    duration!: 0,
-    activeEvents!: DEFAULT_VALUE_CALLBACKS.activeEvents(),
-    eventCounter!: DEFAULT_VALUE_CALLBACKS.eventCounter()
+interface IDebugEvent extends IBaseEvent {
+  debugEvent: {
+    subTypes: string[];
+    timestamp: number;
+    success: boolean;
+    eventName?: string;
+    enabled: boolean;
+    startTime: number;
+    endTime: number;
+    duration: number;
+    activeEvents: number;
+    eventCounter: number;
   };
+}
+export class DebugEvent extends BaseEvent implements IDebugEvent {
+  debugEvent: {
+    subTypes: string[];
+    timestamp: number;
+    success: boolean;
+    eventName: string;
+    enabled: boolean;
+    startTime: number;
+    endTime: number;
+    duration: number;
+    activeEvents: number;
+    eventCounter: number;
+  } = {
+      subTypes: [MainEventTypes.DEBUG],
+      timestamp: DEFAULT_VALUE_CALLBACKS.timestamp(),
+      success: false,
+      eventName: "Debug Event",
+      enabled: true,
+      startTime: Date.now(),
+      endTime: 0,
+      duration: 0,
+      activeEvents: DEFAULT_VALUE_CALLBACKS.activeEvents(),
+      eventCounter: DEFAULT_VALUE_CALLBACKS.eventCounter()
+    };
+  debug: any;
 
-  constructor() {
-    super(MainEventTypes.DEBUG);
+  constructor(data?: Partial<IDebugEvent>) {
+    super(data); 
+    Object.assign(this.debugEvent, data?.debugEvent);
     this.updateData();
   }
+
   updateData() { // Method to update debugEvent
     this.debugEvent.endTime = Date.now();
     this.debugEvent.duration = this.debugEvent.endTime - this.debugEvent.startTime;
@@ -90,26 +143,23 @@ export class EventEmitterMixin<IEventTypes> {
     this._emitter = new EventEmitter();
   }
 
-  private storeEvent(event: string) {
+  private storeEvent(event: string, eventData: any) {  // Modified parameter
     if (!this._events.has(event)) {
-      const SpecializedEvent = this.getSpecializedEventConstructor(event);
-
-      // Create a BaseEvent to wrap the unknown event type
-      this._events.set(event, SpecializedEvent
-        ? new SpecializedEvent(event)
-        : new BaseEvent(MainEventTypes.UNKNOWN, ['success': false, message: "Unknown Event", 'data': event])
-      );
+      this._events.set(event, this.generateEventIndex(eventData));
     }
   }
-  private getSpecializedEventConstructor(event: string): { new(event: string): BaseEvent } | null {
-    switch (true) {
-      case (event == typeof MainEventTypes):
-        return null;
-      case (event === "string"):
-      case (event === "object"):
-        return `${event as string}`;
-      default:
-        return null;
+
+  private generateEventIndex(eventData: any): any {
+    if (typeof eventData === 'object') {
+      if (typeof eventData.message === 'string') {
+        return eventData.message; // Use message as index
+      } else {
+        return JSON.stringify(eventData); //  Fallback 
+      }
+    } else if (typeof eventData === 'string') {
+      return eventData;
+    } else {
+      return JSON.stringify(eventData); // Handle other data types
     }
   }
   private createEvent(event: string, ...args: any[]): IEventTypes | null {
@@ -122,7 +172,7 @@ export class EventEmitterMixin<IEventTypes> {
       if (!originalEvent) {
         console.error('Event not found:', event);
         return null;
-      } 
+      }
       if (args[0] && args[0].debugEvent && args[0].debugEvent.enabled) {
         let debugData;
         if (args[0].debugEvent.debugEvent) {
@@ -135,8 +185,8 @@ export class EventEmitterMixin<IEventTypes> {
             eventName: event,
           };
           this._events.set(event, originalEvent); // Replace with a DebugEvent
-        } else 
-        return { ...originalEvent, debug: debugData } as IEventTypes;
+        } else
+          return { ...originalEvent, debug: debugData } as IEventTypes;
       };
       // Get the stored event (could be BaseEvent for unknown ones) and merge
       return { ...this._events.get(event), ...args[0] };
@@ -145,22 +195,6 @@ export class EventEmitterMixin<IEventTypes> {
       return null;
     }
   }
-  public emitError(event: string, error?: any): void {
-    const newEvent: ErrorEvent = {
-      ...(new BaseEvent(MainEventTypes.ERROR) as ErrorEvent),
-      errorEvent: {
-        error: new Error('Something went wrong'), // A sample error
-        errCode: 1001 // A sample error code
-      }
-    };
-    this.emit(event as string, newEvent);
-  }
-  public handleError(error: any, errorBlob?: any): void {
-    const errorData: any = { ...errorBlob || error };
-    console.error('Error from eventManager:', error);
-    this.emitError(`${MainEventTypes.ERROR}.${MainEventTypes.ERROR}`, errorData); // Emit the error for wider handling
-  }
-
   private isValidEvent(event: string, eventData: any): boolean {
     switch (event) {
       case SubEventTypes.STATS.ALL_STATS_UPDATED:
@@ -177,36 +211,53 @@ export class EventEmitterMixin<IEventTypes> {
         return true; // Basic validation
     }
   }
+  public emitError(event: string, error?: any): void {
+    const newEvent: BaseEvent = {
+      ...(new BaseEvent({types: [MainEventTypes.ERROR]}) as BaseEvent),
+      errorEvent: {
+        subTypes: [SubEventTypes.ERROR.UNKNOWN],
+        error: new Error('Something went wrong'), // A sample error
+        errCode: 2, // A sample error code
+        data: error
+      }
+    };
+    this._emitter.emit(event as string, newEvent);
+  }
+  public handleError(error: any, errorBlob?: any): void {
+    const errorData: any = { ...errorBlob || error };
+    console.error('Error from eventManager:', error);
+    this.emitError(`${MainEventTypes.ERROR}.${MainEventTypes.ERROR}`, errorData); // Emit the error for wider handling
+  }
+
   async on(event: string, listener: (...args: any[]) => void) {
-    this.storeEvent(event); // Ensure the event is registered
     EventEmitterMixin.stats.activeEvents++;
     EventEmitterMixin.stats.eventCounter++;
-    if (args[0] && args[0].debug && args[0].debug.enabled) {
-      this._emitter.on(event.toString(), listener);
-    }
-
+    const eventData = this.createEvent(event, listener);
+    this.storeEvent(event, listener); // Ensure the event is registered
+    this._emitter.on(event.toString(), listener);
+  }
   async prepend(event: string, listener: (...args: any[]) => void) {
-      this.storeEvent(event);
-      this._emitter.prependListener(event.toString(), listener); // Use prependListener
-    }
+    this.storeEvent(event, listener);
+    this._emitter.prependListener(event.toString(), listener); // Use prependListener
+  }
 
   async off(event: string, listener: (...args: any[]) => void) {
-      EventEmitterMixin.stats.activeEvents--;
-      this._emitter.off(event.toString(), listener);
-    }
+    EventEmitterMixin.stats.activeEvents--;
+    this._emitter.off(event.toString(), listener);
+  }
 
   async emit(event: string, ...args: any[]) {
-      const eventData = this.createEvent(event, ...args);
-      if (!eventData) {
-        return; // Handle event creation failure
-      }
-
-      // this._events.push(eventData); // ??
-      this._emitter.emit(event.toString(), eventData);
+    const eventData = this.createEvent(event, ...args);
+    if (!eventData) {
+      return; // Handle event creation failure
     }
 
-    // Method to process the event queue (you'll need to call this)
+    // this._events.push(eventData); // ??
+    this._emitter.emit(event.toString(), eventData);
   }
+
+  // Method to process the event queue (you'll need to call this)
+}
 
 export class SingletonEventManager extends EventEmitterMixin<IEventTypes> {
   private static _instance: any;
