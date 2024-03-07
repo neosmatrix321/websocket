@@ -16,22 +16,20 @@ import Stats from "./stats/stats";
 import Server from "./server/server";
 import Clients from "./clients/clients";
 
-
-
-const EventMixin = eH.SingletonEventManager.getInstance();
+const EventMixin = eM.SingletonEventManager.getInstance();
 
 @injectable()
-export class Main {
+export default class Main {
   private eV: typeof EventMixin;
   private stats!: statsI.IStats;
   private server!: serverI.IHandleWrapper;
-  private clients!: clientsI.IClientsWrapper;
+  private clients!: clientsI.IClientsWrapper['clients'];
   private settings!: settingsI.ISettings;
 
   public constructor(
     @inject(statsI.STATS_WRAPPER_TOKEN) statsInstance: statsI.IStats,
     @inject(serverI.SERVER_WRAPPER_TOKEN) serverInstance: serverI.IHandleWrapper,
-    @inject(clientsI.CLIENTS_WRAPPER_TOKEN) clientsInstance: clientsI.IClientsWrapper,
+    @inject(clientsI.CLIENTS_WRAPPER_TOKEN) clientsInstance: clientsI.IClientsWrapper['clients'],
     @inject(settingsI.PRIVATE_SETTINGS_TOKEN) settingsInstance: settingsI.ISettings,
     @inject(Stats) private statsService: Stats,
     @inject(Server) private serverService: Server,
@@ -43,16 +41,54 @@ export class Main {
     this.clients = clientsInstance;
     this.settings = settingsInstance;
     this.initialize();
+    // this.eV.on('createTimer', () => {
+    //   this.startTimer();
+    // });  
   }
 
-  static startIntervalIfNeeded() {
-    throw new Error("Method not implemented.");
+  public async initialize() {
+    console.log(this);
+    try {
+      await this.serverService.createServer();
+      this.setupGlobalEventListeners();
+    } catch (err) {
+      console.error("Main Initialization Error: ", err);
+    }
   }
+
+  private setupGlobalEventListeners() {
+    // Event handling for client connections, messages, errors
+    this.server._handle.web.on('clientConnected', this.handleConnection.bind(this));
+    this.server._handle.web.on('close', this.handleClose.bind(this));
+    this.server._handle.web.on('message', this.handleMessage.bind(this));
+    this.server._handle.web.on('error', console.error);
+    // this.main._server.on('message', this.handleMessage.bind(this)); // Assuming ServerWrapper emits 'message'
+    // this.main._server.on('close', this.handleClose.bind(this));
+  }
+
+  public startIntervalIfNeeded() {
+    if (this.stats.clientsCounter > 0 && !this.stats.interval_sendinfo) {
+      this.stats.interval_sendinfo = setInterval(() => {
+        this.gatherAndSendStats();
+        this.clientsService.updateClientsStats();
+      }, 5000);
+    }
+  }
+  // public startTimer() {
+  //   this.startIntervalIfNeeded();
+  //   setInterval(() => {
+  //     this.eV.emit('createTimer');
+  
+  //       updateStats();
+  //       updateClients();
+  //   }, 20000); // Adjust interval as needed
+  // }
+// Event listener to start the timer (from EventManager)
 
   private async gatherAndSendStats() {
-    await this.statsService.updateAllStats(updatedStats);
+    await this.statsService.updateAllStats();
 
-    this.clients.forEach((client: any) => {
+    Object.values(this.clients).forEach((client: any) => {
       if (client.readyState === client.OPEN) {
         // . detailed logic to build and send the stats payload.
         client.send('client aagdssdaf');
@@ -61,42 +97,49 @@ export class Main {
   }
 
   private async updateStats() {
-    await this.stats.updateAllStats();
-    this.eV.emit('statsUpdated', this.stats.stats);
+    await this.statsService.updateAllStats();
+    this.eV.emit('statsUpdated', { message: 'stats updated' });
   }
   private async handleClose(ws: any, code: any) {
     console.log("dead ip(" + ws.ip + ") alive(" + ws.readyState + ") code(" + code + ") count(" + this.stats.clientsCounter + ")");
-    await this.clients.removeClient(ws.id); // Assuming you have removeClient
-    this.server._handle.web.destroyClient(ws.ip); // If applicable
+    await this.clientsService.removeClient(ws.id); // Assuming you have removeClient
+    this.serverService.destroyClient(ws.id); // If applicable
     ws.terminate();
     this.startIntervalIfNeeded();
   }
 
-  private async handleConnection(ws: any) {
-    this.stats.clientsCounter++;
-    // const client1 = new Client({ /* Client Data */ });
-
-    // // Add clients to the container
-    // clientsContainer.addClient(client1);
-    this.handleGreeting(ws, 'greeting'); // Integrate with your client management 
+  private async handleConnection(ws: serverI.MyWebSocket) {
+    this.handleGreeting(ws); // Integrate with your client management 
     this.setupWebSocketEvents(ws);
-    this.startIntervalIfNeeded();
+
   }
 
-  private async handleGreeting(client: WebSocket, obj: any) {
-    const newIP = client.socket.remoteAddress;
+  private async setupWebSocketEvents(ws: serverI.MyWebSocket) {
+    ws.on('close', this.handleClose.bind(this, ws));
+    ws.on('message', this.handleMessage.bind(this, ws));
+    ws.on('greeting', this.handleGreeting.bind(this, ws));
+    this.startIntervalIfNeeded();
+    WebSocket.OPEN;
+  }
+
+  private async handleGreeting(client: serverI.MyWebSocket) {
+    let newIP: string = '';
+  if ('_socket' in client) {
+    newIP = (client as any)._socket.remoteAddress;
+  }
     const type = 'basic'
-    if (!isMyWebSocketWithId(client)) {
+    if (!this.serverService.isMyWebSocketWithId(client)) {
       this.stats.clientsCounter++;
-      const newIP = client.socket.remoteAddress;
       const newID = this.stats.clientsCounter;
       const type = 'basic'
-      this.clients.addClient(newIP, newID, type);
+      this.clientsService.addClient(`${newID}`, newIP, type, client);
     }
-    if (isMyWebSocketWithId(client)) {
-      const ID = client.id;
-      // this.clients[client.info.id]._config.type = ClientType.Admin; // Update isAdmin
-      await this.clients.updateClientStats(this.clients[ID]);
+    if (this.serverService.isMyWebSocketWithId(client)) {
+      const createdClient = this.clients[client.id];
+      if (createdClient) {
+        // createdClient.info.type = ; // Update isAdmin
+        await this.clientsService.updateClientStats(createdClient);
+      }
     } else {
       console.error("Could not create Client " + newIP)
     }
@@ -106,39 +149,23 @@ export class Main {
     console.log('dummy');
   }
 
-  private async handleWebSocketMessage(ws: any, data: any, isBinary: any) {
-    const decodedData = Buffer.from(data, 'base64').toString();
-    const messageObject = JSON.parse(decodedData);
+  // private async handleWebSocketMessage(ws: any, data: any, isBinary: any) {
+  //   const decodedData = Buffer.from(data, 'base64').toString();
+  //   const messageObject = JSON.parse(decodedData);
 
-    if (messageObject.type) {
-      switch (messageObject.type) {
-        case 'greeting':
-          this.handleGreeting(ws, messageObject);
-          break;
-        // Add other cases for message types 
-        default:
-          console.log("Unknown message type");
-      }
-    }
-  }
+  //   if (messageObject.type) {
+  //     switch (messageObject.type) {
+  //       case 'greeting':
+  //         this.handleGreeting(ws, messageObject);
+  //         break;
+  //       // Add other cases for message types 
+  //       default:
+  //         console.log("Unknown message type");
+  //     }
+  //   }
+  // }
 
-  public startIntervalIfNeeded() {
-    if (this.stats.clientsCounter > 0 && !this.stats.interval_sendinfo) {
-      this.stats.interval_sendinfo = setInterval(() => {
-        this.gatherAndSendStats();
-      }, 1000);
-    }
-  }
 
-  public async initialize() {
-    console.log(this);
-    try {
-      await Server.createServer();
-
-    } catch (err) {
-      console.error("Main Initialization Error: ", err);
-    }
-  }
 }
 
 // Instantiate the main object to start your application

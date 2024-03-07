@@ -13,6 +13,7 @@ export const SubEventTypes = {
   CLIENTS: { CREATE: 'CREATE', CREATED: 'CREATED', MODIFY: 'MODIFY', MODIFIED: 'MODIFIED', DELETE: 'DELETE', CLIENT_STATS_UPDATED: 'CLIENT_STATS_UPDATED', UPDATE_CLIENT_STATS: 'UPDATE_CLIENT_STATS' },
   WS: { CONNECT: 'CONNECT', DISCONNECT: 'DISCONNECT', MESSAGE: 'MESSAGE' }
 };
+
 export const DEFAULT_VALUE_CALLBACKS = {
   timestamp: () => Date.now(),
   clientName: (clientId: string) => `Client-${clientId}`,
@@ -153,11 +154,17 @@ const FirstEvent = new DebugEvent( {
 
 export type IEventTypes = BaseEvent | DebugEvent;
 
-export interface IEventRoot<T> { [key: string]: T; }
-//  getStoredEvent: (event: string) => IEventTypes;
-// , getStoredEvent: (event: string) => { return new BaseEvent(); }
+export interface IEventStats {
+  eventCounter: number;
+  activeEvents: number;
+}
+
+export interface IEventManager {
+  stats: IEventStats;
+}
+
 export class EventEmitterMixin {
-  static stats: { eventCounter: number; activeEvents: number; } = { eventCounter: 0, activeEvents: 0 };
+  public static stats: IEventStats = { eventCounter: 0, activeEvents: 0 };
   private _emitter: EventEmitter;
   private _events: Map<string, any> = new Map(); // Store default events
   // private _listeners: Map<string, ((...args: any[]) => void)[]> = new Map();
@@ -249,7 +256,7 @@ export class EventEmitterMixin {
         return true; // Basic validation
     }
   }
-  public emitError(event: string, error?: any): void {
+  private emitError(event: string, error?: any): void {
     const newEvent: BaseEvent = {
       ...(new BaseEvent({mainTypes: [MainEventTypes.ERROR]}) as BaseEvent),
       errorEvent: {
@@ -266,24 +273,24 @@ export class EventEmitterMixin {
     this.emitError(`${MainEventTypes.ERROR}.${MainEventTypes.ERROR}`, errorData); // Emit the error for wider handling
   }
 
-  async on(event: string, listener: (...args: any[]) => void) {
+  public async on(event: string, listener: (...args: any[]) => void) {
     EventEmitterMixin.stats.activeEvents++;
     EventEmitterMixin.stats.eventCounter++;
     const eventData = this.createEvent(event, listener);
     this.storeEvent(event, listener); // Ensure the event is registered
     this._emitter.on(event.toString(), listener);
   }
-  async prepend(event: string, listener: (...args: any[]) => void) {
+  public async prepend(event: string, listener: (...args: any[]) => void) {
     this.storeEvent(event, listener);
     this._emitter.prependListener(event.toString(), listener); // Use prependListener
   }
 
-  async off(event: string, listener: (...args: any[]) => void) {
+  public async off(event: string, listener: (...args: any[]) => void) {
     EventEmitterMixin.stats.activeEvents--;
     this._emitter.off(event.toString(), listener);
   }
 
-  async emit(event: string, ...args: any[]) {
+  public async emit(event: string, ...args: any[]) {
     const eventData = this.createEvent(event, ...args);
     if (!eventData) {
       return; // Handle event creation failure
@@ -296,18 +303,7 @@ export class EventEmitterMixin {
   // Method to process the event queue (you'll need to call this)
 }
 
-export class SingletonEventManager extends EventEmitterMixin {
-  private static _instance: any;
-  private constructor() {
-    super();
-  }
-  public static getInstance(): SingletonEventManager {
-    if (!SingletonEventManager._instance) {
-      SingletonEventManager._instance = new SingletonEventManager();
-    }
-    return SingletonEventManager._instance;
-  }
-}
+
 
 
 

@@ -32,7 +32,6 @@ export interface MyWebSocket extends WebSocket {
 
 export interface IserverWrapper {
   killAll(): void;
-  isMyWebSocketWithId(ws: WebSocket): ws is MyWebSocket
 }
 
 @injectable()

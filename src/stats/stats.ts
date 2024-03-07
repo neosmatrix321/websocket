@@ -11,11 +11,11 @@ import * as settingsI from '../settings/settingsInstance'; // Import settings in
 import * as statsI from "./statsInstance";
 import { Main } from '../main';
 
-const EventMixin = eH.SingletonEventManager.getInstance();
+const EventMixin = eM.SingletonEventManager.getInstance();
 
 @injectable()
 export default class Stats {
-  private eV: typeof EventMixin;
+  private eV: eM.eventManager;
   private stats!: statsI.IStats;
   private settings!: settingsI.ISettings;
   constructor(

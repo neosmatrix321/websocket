@@ -9,11 +9,14 @@ import { inject, injectable } from 'inversify';
 import * as eH from "../global/EventHandlingMixin";
 import * as eM from "../global/EventHandlingManager";
 import * as serverI from "../server/serverInstance";
+import Main from "../main";
+import Stats from "../stats/stats";
 
+const EventMixin = eM.SingletonEventManager.getInstance();
 
 @injectable()
 export default class Server  {
-  private eV: typeof EventMixin;
+  private eV: eM.eventManager;
   @inject(serverI.SERVER_WRAPPER_TOKEN) server!: serverI.IHandleWrapper;
   constructor() {
     this.eV = EventMixin;
@@ -64,30 +67,7 @@ export default class Server  {
       this.eV.handleError(new Error('Error creating server'), error);
     }
   }
-  public async createTimer() {
-    // Interval function moved here
-    // this.stats.updateAndGetPidIfNecessary();
-    this.eV.emit('createTimer');
-    this.server._handle.web.clients.forEach((ws_client: WebSocket) => {
-      if (!this.isMyWebSocketWithId(ws_client)) {
-        this.eV.emit(eH.MainEventTypes.WS, ws_client);
-        Main.stats.lastUpdates = { "timerUpdated": Date.now() };
-      }
-      if (this.isMyWebSocketWithId(ws_client)) {
-        if (ws_client.readyState === ws_client.OPEN) {
-          if (!ws_client.id) {
-            console.error(`No Client with ID: ${ws_client.id} known`);
-          }
-          const time_diff = Date.now() - Main.stats.lastUpdates.timerUpdated;
-          if (time_diff > 20000) {
-            this.eV.emit(eH.SubEventTypes.CLIENTS.UPDATE_CLIENT_STATS, ws_client.id);
-          }
-        }
-      }
-    });
-    await Main.stats.updateAllStats(); // Get updated stats
-    this.eV.emit('statsUpdated', Main.stats.stats);
-  }
+
 
   handleUpgrade(request: IncomingMessage, socket: Duplex, head: Buffer, callback: (ws: any) => void) {
     this.server._handle.web.handleUpgrade(request, socket, head, callback);
