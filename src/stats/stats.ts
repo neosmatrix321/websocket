@@ -9,7 +9,6 @@ import * as eH from "../global/EventHandlingMixin";
 import * as eM from "../global/EventHandlingManager";
 import * as settingsI from '../settings/settingsInstance'; // Import settings interface/class
 import * as statsI from "./statsInstance";
-import { Main } from '../main';
 
 const EventMixin = eM.SingletonEventManager.getInstance();
 

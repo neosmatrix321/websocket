@@ -1,9 +1,10 @@
 "use strict";
 import "reflect-metadata";
-import Main from "./main";
-
+// import { Main } from "./main";
+import mainApp from "./main";
 
 async function startApplication() {
-  new Main(); 
+  console.log("Starting application...");
+  mainApp.initialize();
 }
 startApplication();

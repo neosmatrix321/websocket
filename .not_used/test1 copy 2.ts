@@ -1,73 +1,40 @@
-import { inject, injectable } from 'inversify';
-import { EventEmitterMixin, catType, IStatsEvent, statsType, IBaseEvent } from '../global/globalEventHandling';
-import { IStats } from './statsInstance';
-import pidusage from 'pidusage';
-import si from 'systeminformation';
-import * as settings from '../settings/settingsInstance'; 
+const EventEmitter = require('events');
 
-// ... interfaces (IStatsEvent, IBaseEvent) ...
-
-class BaseStatsEvent implements IBaseEvent {
-    cat = catType.stats;
-}
-
-@injectable()
-export default class Stats extends EventEmitterMixin<IStatsEvent>(BaseStatsEvent) {
-    @inject(GLOBAL_STATS_TOKEN) stats!: IStats;
-    @inject(PRIVATE_SETTINGS_TOKEN) _settings!: settings.ISettings;
-
+class EventEmitterMixin extends EventEmitter {
     constructor() {
         super();
-        this.initialize();
+        this.eventMap = {};
     }
 
-    private async initialize() {
-        // ... (Potentially fetch initial stats here) ...
-        this.updateStatsPeriodically(); 
+    on(eventName, listener) {
+        if (!this.eventMap[eventName]) {
+            this.eventMap[eventName] = [];
+        }
+        this.eventMap[eventName].push(listener);
+        super.on(eventName, listener);
     }
 
-    private updateStatsPeriodically() {
-        // Example: Update stats every 5 seconds
-        setInterval(() => {
-            this.updateAllStats(); 
-        }, 5000);
+    prepend(eventName, listener) {
+        if (!this.eventMap[eventName]) {
+            this.eventMap[eventName] = [];
+        }
+        this.eventMap[eventName].unshift(listener);
+        super.prependListener(eventName, listener);
     }
 
-    // ... (other Stats class methods) ...
-
-    public async updateAllStats() {
-        try {
-            await this.getPid(); 
-            await this.comparePids(); 
-            await this.getLatencyGoogle();
-            await this.getSI();
-            await this.getPU();
-
-            this.emit('statsUpdated', { 
-                type: statsType.update, 
-                data: { errCode: 0, blob: this.stats } 
-            }); 
-        } catch (e) {
-            this.emit('statsUpdated', {
-                type: statsType.update,
-                data: { errCode: 1, message: e.message }
-            }); 
+    emit(eventName, ...args) {
+        if (this.eventMap[eventName]) {
+            super.emit(eventName, ...args);
         }
     }
 
-    private async getLatencyGoogle(): Promise<void> {
-        // ... (your existing logic) ...
-
-        const eventData: IStatsEvent = {
-            type: statsType.update,
-            message: 'Google latency updated', // Or a more specific message
-            data: {
-                errCode: 0, 
-                blob: { latencyGoogle: this.stats.latencyGoogle }
-            } 
-        };
-        this.emit('latencyUpdated', eventData); 
+    off(eventName, listener) {
+        if (this.eventMap[eventName]) {
+            const index = this.eventMap[eventName].indexOf(listener);
+            if (index > -1) {
+                this.eventMap[eventName].splice(index, 1);
+            }
+            super.removeListener(eventName, listener);
+        }
     }
-
-    // ... (Similar refactoring for getSI, getPU, etc.) ...
 }

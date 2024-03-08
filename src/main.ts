@@ -1,6 +1,6 @@
 "use strict";
 import "reflect-metadata";
-import { inject, injectable } from "inversify";
+import { Container, inject, injectable } from "inversify";
 import { WebSocket } from 'ws'
 import { Server as httpsServer } from "http";
 import * as eM from "./global/EventHandlingManager";
@@ -19,12 +19,12 @@ import Clients from "./clients/clients";
 const EventMixin = eM.SingletonEventManager.getInstance();
 
 @injectable()
-export default class Main {
-  private eV: typeof EventMixin;
-  private stats!: statsI.IStats;
-  private server!: serverI.IHandleWrapper;
-  private clients!: clientsI.IClientsWrapper['clients'];
-  private settings!: settingsI.ISettings;
+export class Main {
+  protected eV: typeof EventMixin;
+  protected stats: statsI.IStats;
+  protected server: serverI.IHandleWrapper;
+  protected clients: clientsI.IClientsWrapper['clients'];
+  protected settings: settingsI.ISettings;
 
   public constructor(
     @inject(statsI.STATS_WRAPPER_TOKEN) statsInstance: statsI.IStats,
@@ -40,16 +40,16 @@ export default class Main {
     this.server = serverInstance;
     this.clients = clientsInstance;
     this.settings = settingsInstance;
-    this.initialize();
+    // this.initialize();
     // this.eV.on('createTimer', () => {
     //   this.startTimer();
     // });  
   }
 
-  public async initialize() {
+  public initialize() {
     console.log(this);
     try {
-      await this.serverService.createServer();
+      this.serverService.createServer();
       this.setupGlobalEventListeners();
     } catch (err) {
       console.error("Main Initialization Error: ", err);
@@ -91,19 +91,21 @@ export default class Main {
     Object.values(this.clients).forEach((client: any) => {
       if (client.readyState === client.OPEN) {
         // . detailed logic to build and send the stats payload.
-        client.send('client aagdssdaf');
+        const statsData = { ...this.stats, ...client.info };
+        client.send(JSON.stringify(statsData));
+
       }
     });
   }
 
-  private async updateStats() {
-    await this.statsService.updateAllStats();
-    this.eV.emit('statsUpdated', { message: 'stats updated' });
-  }
+  // private async updateStats() {
+  //   await this.statsService.updateAllStats();
+  //   this.eV.emit('statsUpdated', { message: 'stats updated' });
+  // }
   private async handleClose(ws: any, code: any) {
     console.log("dead ip(" + ws.ip + ") alive(" + ws.readyState + ") code(" + code + ") count(" + this.stats.clientsCounter + ")");
     await this.clientsService.removeClient(ws.id); // Assuming you have removeClient
-    this.serverService.destroyClient(ws.id); // If applicable
+    // this.clientsService.destroyClient(ws.id); // TODO: If applicable
     ws.terminate();
     this.startIntervalIfNeeded();
   }
@@ -149,6 +151,7 @@ export default class Main {
     console.log('dummy');
   }
 
+
   // private async handleWebSocketMessage(ws: any, data: any, isBinary: any) {
   //   const decodedData = Buffer.from(data, 'base64').toString();
   //   const messageObject = JSON.parse(decodedData);
@@ -167,5 +170,18 @@ export default class Main {
 
 
 }
+const TYPES = {
+  Main: Symbol.for('Main'),
+  // Add more symbols as needed...
+};
+// Create the container
+const container = new Container();
 
+// Bind your dependencies
+container.bind<Main>(TYPES.Main).to(Main);
+// Add more bindings as needed...
+
+// Resolve dependencies and start Main
+const mainApp = container.get<Main>(TYPES.Main);
+export default mainApp;
 // Instantiate the main object to start your application

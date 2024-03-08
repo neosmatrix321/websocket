@@ -9,13 +9,11 @@ import { inject, injectable } from 'inversify';
 import * as eH from "../global/EventHandlingMixin";
 import * as eM from "../global/EventHandlingManager";
 import * as serverI from "../server/serverInstance";
-import Main from "../main";
-import Stats from "../stats/stats";
 
 const EventMixin = eM.SingletonEventManager.getInstance();
 
 @injectable()
-export default class Server  {
+export default class Server {
   private eV: eM.eventManager;
   @inject(serverI.SERVER_WRAPPER_TOKEN) server!: serverI.IHandleWrapper;
   constructor() {
@@ -60,7 +58,13 @@ export default class Server  {
 
       _serverCert.listen(this.server._settings.streamServerPort, this.server._settings.ip, () => {
         console.log(`HTTPS server ${this.server._settings.ip} listening on ${this.server._settings.streamServerPort}`);
-        this.eV.emit('serverCreated');
+        const serverEvent: eH.IBaseEvent = {
+          mainTypes: [eH.MainEventTypes.SERVER],
+          subTypes: [eH.SubEventTypes.SERVER.LISTEN],
+          message: 'Server created',
+          success: true,
+        };
+        this.eV.emit(eH.MainEventTypes.SERVER, serverEvent);
       });
     } catch (error) {
       console.error("Error creating server:", error);
@@ -71,14 +75,5 @@ export default class Server  {
 
   handleUpgrade(request: IncomingMessage, socket: Duplex, head: Buffer, callback: (ws: any) => void) {
     this.server._handle.web.handleUpgrade(request, socket, head, callback);
-  }
-
-  emitConnection(ws: any, request: IncomingMessage) {
-    this.server._handle.web.emit('connection', ws, request);
-    this.eV.emit('clientConnected', ws);
-  }
-
-  destroyClient(ip: string) {
-    // Implement the logic to destroy a client
   }
 }

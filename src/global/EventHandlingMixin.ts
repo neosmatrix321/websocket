@@ -3,15 +3,42 @@
 import { EventEmitter } from "events";
 import * as eM from "./EventHandlingManager";
 import * as clientI from "../clients/clientInstance";
+import Clients from '../clients/clients';
+import Main from '../main';
 export const MainEventTypes = { BASIC: 'BASIC', MAIN: 'MAIN', STATS: 'STATS', SERVER: 'SERVER', CLIENTS: 'CLIENTS', ERROR: 'ERROR', EVENT: 'EVENT', WS: 'WS', DEBUG: 'DEBUG', UNKNOWN: 'UNKNOWN', STRING: 'STRING', SYMBOL: 'SYMBOL', OBJECT: 'OBJECT', TIMER: 'TIMER', GENERIC: 'GENERIC', FATAL: 'FATAL', DEFAULT: 'DEFAULT' };
 
 export const SubEventTypes = {
-  BASIC: { FIRST: 'FIRST', LAST: 'LAST', DEFAULT: 'DEFAULT' },
-  MAIN: { TIMER_CREATED: 'TIMER_CREATED', START_TIMER: 'START_TIMER', TIMER_STARTED: 'TIMER_STARTED', TIMER_STOPPED: 'TIMER_STOPPED', STOP_TIMER: 'STOP_TIMER', PID_AVAILABLE: 'PID_AVAILABLE' },
-  STATS: { UPDATE_ALL_STATS: 'UPDATE_ALL_STATS', ALL_STATS_UPDATED: 'ALL_STATS_UPDATED', PI_STATS_UPDATED: 'PI_STATS_UPDATED', UPDATE_PI_STATS: 'UPDATE_PI_STATS', PU_STATS_UPDATED: 'PU_STATS_UPDATED', UPDATE_PU_STATS: 'UPDATE_PU_STATS', OTHER_STATS_UPDATED: 'OTHER_STATS_UPDATED', UPDATE_OTHER_STATS: 'UPDATE_OTHER_STATS' },
-  SERVER: { LISTEN: 'LISTEN', CLIENT_CONNECTED: 'CLIENT_CONNECTED', CLIENT_MESSAGE_READY: 'CLIENT_MESSAGE_READY', CLIENT_DISCONNECTED: 'CLIENT_DISCONNECTED' },
-  CLIENTS: { CREATE: 'CREATE', CREATED: 'CREATED', MODIFY: 'MODIFY', MODIFIED: 'MODIFIED', DELETE: 'DELETE', CLIENT_STATS_UPDATED: 'CLIENT_STATS_UPDATED', UPDATE_CLIENT_STATS: 'UPDATE_CLIENT_STATS' },
-  WS: { CONNECT: 'CONNECT', DISCONNECT: 'DISCONNECT', MESSAGE: 'MESSAGE' }
+  BASIC: {
+    FIRST: 'FIRST',
+    LAST: 'LAST',
+    DEFAULT: 'DEFAULT'
+  },
+  MAIN: {
+    START_INTERVAL: 'START_INTERVAL',
+    STOP_INTERVAL: 'STOP_INTERVAL',
+    PID_AVAILABLE: 'PID_AVAILABLE'
+  },
+  STATS: {
+    UPDATE_ALL: 'UPDATE_ALL',
+    UPDATE_PI: 'UPDATE_PI',
+    UPDATE_PU: 'UPDATE_PU',
+    UPDATE_OTHER: 'UPDATE_OTHER'
+  },
+  SERVER: {
+    LISTEN: 'LISTEN'
+  },
+  CLIENTS: {
+    CREATE: 'CREATE',
+    MODIFY: 'MODIFY',
+    DELETE: 'DELETE'
+  },
+  CLIENT: {
+    CONNECT: 'CONNECT',
+    DISCONNECT: 'DISCONNECT',
+    MESSAGE: 'MESSAGE',
+    UPDATE_STATS: 'UPDATE_STATS',
+    UPDATE_SETTINGS: 'UPDATE_SETTINGS'
+  },
 };
 
 export const DEFAULT_VALUE_CALLBACKS = {
@@ -32,7 +59,6 @@ export interface IBaseEvent {
   serverEvent?: { timerId?: number, startTime?: number, endTime?: number, duration?: number };
   clientsEvent?: { id?: string, ip?: string, clientType: clientI.ClientType, message?: string };
   errorEvent?: { errCode: number, error?: Error, message?: string, data?: any };
-  wsEvent?: { message?: string, connectionId?: string };
 }
 
 export class BaseEvent implements IBaseEvent {
@@ -66,12 +92,6 @@ export class BaseEvent implements IBaseEvent {
   } = {
       error: new Error(), errCode: -1
     };
-  wsEvent?: {
-    message?: string, connectionId?: string
-  } = {
-      message: "", connectionId: ""
-    };
-
   constructor(data?: Partial<IBaseEvent>) {
     Object.assign(this, data);
   }
@@ -80,9 +100,9 @@ export class BaseEvent implements IBaseEvent {
 interface IDebugEvent extends IBaseEvent {
   debugEvent: {
     timestamp?: number;
-    success: boolean;
+    success?: boolean;
     eventName?: string;
-    enabled?: boolean;
+    enabled: boolean;
     startTime?: number;
     endTime?: number;
     duration?: number;
@@ -91,17 +111,7 @@ interface IDebugEvent extends IBaseEvent {
   };
 }
 export class DebugEvent extends BaseEvent implements IDebugEvent {
-  debugEvent: {
-    timestamp: number;
-    success: boolean;
-    eventName: string;
-    enabled: boolean;
-    startTime: number;
-    endTime: number;
-    duration: number;
-    activeEvents: number;
-    eventCounter: number;
-  } = {
+  debugEvent = {
       timestamp: DEFAULT_VALUE_CALLBACKS.timestamp(),
       success: false,
       eventName: "Debug Event",
@@ -112,10 +122,9 @@ export class DebugEvent extends BaseEvent implements IDebugEvent {
       activeEvents: DEFAULT_VALUE_CALLBACKS.activeEvents(),
       eventCounter: DEFAULT_VALUE_CALLBACKS.eventCounter()
     };
-  debug: any;
 
   constructor(data?: Partial<IDebugEvent>) {
-    super(data); 
+    super(data);
     Object.assign(this.debugEvent, data?.debugEvent);
     this.updateData();
   }
@@ -126,7 +135,7 @@ export class DebugEvent extends BaseEvent implements IDebugEvent {
   }
 }
 
-const FirstEvent = new DebugEvent( {
+const FirstEvent = new DebugEvent({
   mainTypes: [MainEventTypes.BASIC],
   subTypes: [SubEventTypes.BASIC.FIRST],
   message: "First event",
@@ -148,8 +157,7 @@ const FirstEvent = new DebugEvent( {
   },
   clientsEvent: { id: "", ip: "", clientType: clientI.ClientType.Unknown },
   errorEvent: { errCode: 0, error: new Error("First event error") },
-  wsEvent: { message: "First event message", connectionId: "First event connection" },
-  debugEvent: { success: true }
+  debugEvent: { enabled: true }
 });
 
 export type IEventTypes = BaseEvent | DebugEvent;
@@ -166,6 +174,7 @@ export interface IEventManager {
 export class EventEmitterMixin {
   public static stats: IEventStats = { eventCounter: 0, activeEvents: 0 };
   private _emitter: EventEmitter;
+  private _validationQueue: Map<string, any> = new Map();
   private _events: Map<string, any> = new Map(); // Store default events
   // private _listeners: Map<string, ((...args: any[]) => void)[]> = new Map();
 
@@ -175,36 +184,32 @@ export class EventEmitterMixin {
 
   private storeEvent(event: string, eventData: any) {  // Modified parameter
     if (!this._events.has(event)) {
-      this._events.set(event, this.generateEventIndex(eventData));
-    }
-  }
-
-  private generateEventIndex(eventData: any): IEventTypes {
-    let eventDataResult: IEventTypes;
-    if (typeof eventData === 'object' && eventData as string === typeof MainEventTypes) {
-      return eventData as IEventTypes;
-    }
-    try {
-      eventDataResult = this.createEvent(eventData);
-      return eventDataResult;
-    } catch (error) {
-      let eventDataResult: IEventTypes = { mainTypes: [MainEventTypes.ERROR], subTypes: [MainEventTypes.UNKNOWN], success: false, message: 'Fatal: Failed to create event', errorEvent: { errCode: 5, error: new Error("Fatal: Failed to create event"), data: error } };
-      if (typeof eventData === 'object') {
-        if (typeof eventData.message === 'string') {
-          eventDataResult = new BaseEvent({ message: eventData.message });
-          return eventDataResult; // Use message as index
-        } else {
-          return new BaseEvent({ data: JSON.stringify(eventData) }); //  Fallback
-        }
-      } else if (typeof eventData === 'string') {
-        return eventDataResult = new BaseEvent({ message: eventData });
-      } else {
-        return new BaseEvent({ data: JSON.stringify(eventData) }); // Handle other data types
+      if (eventData[0] && !this.isValidEvent(event, eventData[0])) {
+        const { customKey, customData } = this.createEvent(event, eventData);
+        this._events.set(customKey, customData);
       }
+    } else {
     }
   }
-  private createEvent(event: string, ...args: any[]): IEventTypes {
-    let eventResultData: IEventTypes = {mainTypes: [MainEventTypes.ERROR], subTypes: [MainEventTypes.UNKNOWN], success: false, message: '' };
+  private updateClientInternalStats( ...customData: DebugEvent[] ): IEventTypes {
+    if (customData[0] && customData[0].debugEvent && customData[0].debugEvent.enabled) {
+      let debugEvent;
+      if (customData[0].debugEvent.eventName) {
+        customData[0].updateData(); // Calculate debug data
+        debugEvent = customData[0].debugEvent;
+      } else if (!customData[0].debugEvent.eventName) {
+        debugEvent = { debugEvent: {
+            enabled: true,
+            eventName: "debugEvent",
+          }
+        }
+      }
+      const finalData = { ...customData[0], ...debugEvent };
+      return finalData;
+    }
+    return customData[0];
+  }
+  private createEvent(event: string, ...args: any[]): { customKey: string, customData: IEventTypes } {
     try {
       // Ensure args[0] conforms to the expected event interface
       if (args[0] && !this.isValidEvent(event, args[0])) {
@@ -212,53 +217,42 @@ export class EventEmitterMixin {
       }
       const originalEvent = this._events.get(event);
       if (!originalEvent) {
+        const newData = new BaseEvent({data: JSON.stringify(event)});
+        newData.errorEvent = { errCode: 6, data: { event, args } };
+        this.emitError(MainEventTypes.EVENT, newData);
+        return { customKey: MainEventTypes.ERROR, customData: newData };
+      }
+      const updatedData = this.updateClientInternalStats(originalEvent);
 
-        this.emitError(MainEventTypes.EVENT, new BaseEvent());
-        eventResultData.errorEvent = { errCode: 6, data: { event, args } };
-        return new BaseEvent( );
-      }
-      if (args[0] && args[0].debugEvent && args[0].debugEvent.enabled) {
-        let debugData;
-        if (args[0].debugEvent.debugEvent) {
-          args[0].debugEvent.updateData(); // Calculate debug data
-          debugData = args[0].debugEvent.debugEvent;
-        } else if (!args[0].debugEvent.debugEvent) {
-          debugData = {
-            subType: MainEventTypes.DEBUG,
-            enabled: true,
-            eventName: event,
-          };
-          this._events.set(event, originalEvent); // Replace with a DebugEvent
-        } else {
-          return { ...originalEvent, debug: debugData } as IEventTypes;
-        }
-      };
       // Get the stored event (could be BaseEvent for unknown ones) and merge
-      return { ...this._events.get(event), ...args[0] };
+      return { ...this._events.get(event), ...updatedData };
     } catch (error) {
-      this.emitError(MainEventTypes.EVENT, new BaseEvent({mainTypes: [MainEventTypes.ERROR], subTypes: [MainEventTypes.FATAL], message: 'Fatal: Failed to create event', errorEvent: { errCode: 3, data: error } }));
-      return new BaseEvent({ data: JSON.stringify(event) })
-      }
+      const newData = new BaseEvent({data: JSON.stringify(event)});
+      this.emitError(MainEventTypes.EVENT, newData);
+      return { customKey: MainEventTypes.ERROR, customData: newData };
+    }
   }
-  private isValidEvent(event: string, eventData: any): boolean {
+  private isValidEvent(event: string, eventData?: any): boolean {
     switch (event) {
-      case SubEventTypes.STATS.ALL_STATS_UPDATED:
-        // Check if eventData conforms to StatsEvent interface
-        return eventData.statsEvent && typeof eventData.statsEvent.newValue === 'number';
-      case SubEventTypes.SERVER.CLIENT_CONNECTED:
-      case SubEventTypes.SERVER.CLIENT_DISCONNECTED:
-      case SubEventTypes.SERVER.CLIENT_MESSAGE_READY:
-      case SubEventTypes.CLIENTS.CLIENT_STATS_UPDATED:
-        // Check if eventData conforms to ServerEvent interface
-        return eventData.clientId && typeof eventData.clientId === 'string';
+      // case SubEventTypes.STATS.ALL_STATS_UPDATED:
+      //   // Check if eventData conforms to StatsEvent interface
+      //   return eventData.statsEvent && typeof eventData.statsEvent.newValue === 'number';
+      // case SubEventTypes.CLIENT.CONNECT:
+      // case SubEventTypes.SERVER.LISTEN:
+      // case SubEventTypes.CLIENTS.CREATE:
+      // Check if eventData conforms to ServerEvent interface
+      case typeof MainEventTypes:
+        return true;
       // Add more cases for other event types
       default:
-        return true; // Basic validation
+        const newEvent: BaseEvent = { mainTypes: [MainEventTypes.ERROR], subTypes: [MainEventTypes.FATAL], success: false, message: 'Fatal: Invalid event type', errorEvent: { errCode: 4, data: { event, eventData } } };
+        this.emit(MainEventTypes.ERROR, newEvent);
+        return false;
     }
   }
   private emitError(event: string, error?: any): void {
     const newEvent: BaseEvent = {
-      ...(new BaseEvent({mainTypes: [MainEventTypes.ERROR]}) as BaseEvent),
+      ...(new BaseEvent({ mainTypes: [MainEventTypes.ERROR] }) as BaseEvent),
       errorEvent: {
         errCode: 2, // A sample error code
         error: new Error('Something went wrong'), // A sample error
@@ -267,6 +261,8 @@ export class EventEmitterMixin {
     };
     this._emitter.emit(event as string, newEvent);
   }
+
+  // ... other EventEmitter methods
   public handleError(error: any, errorBlob?: any): void {
     const errorData: any = { ...errorBlob || error };
     console.error('Error from eventManager:', error);
@@ -299,7 +295,9 @@ export class EventEmitterMixin {
     // this._events.push(eventData); // ??
     this._emitter.emit(event.toString(), eventData);
   }
-
+  protected onAny(listener: (mainType: string, event: any) => void) {
+    this.on('*', listener); // Assuming your EventEmitter library uses '*' for wildcard
+  }
   // Method to process the event queue (you'll need to call this)
 }
 

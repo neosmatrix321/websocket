@@ -5,126 +5,215 @@ import { WebSocket, WebSocketServer } from "ws";
 // import * as statsC from "../stats/stats";
 import * as statsI from "../stats/statsInstance";
 import * as serverI from "../server/serverInstance";
+import * as clientsI from "../clients/clientInstance";
+import * as settingsI from "../settings/settingsInstance";
 // import * as serverC from "../server/server";
 // import * as clientsC from "../clients/clients";
 import * as eH from "./EventHandlingMixin";
-// const EventMixin = eH.SingletonEventManager.getInstance();
-// @inject(EVENT_MANAGER_TOKEN) eventInstance: typeof EventMixin
-
+import Stats from "../stats/stats";
+import Server from "../server/server";
+import Clients from "../clients/clients";
+import mainApp from "../main";
 
 // export interface IeventManager {
 //   stats: { eventCounter: number; activeEvents: number; };
-//   handleTimerCreated(event: eH.IEvent): void;
-//   handleStartTimer(event: eH.IEvent): void;
-//   handleTimerStarted(event: eH.IEvent): void;
-//   handleStartStopTimer(event: eH.IEvent): void;
+//   handleTimerCreated(event: eH.IEventTypes): void;
+//   handleStartTimer(event: eH.IEventTypes): void;
+//   handleTimerStarted(event: eH.IEventTypes): void;
+//   handleStartStopTimer(event: eH.IEventTypes): void;
 //   gatherAndSendStats(): void;
-//   handleStatsUpdated(event: eH.IEvent): void;
-//   serverActive(event: eH.IEvent): void;
-//   handleClientConnected(event: eH.IEvent): void;
-//   clientMessageReady(event: eH.IEvent): void;
+//   handleStatsUpdated(event: eH.IEventTypes): void;
+//   serverActive(event: eH.IEventTypes): void;
+//   handleClientConnected(event: eH.IEventTypes): void;
+//   clientMessageReady(event: eH.IEventTypes): void;
 //   updateClientStats(): void;
 //   broadcastMessage(clientId: string, message?: string): void;
-//   handleClientDisconnected(event: eH.IEvent): void;
-//   handleLatencyStopped(event: eH.IEvent): void;
-//   clientBye(event: eH.IEvent): void;
-//   clientSettingsUpdated(event: eH.IEvent): void;
+//   handleClientDisconnected(event: eH.IEventTypes): void;
+//   handleLatencyStopped(event: eH.IEventTypes): void;
+//   clientBye(event: eH.IEventTypes): void;
+//   clientSettingsUpdated(event: eH.IEventTypes): void;
 // }
 
-
+export interface IEventTypes {
+  [key: string]: { // Main event categories
+    [key: string]: any; // Subtypes
+    // basic events
+    BASIC: {
+      FIRST: any;
+      LAST: any;
+      DEFAULT: any;
+    }
+    // ... main events
+    MAIN: {
+      START_INTERVAL: any;
+      STOP_INTERVAL: any;
+      PID_AVAILABLE: any;
+    };
+    // ... stats events
+    STATS: {
+      UPDATE_ALL: any;
+      UPDATE_PI: any;
+      UPDATE_PU: any;
+      UPDATE_OTHER: any;
+    };
+    // ... server events
+    SERVER: {
+      LISTEN: any;
+    };
+    // ... client events
+    CLIENTS: {
+      CREATE: any;
+      DELETE: any;
+      MODIFY: any;
+    };
+    // ... client events
+    CLIENT: {
+      CONNECT: any;
+      DISCONNECT: any;
+      MESSAGE: any;
+      UPDATE_STATS: any;
+      UPDATE_SETTINGS: any;
+    };
+    DEBUG: {
+      START: any;
+      STOP: any;
+    };
+    ERROR: {
+      GLOBAL: any;
+    }
+  };
+}
 
 export class eventManager extends eH.EventEmitterMixin {
   public constructor(
-    ) {
+  ) {
     super();
     this.setupEventHandlers();
     this.emit('someEvent', { debug: { enabled: true } });
   }
-  private setupEventHandlers() {
-    // Main Events
-    this.on(eH.MainEventTypes.MAIN, (event: eH.IEventTypes) => {
-      if (event.subTypes[0]) {
-        switch (event.subTypes[0]) {
-          case eH.SubEventTypes.MAIN.TIMER_CREATED:
-            this.handleTimerCreated(event);
-            break;
-          case eH.SubEventTypes.MAIN.START_TIMER:
-            this.handleStartTimer(event);
-            break;
-          case eH.SubEventTypes.MAIN.TIMER_STARTED:
-            this.handleTimerStarted(event);
-            break;
-          case eH.SubEventTypes.MAIN.PID_AVAILABLE:
-            this.handleStartStopTimer(event);
-            break;
-          default:
-            console.warn('Unknown main event subtype:', event.subTypes[0]);
-        }
-      } else {
-        this.handleError(new Error('Main event data missing'));
-      }
-    });
-    // Stats Events
-    this.on(eH.MainEventTypes.STATS, (event: eH.IEventTypes) => {
-      if (event.statsEvent) {
-        switch (event.subTypes[0]) {
-          case eH.SubEventTypes.STATS.UPDATE_ALL_STATS:
-            this.gatherAndSendStats();
-            break;
-          case eH.SubEventTypes.STATS.ALL_STATS_UPDATED:
-            this.handleStatsUpdated(event);
-            break;
-          default:
-            console.warn('Unknown stats event subtype:', event.subTypes[0]);
-        }
-      } else {
-        this.handleError(new Error('Stats event data missing'));
-      }
-    });
-    // Server Events
-    this.on(eH.MainEventTypes.SERVER, (event: eH.IEventTypes) => {
-      if (event.serverEvent) {
-        switch (event.subTypes[0]) {
-          case eH.SubEventTypes.SERVER.LISTEN:
-            this.serverActive(event);
-            break;
-          case eH.SubEventTypes.SERVER.CLIENT_CONNECTED:
-            this.handleClientConnected(event);
-            break;
-          case eH.SubEventTypes.SERVER.CLIENT_MESSAGE_READY:
-            this.handleClientMessage(event);
-            break;
-          case eH.SubEventTypes.SERVER.CLIENT_DISCONNECTED:
-            this.handleClientDisconnected(event);
-            break;
-          // ... add cases for other server event subtypes
-          default:
-            console.warn('Unknown server event subtype:', event.subTypes[0]);
-        }
-      } else {
-        this.handleError(new Error('Server event data missing'));
-      }
-    });
-    // Client Events
-    this.on(eH.MainEventTypes.CLIENTS, (event: eH.IEventTypes) => {
-      if (event.clientsEvent) {
-        switch (event.subTypes[0]) {
-          case eH.SubEventTypes.CLIENTS.CLIENT_STATS_UPDATED:
-            this.clientMessageReady(event);
-            break;
-          case eH.SubEventTypes.CLIENTS.UPDATE_CLIENT_STATS:
-            this.updateClientStats();
-            break;
-          // ... add cases for other client event subtypes
-          default:
-            console.warn('Unknown clients event subtype:', event.subTypes[0]);
-        }
-      } else {
-        this.handleError(new Error('Clients event data missing'));
+
+  // private setupEventHandlers() {
+  //   this.registerEventHandler(eH.MainEventTypes.MAIN, this.handleMainEvent);
+  //   this.registerEventHandler(eH.MainEventTypes.STATS, this.handleStatsEvent);
+  //   this.registerEventHandler(eH.MainEventTypes.SERVER, this.handleServerEvent);
+  //   // ... register other top-level event handlers 
+  // }
+
+  // private registerEventHandler(eventType: string, handler: (event: eH.IEventTypes) => void) {
+  //   this.on(eventType, (event: eH.IEventTypes) => {
+  //     if (event.subTypes[0]) { // Assuming your events have subTypes
+  //       handler.call(this, event); // Call the handler in the context of 'this'
+  //     } else {
+  //       this.handleError(new Error(`${eventType} event data missing`));
+  //     }
+  //   });
+  // }
+  protected setupEventHandlers() {
+    // ... (your other event handlers)
+
+    // Debug event handler
+    this.on('DEBUG',  (event: IEventTypes) => {
+      if (event.subTypes[0] === 'START') {
+        console.log(`Debug event started: ${event.debug.eventName}`);
+      } else if (event.subTypes[0] === 'STOP') {
+        const duration = event.debug.endTime - event.debug.startTime;
+        console.log(`Debug event '${event.debug.eventName}' completed in ${duration}ms`);
       }
     });
 
-    // Debug Events
+    // Global error handler
+    this.on('ERROR', (event: IEventTypes) => {
+      if (event.subTypes[0] === 'GLOBAL') {
+        console.error(`${event.subTypes[0]} Error Event: `, event.error); 
+      }
+    });
+
+    // Unknown event handler
+    this.onAny((mainType: string, event: IEventTypes) => {
+      if (!event.subTypes) return; // Safety check
+
+      console.warn(`Unknown event: ${mainType}.${event.subTypes[0]}`);
+    });
+  }
+  public startDebugEvent(eventName: string) {
+    this.emit('DEBUG', {
+      subTypes: ['START'], 
+      debug: { eventName, startTime: Date.now() }
+    }); 
+  }
+
+  // Example: Emit a debug stop event
+  public stopDebugEvent(eventName: string) {
+    this.emit('DEBUG', { 
+      subTypes: ['STOP'], 
+      debug: { eventName, endTime: Date.now() } 
+    });
+  }
+
+  private handleMainEvent(event: eH.IEventTypes) {
+    switch (event.subTypes[0]) {
+      case eH.SubEventTypes.MAIN.TIMER_CREATED:
+      case eH.SubEventTypes.MAIN.TIMER_CREATED:
+        this.handleTimerCreated(event);
+        break;
+      case eH.SubEventTypes.MAIN.START_TIMER:
+        this.handleStartTimer(event);
+        break;
+      case eH.SubEventTypes.MAIN.TIMER_STARTED:
+        this.handleTimerStarted(event);
+        break;
+      case eH.SubEventTypes.MAIN.PID_AVAILABLE:
+        this.handleStartStopTimer(event);
+        break;
+      // ... other MAIN subtypes
+      default:
+        console.warn('Unknown main event subtype:', event.subTypes[0]);
+    }
+  }
+  private handleStatsEvent(event: eH.IEventTypes) {
+    switch (event.subTypes[0]) {
+      case eH.SubEventTypes.STATS.UPDATE_ALL:
+        this.gatherAndSendStats();
+        break;
+      case eH.SubEventTypes.STATS.ALL_UPDATED:
+        this.handleStatsUpdated(event);
+        break;
+      default:
+        console.warn('Unknown stats event subtype:', event.subTypes[0]);
+    }
+  }
+  private handleServerEvent(event: eH.IEventTypes) {
+    switch (event.subTypes[0]) {
+      case eH.SubEventTypes.SERVER.LISTEN:
+        this.handleStartTimer(event);
+        // this.serverActive(event);
+        break;
+      case eH.SubEventTypes.SERVER.CLIENT_MESSAGE_READY:
+        this.handleClientMessage(event);
+        break;
+      case eH.SubEventTypes.SERVER.CLIENT_DISCONNECTED:
+        this.handleClientDisconnected(event);
+        break;
+      default:
+        console.warn('Unknown server event subtype:', event.subTypes[0]);
+    }
+  }
+  private handleClientEvent(event: eH.IEventTypes) {
+    switch (event.subTypes[0]) {
+      case eH.SubEventTypes.CLIENT.CONNECT:
+        this.handleClientConnected(event);
+        break;
+      case eH.SubEventTypes.CLIENT.MESSAGE:
+        this.clientMessageReady(event); // handleClientMessage
+        break;
+      case eH.SubEventTypes.CLIENT.DISCONNECT:
+        this.handleClientDisconnected(event);
+        break;
+      default:
+        console.warn('Unknown client event subtype:', event.subTypes[0]);
+    }
+  }
+  private handleDebugEvent(event: eH.IEventTypes) {
     this.on(eH.MainEventTypes.DEBUG, (event: eH.DebugEvent) => {
       if (event.debug.endTime) { // Check if timing completed
         const duration = event.debug.endTime - event.debug.startTime;
@@ -132,66 +221,49 @@ export class eventManager extends eH.EventEmitterMixin {
       }
     });
   }
+
   handleStartStopTimer(event: eH.IEventTypes) {
     throw new Error("Method not implemented.");
   }
 
-  private gatherAndSendStats(): void {
-    Stats.stats.updateAllStats();
-    const statsData: eH.BaseEvent = {
-      type: eH.SubEventTypes.STATS.ALL_STATS_UPDATED,
-      statsEvent: {
-        statsId: 1,
-        // newValue: statsI.calculateSystemLoad(), // Example system load calculation
-        // oldValue: null, // Store previous value if needed 
-        updatedFields: ['systemLoad']
-      }
-    };
-
-    // 2. Send stats to all connected clients
-    this.webServer.clients.forEach(client => {
-      // Note: You might add error handling for WebSocket send failures
-      client.send(JSON.stringify(statsData));
-    });
-  }
   private handleStatsUpdated(event: eH.IEventTypes): void {
     try {
       this.clientMessageReady(event);
-      //  this.on(eH.EventTypes.PID_AVAILABLE, this.handleStatsUpdated.bind(this));
+      //  this.on(eH.MainEventTypes.PID_AVAILABLE, this.handleStatsUpdated.bind(this));
     } catch (error) {
       this.handleError(new Error('statsUpdated'), error); // Or a custom error type
     }
   }
 
-  private handleStartTimer(event: eH.IEvent): void {
+  private handleStartTimer(event: eH.IEventTypes): void {
     console.log('Start timer event received:', event);
     // You can start a timer here
     const timerId = setTimeout(() => {
       console.log('Timer ended');
       // Emit timer ended event
-      this.emit(eH.EventTypes.MAIN, { type: eH.SubEventTypes.TIMER_STOPPED, timestamp: Date.now() });
+      this.emit(eH.MainEventTypes.MAIN, { subTypes: eH.SubEventTypes.MAIN.TIMER_STOPPED, timestamp: Date.now() });
     }, 1000); // For example, wait for 1 second
     // Store timerId if you need to clear it later
   }
 
-  private serverActive(event: eH.IEvent): void {
+  private serverActive(event: eH.IEventTypes): void {
     console.error("Method not implemented.");
   }
 
-  private handleTimerStarted(event: eH.IEvent): void {
-    if (!event[eH.EventTypes.MAIN]) return;
+  private handleTimerStarted(event: eH.IEventTypes): void {
+    if (!event[eH.MainEventTypes.MAIN]) return;
 
-    const timerEvent = event[eH.EventTypes.MAIN] as MainEvent;
+    const timerEvent = event[eH.MainEventTypes.MAIN] as MainEvent;
 
     // 1. Store timer information (you might use a database or in-memory structure)
     this.activeTimers.set(timerEvent.mainEvent.pid, {
       startTime: timerEvent.timestamp
     });
   }
-  public async handleClientConnected(event: eH.IEvent): void {
-    Main.startIntervalIfNeeded();
-    const newEvent: eH.IEvent = {
-      type: eH.SubEventTypes.CLIENT_CONNECTED, // or another appropriate type
+  public async handleClientConnected(event: eH.IEventTypes): Promise<void> {
+    this.MainService.startIntervalIfNeeded();
+    const newEvent: eH.IEventTypes = {
+      subTypes: eH.SubEventTypes.CLIENT_CONNECTED, // or another appropriate type
       message: 'Client connected',
       success: false,
       timestamp: Date.now(),
@@ -200,10 +272,10 @@ export class eventManager extends eH.EventEmitterMixin {
         blob: event
       }
     };
-    this.emit(eH.EventTypes.SERVER, newEvent);
+    this.emit(eH.MainEventTypes.SERVER, newEvent);
   }
-  public clientMessageReady(event: eH.IEvent): void {
-    if (!event[eH.EventTypes.CLIENTS]) return; // Safety check
+  public clientMessageReady(event: eH.IEventTypes): void {
+    if (!event[eH.MainEventTypes.CLIENTS]) return; // Safety check
 
     const clientEvent = event[eH.MainEventTypes.CLIENTS] as eH.BaseEvent;
 
@@ -228,12 +300,12 @@ export class eventManager extends eH.EventEmitterMixin {
       return JSON.parse(message);
     } catch (error) {
       this.handleError(error);
-      return { type: 'unknown' }; // Default to unknown type 
+      return { subTypes: 'unknown' }; // Default to unknown type 
     }
   }
-  public handleClientMessage(event: eH.IEvent): void {
-    if (event[eH.EventTypes.CLIENTS] && event[eH.EventTypes.CLIENTS].clientId) {
-      const clientId = event[eH.EventTypes.CLIENTS].clientId;
+  public handleClientMessage(event: eH.IEventTypes): void {
+    if (event[eH.MainEventTypes.CLIENTS] && event[eH.MainEventTypes.CLIENTS].clientId) {
+      const clientId = event[eH.MainEventTypes.CLIENTS].clientId;
 
       // Example 1: Update stats based on message
       if (event.data && event.data.type === 'update_stats') {
@@ -247,7 +319,7 @@ export class eventManager extends eH.EventEmitterMixin {
     } else {
       console.warn('Invalid client message format');
     }
-    this.emit(eH.EventTypes.SERVER, newEvent);
+    this.emit(eH.MainEventTypes.SERVER, newEvent);
   }
   public updateClientStats() {
     console.error("Method not implemented.");
@@ -255,9 +327,9 @@ export class eventManager extends eH.EventEmitterMixin {
   public broadcastMessage(clientId: string, message?: string) {
     console.error("Method not implemented.");
   }
-  public handleClientDisconnected(event: eH.IEvent): void {
-    const newEvent: eH.IEvent = {
-      type: eH.SubEventTypes.CLIENT_DISCONNECTED, // or another appropriate type
+  public handleClientDisconnected(event: eH.IEventTypes): void {
+    const newEvent: eH.IEventTypes = {
+      subTypes: eH.SubEventTypes.CLIENT_DISCONNECTED, // or another appropriate type
       message: 'Client disconnected',
       success: true,
       timestamp: Date.now(),
@@ -269,7 +341,7 @@ export class eventManager extends eH.EventEmitterMixin {
     this.handleError(new Error(newEvent.message)); // Or a custom error type
   }
 
-  public clientMessageReady(event: eH.IEvent): void {
+  public clientMessageReady(event: eH.IEventTypes): void {
     console.error("Method not implemented.");
   }
   handleLatencyStopped(event: any) {
@@ -280,18 +352,15 @@ export class eventManager extends eH.EventEmitterMixin {
   }
 
 
-  private clientBye(event: eH.IEvent): void {
-    if (event[eH.EventTypes.CLIENTS]) {
+  private clientBye(event: eH.IEventTypes): void {
+    if (event[eH.MainEventTypes.CLIENTS]) {
       // Example logic - you'll need to replace with your specific functionality
-      console.log(eH.EventTypes.CLIENTS, `Client disconnected: ${event[eH.EventTypes.CLIENTS]}`);
+      console.log(eH.MainEventTypes.CLIENTS, `Client disconnected: ${event[eH.MainEventTypes.CLIENTS]}`);
     } else {
       console.error("Client disconnection event missing clientId");
     }
   }
 
-  private clientSettingsUpdated(event: eH.IEvent): void {
-    console.error("Method not implemented.");
-  }
 }
 
 
@@ -302,7 +371,7 @@ export class SingletonEventManager extends eventManager {
   }
   public static getInstance(): SingletonEventManager {
     if (!SingletonEventManager._instance) {
-      SingletonEventManager._instance = new SingletonEventManager();
+      SingletonEventManager._instance = new eventManager();
     }
     return SingletonEventManager._instance;
   }
