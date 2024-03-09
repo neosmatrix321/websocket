@@ -5,7 +5,24 @@ import * as eM from "./EventHandlingManager";
 import * as clientI from "../clients/clientInstance";
 import Clients from '../clients/clients';
 import Main from '../main';
-export const MainEventTypes = { BASIC: 'BASIC', MAIN: 'MAIN', STATS: 'STATS', SERVER: 'SERVER', CLIENTS: 'CLIENTS', ERROR: 'ERROR', EVENT: 'EVENT', WS: 'WS', DEBUG: 'DEBUG', UNKNOWN: 'UNKNOWN', STRING: 'STRING', SYMBOL: 'SYMBOL', OBJECT: 'OBJECT', TIMER: 'TIMER', GENERIC: 'GENERIC', FATAL: 'FATAL', DEFAULT: 'DEFAULT' };
+export const MainEventTypes = {
+  DEFAULT: 'DEFAULT',
+  BASIC: 'BASIC',
+  MAIN: 'MAIN',
+  STATS: 'STATS',
+  SERVER: 'SERVER',
+  CLIENTS: 'CLIENTS',
+  CLIENT: 'CLIENT',
+  EVENT: 'EVENT',
+  STRING: 'STRING',
+  SYMBOL: 'SYMBOL',
+  OBJECT: 'OBJECT',
+  ERROR: 'ERROR',
+  GENERIC: 'GENERIC',
+  FATAL: 'FATAL',
+  UNKNOWN: 'UNKNOWN',
+  DEBUG: 'DEBUG',
+};
 
 export const SubEventTypes = {
   BASIC: {
@@ -30,7 +47,7 @@ export const SubEventTypes = {
   CLIENTS: {
     CREATE: 'CREATE',
     MODIFY: 'MODIFY',
-    DELETE: 'DELETE'
+    DELETE: 'DELETE',
   },
   CLIENT: {
     CONNECT: 'CONNECT',
@@ -147,7 +164,7 @@ const FirstEvent = new DebugEvent({
     updatedFields: ["newValue"]
   },
   mainEvent: {
-    pid: 100
+    pid: -1
   },
   serverEvent: {
     timerId: 1,
@@ -234,16 +251,9 @@ export class EventEmitterMixin {
   }
   private isValidEvent(event: string, eventData?: any): boolean {
     switch (event) {
-      // case SubEventTypes.STATS.ALL_STATS_UPDATED:
-      //   // Check if eventData conforms to StatsEvent interface
-      //   return eventData.statsEvent && typeof eventData.statsEvent.newValue === 'number';
-      // case SubEventTypes.CLIENT.CONNECT:
-      // case SubEventTypes.SERVER.LISTEN:
-      // case SubEventTypes.CLIENTS.CREATE:
-      // Check if eventData conforms to ServerEvent interface
+
       case typeof MainEventTypes:
         return true;
-      // Add more cases for other event types
       default:
         const newEvent: BaseEvent = { mainTypes: [MainEventTypes.ERROR], subTypes: [MainEventTypes.FATAL], success: false, message: 'Fatal: Invalid event type', errorEvent: { errCode: 4, data: { event, eventData } } };
         this.emit(MainEventTypes.ERROR, newEvent);
@@ -295,9 +305,7 @@ export class EventEmitterMixin {
     // this._events.push(eventData); // ??
     this._emitter.emit(event.toString(), eventData);
   }
-  protected onAny(listener: (mainType: string, event: any) => void) {
-    this.on('*', listener); // Assuming your EventEmitter library uses '*' for wildcard
-  }
+
   // Method to process the event queue (you'll need to call this)
 }
 

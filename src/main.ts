@@ -62,16 +62,17 @@ export class Main {
     this.server._handle.web.on('close', this.handleClose.bind(this));
     this.server._handle.web.on('message', this.handleMessage.bind(this));
     this.server._handle.web.on('error', console.error);
-    // this.main._server.on('message', this.handleMessage.bind(this)); // Assuming ServerWrapper emits 'message'
-    // this.main._server.on('close', this.handleClose.bind(this));
   }
 
-  public startIntervalIfNeeded() {
+  public IntervalStartStop() {
     if (this.stats.clientsCounter > 0 && !this.stats.interval_sendinfo) {
       this.stats.interval_sendinfo = setInterval(() => {
         this.gatherAndSendStats();
         this.clientsService.updateClientsStats();
       }, 5000);
+    } else if (this.stats.clientsCounter === 0 && this.stats.interval_sendinfo) {
+      clearInterval(this.stats.interval_sendinfo);
+      this.stats.interval_sendinfo = null;
     }
   }
   // public startTimer() {
@@ -107,20 +108,18 @@ export class Main {
     await this.clientsService.removeClient(ws.id); // Assuming you have removeClient
     // this.clientsService.destroyClient(ws.id); // TODO: If applicable
     ws.terminate();
-    this.startIntervalIfNeeded();
   }
 
   private async handleConnection(ws: serverI.MyWebSocket) {
     this.handleGreeting(ws); // Integrate with your client management 
     this.setupWebSocketEvents(ws);
-
   }
 
   private async setupWebSocketEvents(ws: serverI.MyWebSocket) {
     ws.on('close', this.handleClose.bind(this, ws));
     ws.on('message', this.handleMessage.bind(this, ws));
     ws.on('greeting', this.handleGreeting.bind(this, ws));
-    this.startIntervalIfNeeded();
+    this.IntervalStartStop();
     WebSocket.OPEN;
   }
 
@@ -148,40 +147,29 @@ export class Main {
   }
 
   private async handleMessage(ws: any, data: any, isBinary: any) {
-    console.log('dummy');
+    const decodedData = Buffer.from(data, 'base64').toString();
+    const messageObject = JSON.parse(decodedData);
+
+    if (messageObject.type) {
+      switch (messageObject.type) {
+        case 'greeting':
+          this.handleGreeting(ws, messageObject);
+          break;
+        // Add other cases for message types 
+        default:
+          console.log("Unknown message type");
+      }
+    }
   }
-
-
-  // private async handleWebSocketMessage(ws: any, data: any, isBinary: any) {
-  //   const decodedData = Buffer.from(data, 'base64').toString();
-  //   const messageObject = JSON.parse(decodedData);
-
-  //   if (messageObject.type) {
-  //     switch (messageObject.type) {
-  //       case 'greeting':
-  //         this.handleGreeting(ws, messageObject);
-  //         break;
-  //       // Add other cases for message types 
-  //       default:
-  //         console.log("Unknown message type");
-  //     }
-  //   }
-  // }
-
-
 }
+
 const TYPES = {
   Main: Symbol.for('Main'),
-  // Add more symbols as needed...
 };
 // Create the container
 const container = new Container();
 
-// Bind your dependencies
 container.bind<Main>(TYPES.Main).to(Main);
-// Add more bindings as needed...
 
-// Resolve dependencies and start Main
 const mainApp = container.get<Main>(TYPES.Main);
 export default mainApp;
-// Instantiate the main object to start your application

@@ -37,36 +37,30 @@ import mainApp from "../main";
 export interface IEventTypes {
   [key: string]: { // Main event categories
     [key: string]: any; // Subtypes
-    // basic events
     BASIC: {
       FIRST: any;
       LAST: any;
       DEFAULT: any;
     }
-    // ... main events
     MAIN: {
       START_INTERVAL: any;
       STOP_INTERVAL: any;
       PID_AVAILABLE: any;
     };
-    // ... stats events
     STATS: {
       UPDATE_ALL: any;
       UPDATE_PI: any;
       UPDATE_PU: any;
       UPDATE_OTHER: any;
     };
-    // ... server events
     SERVER: {
       LISTEN: any;
     };
-    // ... client events
     CLIENTS: {
       CREATE: any;
       DELETE: any;
       MODIFY: any;
     };
-    // ... client events
     CLIENT: {
       CONNECT: any;
       DISCONNECT: any;
@@ -110,7 +104,14 @@ export class eventManager extends eH.EventEmitterMixin {
   // }
   protected setupEventHandlers() {
     // ... (your other event handlers)
-
+    // Main event handler
+    this.on(eH.MainEventTypes.MAIN, this.handleMainEvent);
+    // Stats event handler
+    this.on(eH.MainEventTypes.STATS, this.handleStatsEvent);
+    // Server event handler
+    this.on(eH.MainEventTypes.SERVER, this.handleServerEvent);
+    // Client event handler
+    this.on(eH.MainEventTypes.CLIENTS, this.handleClientEvent);
     // Debug event handler
     this.on('DEBUG',  (event: IEventTypes) => {
       if (event.subTypes[0] === 'START') {
@@ -128,41 +129,26 @@ export class eventManager extends eH.EventEmitterMixin {
       }
     });
 
-    // Unknown event handler
-    this.onAny((mainType: string, event: IEventTypes) => {
-      if (!event.subTypes) return; // Safety check
+    // Unknown event handler // TODO: catch rest of events
+    // this.onAny((mainType: string, event: IEventTypes) => {
+    //   if (!event.subTypes) return; // Safety check
 
-      console.warn(`Unknown event: ${mainType}.${event.subTypes[0]}`);
-    });
-  }
-  public startDebugEvent(eventName: string) {
-    this.emit('DEBUG', {
-      subTypes: ['START'], 
-      debug: { eventName, startTime: Date.now() }
-    }); 
-  }
-
-  // Example: Emit a debug stop event
-  public stopDebugEvent(eventName: string) {
-    this.emit('DEBUG', { 
-      subTypes: ['STOP'], 
-      debug: { eventName, endTime: Date.now() } 
-    });
+    //   console.warn(`Unknown event: ${mainType}.${event.subTypes[0]}`);
+    // });
   }
 
   private handleMainEvent(event: eH.IEventTypes) {
     switch (event.subTypes[0]) {
       case eH.SubEventTypes.MAIN.TIMER_CREATED:
-      case eH.SubEventTypes.MAIN.TIMER_CREATED:
         this.handleTimerCreated(event);
         break;
-      case eH.SubEventTypes.MAIN.START_TIMER:
+      case eH.SubEventTypes.MAIN.START_INTERVAL:
         this.handleStartTimer(event);
         break;
       case eH.SubEventTypes.MAIN.TIMER_STARTED:
         this.handleTimerStarted(event);
         break;
-      case eH.SubEventTypes.MAIN.PID_AVAILABLE:
+      case eH.SubEventTypes.MAIN.STOP_INTERVAL:
         this.handleStartStopTimer(event);
         break;
       // ... other MAIN subtypes
@@ -235,16 +221,16 @@ export class eventManager extends eH.EventEmitterMixin {
     }
   }
 
-  private handleStartTimer(event: eH.IEventTypes): void {
-    console.log('Start timer event received:', event);
-    // You can start a timer here
-    const timerId = setTimeout(() => {
-      console.log('Timer ended');
-      // Emit timer ended event
-      this.emit(eH.MainEventTypes.MAIN, { subTypes: eH.SubEventTypes.MAIN.TIMER_STOPPED, timestamp: Date.now() });
-    }, 1000); // For example, wait for 1 second
-    // Store timerId if you need to clear it later
-  }
+  // private handleStartTimer(event: eH.IEventTypes): void {
+  //   console.log('Start timer event received:', event);
+  //   // You can start a timer here
+  //   const timerId = setTimeout(() => {
+  //     console.log('Timer ended');
+  //     // Emit timer ended event
+  //     this.emit(eH.MainEventTypes.MAIN, { subTypes: eH.SubEventTypes.MAIN.TIMER_STOPPED, timestamp: Date.now() });
+  //   }, 1000); // For example, wait for 1 second
+  //   // Store timerId if you need to clear it later
+  // }
 
   private serverActive(event: eH.IEventTypes): void {
     console.error("Method not implemented.");
