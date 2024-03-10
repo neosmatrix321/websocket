@@ -7,11 +7,11 @@ import pidusage from 'pidusage';
 import si from 'systeminformation';
 
 import * as eventI from "../global/eventInterface";
-import { SingletonEventManager } from "../global/EventEmitterMixin";
+import { EventEmitterMixin } from "../global/EventEmitterMixin";
 import * as settingsI from '../settings/settingsInstance'; // Import settings interface/class
 import * as statsI from "./statsInstance";
 
-const EventMixin = SingletonEventManager.getInstance();
+const EventMixin = EventEmitterMixin.getInstance();
 
 @injectable()
 export default class Stats {

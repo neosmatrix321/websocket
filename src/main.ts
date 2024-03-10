@@ -3,7 +3,7 @@ import "reflect-metadata";
 import { Container, inject, injectable } from "inversify";
 import { WebSocket } from 'ws'
 import { Server as httpsServer } from "http";
-import { SingletonEventManager } from "./global/EventEmitterMixin";
+import { EventEmitterMixin } from "./global/EventEmitterMixin";
 // import Stats from "./stats/stats";
 // import Server from "./server/server";
 // import Clients from "./clients/clients";
@@ -40,7 +40,7 @@ const FirstEvent = new eventI.DebugEvent({
   debugEvent: { enabled: true }
 });
 
-const EventMixin = SingletonEventManager.getInstance();
+const EventMixin = EventEmitterMixin.getInstance();
 
 @injectable()
 export class Main {
@@ -76,7 +76,7 @@ export class Main {
     // ... (your other event handlers)
     // Main event handler
     this.eV.on(eventI.MainEventTypes.MAIN, this.handleMainEvent);
-    this.eV.on(eventI.MainEventTypes.ERROR, (errorEvent) => {
+    this.eV.on(eventI.MainEventTypes.ERROR, (errorEvent: eventI.IEventTypes) => {
       console.error("Global Error Handler:", errorEvent);
     });
     // Stats event handler

@@ -5,9 +5,9 @@ import si from 'systeminformation';
 import * as eM from "../global/EventEmitterMixin";
 import * as eventI from "../global/eventInterface";
 import { WebSocket } from 'ws';
-import { SingletonEventManager } from "../global/EventEmitterMixin";
+import { EventEmitterMixin } from "../global/EventEmitterMixin";
 
-const EventMixin = SingletonEventManager.getInstance();
+const EventMixin = EventEmitterMixin.getInstance();
 export const CLIENTS_WRAPPER_TOKEN = Symbol('clientsWrapper');
 
 

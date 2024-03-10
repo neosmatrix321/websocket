@@ -8,7 +8,7 @@ import { WebSocket, WebSocketServer, createWebSocketStream } from 'ws';
 import { inject, injectable } from 'inversify';
 import * as eM from "../global/EventEmitterMixin";
 
-import { SingletonEventManager } from "../global/EventEmitterMixin";
+import { EventEmitterMixin } from "../global/EventEmitterMixin";
 import * as eH from "../global/eventInterface";
 import * as serverI from "../server/serverInstance";
 import * as eventI from "../global/eventInterface";
@@ -16,7 +16,7 @@ import * as clientsI from "../clients/clientInstance";
 import { SubEventTypes } from '../global/eventInterface';
 import Clients from '../clients/clients';
 
-const EventMixin = SingletonEventManager.getInstance();
+const EventMixin = EventEmitterMixin.getInstance();
 
 @injectable()
 export default class Server {

@@ -24,6 +24,7 @@ export const DEFAULT_VALUE_CALLBACKS = {
 };
 
 export class EventEmitterMixin {
+  private static _instance: EventEmitterMixin;
   public static stats: eventI.IEventStats = { eventCounter: 0, activeEvents: 0 };
   private _emitter: EventEmitter;
   private _events: Map<string, any> = new Map(); // Store default events
@@ -139,20 +140,26 @@ export class EventEmitterMixin {
     // this._events.push(eventData); // ??
     this._emitter.emit(event.toString(), eventData);
   }
+  public static getInstance(): EventEmitterMixin {
+      if (!EventEmitterMixin._instance) {
+          EventEmitterMixin._instance = new EventEmitterMixin();
+      }
+      return EventEmitterMixin._instance;
+  }
 }
 
-export class SingletonEventManager extends EventEmitterMixin {
-  private static _instance: any;
-  private constructor() {
-    super();
-  }
-  public static getInstance(): SingletonEventManager {
-    if (!SingletonEventManager._instance) {
-      SingletonEventManager._instance = new EventEmitterMixin();
-    }
-    return SingletonEventManager._instance;
-  }
-}
+// export class SingletonEventManager extends EventEmitterMixin {
+//   private static _instance: any;
+//   private constructor() {
+//     super();
+//   }
+//   public static getInstance(): SingletonEventManager {
+//     if (!SingletonEventManager._instance) {
+//       SingletonEventManager._instance = new EventEmitterMixin();
+//     }
+//     return SingletonEventManager._instance;
+//   }
+// }
 
 /* 
 https://github.com/neosmatrix321/websocket/tree/master
