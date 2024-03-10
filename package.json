@@ -1,5 +1,4 @@
 {
-  "type": "module",
   "dependencies": {
     "@angular/common": "^17.2.3",
     "@angular/core": "^17.2.3",
@@ -19,7 +18,6 @@
     "reflect-metadata": "^0.2.1",
     "rxjs": "^7.8.1",
     "systeminformation": "^5.21.24",
-    "ts-node": "^10.9.2",
     "type": "^2.7.2",
     "types": "^0.1.1",
     "ws": "^8.16.0"
@@ -34,8 +32,12 @@
   "devDependencies": {
     "@tsconfig/node18": "^18.2.2",
     "@types/jest": "^29.5.12",
-    "@types/mocha": "^10.0.6",
     "@types/ws": "^8.5.10",
-    "tsx": "^4.7.1"
+    "ts-node": "^10.9.2",
+    "tsx": "^4.7.1",
+    "typescript": "^5.4.2"
+  },
+  "scripts": {
+    "start:dev": "ts-node /home/websocket/src/index.ts"
   }
 }

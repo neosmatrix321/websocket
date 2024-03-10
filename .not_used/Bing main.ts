@@ -103,12 +103,7 @@ export default class Main extends EventEmitterMixin(Object) implements IMainServ
     console.log(this.stats);
   }
 
-  async setupWebSocketEvents(ws: any) {
-    this.on('error', console.error);
-    this.on('close', this.handleClose.bind(this, ws));
-    this.on('message', this.handleMessage.bind(this, ws));
-    this.setupInterval(ws);
-  }
+
 
   async handleClose(ws: any, code: any) {
     console.log("dead ip(" + ws.ip + ") alive(" + ws.readyState + ") code(" + code + ") count(" + this.stats.clientsCounter + ")");

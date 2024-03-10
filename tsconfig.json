@@ -13,6 +13,7 @@
     "esModuleInterop": true,
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
-    "strictPropertyInitialization": true
-  }
+    "strictPropertyInitialization": true,
+    "sourceMap": true 
+  },
 }

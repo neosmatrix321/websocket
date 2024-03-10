@@ -2,68 +2,135 @@
 import { inject, injectable } from "inversify";
 import * as clientI from "./clientInstance";
 import si from 'systeminformation';
-import * as eH from "../global/EventHandlingMixin";
-import * as eM from "../global/EventHandlingManager";
-import Main from "../main";
-import * as serverI from "../server/serverInstance";
-import Server from "../server/server";
+import * as eM from "../global/EventEmitterMixin";
+import * as eventI from "../global/eventInterface";
+import { WebSocket } from 'ws';
+import { SingletonEventManager } from "../global/EventEmitterMixin";
 
-const EventMixin = eM.SingletonEventManager.getInstance();
+const EventMixin = SingletonEventManager.getInstance();
+export const CLIENTS_WRAPPER_TOKEN = Symbol('clientsWrapper');
+
 
 @injectable()
 export default class Clients {
-  private eV: eM.eventManager;
-  private clients: Record<string, clientI.clientWrapper>;
-  constructor(@inject(clientI.CLIENTS_WRAPPER_TOKEN) clientsInstance: Record<string, clientI.clientWrapper>) {
-    this.eV = EventMixin;
-    this.clients = clientsInstance || {};  // Initialize if needed
+  private eV: eM.EventEmitterMixin = EventMixin;
+  @inject(CLIENTS_WRAPPER_TOKEN) protected clients!: clientI.clientsWrapper
+  constructor() {
+    this.eV.on(eventI.MainEventTypes.CLIENTS, this.handleClientsEvent.bind(this));
   }
-  public addClient(id: string, ip: string, type: string, wsClient: serverI.MyWebSocket) { // Adjust 'any' type later
-    let typeFinal: clientI.ClientType;
-    switch (type) {
-      case 'admin':
-        typeFinal = clientI.ClientType.Admin; 
+
+
+  public isMyWebSocketWithId(ws: WebSocket): ws is clientI.MyWebSocket {
+    return 'id' in ws;
+  }
+
+  private handleClientsEvent(event: eventI.IEventTypes, client: clientI.MyWebSocket, obj: any, isBinary: boolean) {
+    switch (event.subType) {
+      case eventI.SubEventTypes.CLIENTS.SUBSCRIBE:
+        this.handleClientSubscribe(client);
         break;
-      case 'server':
-        typeFinal = clientI.ClientType.Server; 
+      case eventI.SubEventTypes.CLIENTS.UNSUBSCRIBE:
+        this.handleClientUnsubscribe(client.id);
         break;
+      case eventI.SubEventTypes.CLIENTS.UPDATE_SETTINGS:
+        this.handleClientModifySettings(client.id, obj);
+        break;
+      case eventI.SubEventTypes.CLIENTS.UPDATE_STATS:
+        this.handleClientUpdateStats(client.id);
+        break;
+      case eventI.SubEventTypes.CLIENTS.UPDATE_ALL_STATS:
+        this.handleClientsUpdateStats();
+        break;
+      case eventI.SubEventTypes.CLIENTS.MESSAGE:
+        this.handleClientMessage(client.id, obj, isBinary);
+        break;
+      default:
+        console.warn('Unknown clients event subtype:', event.subType);
+    }
+  }
+
+  private async handleClientMessage(id: string, obj: any, isBinary: boolean) {
+    const decodedData = Buffer.from(obj, 'base64').toString();
+    const messageObject = JSON.parse(decodedData);
+
+    if (messageObject.type) {
+      switch (messageObject.type) {
+        case 'greeting':
+          this.handleGreeting(id, messageObject);
+          break;
+        // Add other cases for message types 
         default:
+          console.log("Unknown message type");
+      }
+    }
+  }
+  handleGreeting(id: string, messageObject: any) {
+    throw new Error("Method not implemented.");
+  }
+
+  public clientMessageReady(ws: eventI.IEventTypes): void {
+    if (!ws) return; // Safety check
+    const clientEvent = ws as eventI.BaseEvent;
+    // 1. Process message (replace with your application logic)
+    // const processedData = this.processClientMessage(clientEvent.message);
+    // 2. Trigger other events based on the processed message
+  } // Add more conditional event emissions as needed
+
+  public handleClientSubscribe(wsClient: WebSocket) { // Adjust 'any' type later
+    let typeFinal: clientI.ClientType;
+    let newIP: string = '';
+    if ('_socket' in wsClient) {
+      newIP = (wsClient as any)._socket.remoteAddress;
+    }
+    switch (newIP) {
+      case 'admin':
+        typeFinal = clientI.ClientType.Admin;
+        break;
+      case '192.168.228.7':
+      case 'neo.dnsfor.me':
+        typeFinal = clientI.ClientType.Server;
+        break;
+      default:
         typeFinal = clientI.ClientType.Basic;
     }
+
+    this.clients.stats.clientsCounter++;
+    let newClient = wsClient as unknown as clientI.MyWebSocket;
+    newClient.id = `${this.clients.stats.clientsCounter}`;
     //public create(newID: string, newIP: string, type: ClientType): void {
-    const newClientInfo: clientI.IClientInfo = { id: id, ip: ip, type: typeFinal};
+    const newClientInfo: clientI.IClientInfo = { id: newClient.id, ip: newIP, type: typeFinal };
     let newResult: { errCode: number, message?: string, data?: any } = { errCode: 1 };
     try {
-      const newWsClient = wsClient as serverI.MyWebSocket || undefined;
-      const newClient: clientI.clientWrapper = clientI.clientWrapper.createClient(newClientInfo, newWsClient);
-      this.clients[id] = newClient;
-      newResult = { errCode: 0 };
+      this.clients.createClient(newClient.id, newIP, typeFinal, newClient);
+      if (this.clients.client[`${newClient.id}`]) newResult = { errCode: 0 };
     } catch (e) {
       newResult = { errCode: 2, message: 'create client failed', data: e };
     }
-    const newEvent: eH.IBaseEvent = {
-      mainTypes: [eH.MainEventTypes.CLIENTS],
-      subTypes: [eH.SubEventTypes.CLIENTS.CREATED],
+    const newEvent: eventI.IBaseEvent = {
+      subType: eventI.SubEventTypes.BASIC.DEFAULT,
       message: 'Create client event',
-      success: newResult.errCode == 0 ? true : false, 
+      success: newResult.errCode == 0 ? true : false,
       clientsEvent: { id: newClientInfo.id, ip: newClientInfo.ip, clientType: newClientInfo.type }
-   };
-   this.eV.emit(eH.SubEventTypes.CLIENTS.CREATE, newEvent);
+    };
+    this.eV.emit(eventI.MainEventTypes.BASIC, newEvent);
   }
-  public async updateClientStats(client: clientI.clientWrapper): Promise<void> {
-    if (client) {
-      const time_diff = Date.now() - client.stats.lastUpdates.timerUpdated;
+  public async handleClientUpdateStats(id: string): Promise<void> {
+    const clientData = this.clients.client[id];
+    clientData.stats.lastUpdates = { "statsUpdated": Date.now() };
+    // Your existing client update logic from `createTimer` will go here
+    if (clientData && clientData.ws.readyState === WebSocket.OPEN) {
+      const time_diff = Date.now() - clientData.stats.lastUpdates.timerUpdated;
       if (time_diff > 20000) {
-        // this.eV.emit(eH.SubEventTypes.CLIENTS.UPDATE_CLIENT_STATS, client.info.id);
-        client.stats.latency = await si.inetLatency(client.info.ip);
-        client.stats.eventCount++;
-        client.stats.lastUpdates['getClientLatency'] = Date.now();
-        this.eV.emit(eH.SubEventTypes.CLIENTS.UPDATE_CLIENT_STATS, client.info.id);
+        // this.eV.emit(eventI.SubEventTypes.CLIENTS.UPDATE_CLIENT_STATS, client.info.id);
+        clientData.stats.latency = await si.inetLatency(clientData.info.ip);
+        clientData.stats.eventCount++;
+        clientData.stats.lastUpdates['getClientLatency'] = Date.now();
+        this.eV.emit(eventI.SubEventTypes.CLIENTS.UPDATE_STATS, clientData.info.id);
       }
-
     }
 
   }
+
   // public updateClientConfig(id: string, info: IClientInfo): void {
   //   const newClientInfo: IClientInfo = { id: id, ip: ip, type: typeFinal };
   //   const client = this.clients[id];
@@ -73,34 +140,36 @@ export default class Clients {
   //     client.stats.lastUpdates.updateConfig = Date.now();
   //   }
   // }
-  public updateClientSettings(id: string, settings: clientI.IClientSettings) {
-    const client = this.clients[id];
+  public handleClientModifySettings(id: string, settings: clientI.IClientSettings) {
+    const client = this.clients.client[id];
     if (client) {
-      client.clientSettings = { ...settings }; // Update settings
+      client.settings = { ...settings }; // Update settings
       client.stats.eventCount++;
       client.stats.lastUpdates.updateSettings = Date.now();
     }
   }
 
-  public async updateClientsStats(): Promise<void> {
+  public async handleClientsUpdateStats(): Promise<void> {
     Object.values(this.clients).forEach((client) => {
-      client.stats.lastUpdates = { "statsUpdated": Date.now() };
-      // Your existing client update logic from `createTimer` will go here
-      if (client.ws?.readyState === WebSocket.OPEN) {
-        // ... your logic ...
-        const choosenClient = this.clients[client.info.id];
-        if (choosenClient) {
-          this.updateClientStats(client);
-        }
-      }
+      this.handleClientUpdateStats(client);
     });
   }
+
+
+  public handleClientUnsubscribe(id: string): void {
+    if (this.clients.client[id]) {
+      this.clients.removeClient(id);
+      this.clients.stats.clientsCounter--;
+      // this.eV.emit(eventI.SubEventTypes.CLIENTS.UNSUBSCRIBE, client.info.id);
+    }
+  }
+
   public removeClient(clientId: string): void {
-    delete this.clients[clientId];
+    delete this.clients.client[clientId];
   }
 
   public getClient(clientId: string): clientI.clientWrapper | undefined {
-    return this.clients[clientId];
+    return this.clients.client[clientId];
   }
 }
 

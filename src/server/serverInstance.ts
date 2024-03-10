@@ -1,8 +1,9 @@
 "use strict";
 import "reflect-metadata";
 import { inject, injectable, optional } from 'inversify';
-import * as eM from "../global/EventHandlingManager";
-import * as eH from "../global/EventHandlingMixin";
+import * as eM from "../global/EventEmitterMixin";
+import * as eH from "../global/eventInterface";
+import * as clientI from "../clients/clientInstance";
 
 // Interfaces (potentially in a separate file, interfaces.ts)
 import { WebSocketServer, WebSocket } from 'ws'
@@ -25,9 +26,6 @@ export interface IHandleWrapper {
   _handle: IHandle;
   _stats: IHandleStats;
   _settings: IHandleSettings;
-}
-export interface MyWebSocket extends WebSocket {
-  id: string
 }
 
 export interface IserverWrapper {

@@ -3,8 +3,7 @@ import "reflect-metadata";
 import { Container, inject, injectable } from "inversify";
 import { WebSocket } from 'ws'
 import { Server as httpsServer } from "http";
-import * as eM from "./global/EventHandlingManager";
-import * as eH from "./global/EventHandlingMixin";
+import { SingletonEventManager } from "./global/EventEmitterMixin";
 // import Stats from "./stats/stats";
 // import Server from "./server/server";
 // import Clients from "./clients/clients";
@@ -12,24 +11,49 @@ import * as statsI from "./stats/statsInstance";
 import * as serverI from "./server/serverInstance";
 import * as clientsI from "./clients/clientInstance";
 import * as settingsI from "./settings/settingsInstance";
+import * as eventI from "./global/eventInterface";
 import Stats from "./stats/stats";
 import Server from "./server/server";
-import Clients from "./clients/clients";
+import Clients, { CLIENTS_WRAPPER_TOKEN } from "./clients/clients";
 
-const EventMixin = eM.SingletonEventManager.getInstance();
+const FirstEvent = new eventI.DebugEvent({
+  subType: eventI.SubEventTypes.BASIC.FIRST,
+  message: "First event",
+  success: true,
+  data: "First event data",
+  statsEvent: {
+    statsId: 1,
+    newValue: 100,
+    updatedFields: ["newValue"]
+  },
+  mainEvent: {
+    pid: -1
+  },
+  serverEvent: {
+    timerId: 1,
+    startTime: Date.now(),
+    endTime: 0,
+    duration: 0
+  },
+  clientsEvent: { id: "", ip: "", clientType: clientsI.ClientType.Unknown },
+  errorEvent: { errCode: 0, error: new Error("First event error") },
+  debugEvent: { enabled: true }
+});
+
+const EventMixin = SingletonEventManager.getInstance();
 
 @injectable()
 export class Main {
   protected eV: typeof EventMixin;
   protected stats: statsI.IStats;
   protected server: serverI.IHandleWrapper;
-  protected clients: clientsI.IClientsWrapper['clients'];
+  protected clients: clientsI.IClientsWrapper;
   protected settings: settingsI.ISettings;
 
   public constructor(
     @inject(statsI.STATS_WRAPPER_TOKEN) statsInstance: statsI.IStats,
     @inject(serverI.SERVER_WRAPPER_TOKEN) serverInstance: serverI.IHandleWrapper,
-    @inject(clientsI.CLIENTS_WRAPPER_TOKEN) clientsInstance: clientsI.IClientsWrapper['clients'],
+    @inject(CLIENTS_WRAPPER_TOKEN) clientsInstance: clientsI.IClientsWrapper,
     @inject(settingsI.PRIVATE_SETTINGS_TOKEN) settingsInstance: settingsI.ISettings,
     @inject(Stats) private statsService: Stats,
     @inject(Server) private serverService: Server,
@@ -40,136 +64,105 @@ export class Main {
     this.server = serverInstance;
     this.clients = clientsInstance;
     this.settings = settingsInstance;
+    console.log("Main constructor: ", this.stats, this.server, this.clients, this.settings);
+    this.setupEventHandlers();
+    this.eV.emit(eventI.MainEventTypes.BASIC, FirstEvent);
     // this.initialize();
     // this.eV.on('createTimer', () => {
     //   this.startTimer();
     // });  
+  }
+  protected setupEventHandlers() {
+    // ... (your other event handlers)
+    // Main event handler
+    this.eV.on(eventI.MainEventTypes.MAIN, this.handleMainEvent);
+    this.eV.on(eventI.MainEventTypes.ERROR, (errorEvent) => {
+      console.error("Global Error Handler:", errorEvent);
+    });
+    // Stats event handler
+    // Server event handler
+    // Client event handler
+
+    // TODO: alternate Debug event handler ?
+    // this.eV.on('DEBUG',  (event: eventI.IEventTypes) => {
+    //   if (event.subType === 'START') {
+    //     console.log(`Debug event started: ${event.debugEvent.eventName}`);
+    //   } else if (event.subType === 'STOP') {
+    //     const duration = event.debugEvent.endTime - event.debugEvent.startTime;
+    //     console.log(`Debug event '${event.debugEvent.eventName}' completed in ${duration}ms`);
+    //   }
+    // });
+
+    // Unknown event handler // TODO: catch rest of events
+    // this.onAny((mainType: string, event: eventI.IEventTypes) => {
+    //   if (!event.subType) return; // Safety check
+
+    //   console.warn(`Unknown event: ${mainType}.${event.subType}`);
+    // });
   }
 
   public initialize() {
     console.log(this);
     try {
       this.serverService.createServer();
-      this.setupGlobalEventListeners();
     } catch (err) {
       console.error("Main Initialization Error: ", err);
     }
   }
 
-  private setupGlobalEventListeners() {
-    // Event handling for client connections, messages, errors
-    this.server._handle.web.on('clientConnected', this.handleConnection.bind(this));
-    this.server._handle.web.on('close', this.handleClose.bind(this));
-    this.server._handle.web.on('message', this.handleMessage.bind(this));
-    this.server._handle.web.on('error', console.error);
+  private handleMainEvent(event: eventI.IEventTypes) {
+    switch (event.subType?.[0]) {
+      case eventI.SubEventTypes.MAIN.START_STOP_INTERVAL:
+        this.IntervalStartStop();
+        break;
+      // ... other MAIN subType
+      default:
+        console.warn('Unknown main event subtype:', event.subType?.[0]);
+    }
   }
 
   public IntervalStartStop() {
-    if (this.stats.clientsCounter > 0 && !this.stats.interval_sendinfo) {
+    if (this.clients.stats.clientsCounter > 0 && !this.stats.interval_sendinfo) {
       this.stats.interval_sendinfo = setInterval(() => {
-        this.gatherAndSendStats();
-        this.clientsService.updateClientsStats();
+        this.statsService.updateAndGetPidIfNecessary().then((result) => {
+          if (result) {
+            this.eV.emit(eventI.MainEventTypes.STATS, {
+              subType: eventI.SubEventTypes.STATS.UPDATE_ALL
+            });
+            this.eV.emit(eventI.MainEventTypes.CLIENTS, {
+              subType: eventI.SubEventTypes.CLIENTS.UPDATE_ALL_STATS
+            });
+            this.clientsService.handleClientsUpdateStats();
+          }
+        }).catch((error) => {
+          this.eV.emit(eventI.MainEventTypes.ERROR, {
+            mainTypes: [eventI.SubEventTypes.ERROR.INFO],
+            subType: ["IntervalStartStop"],
+            message: 'Error updating stats',
+            success: false,
+            errorEvent: { errCode: 2, data: { error } }
+          });
+        });
       }, 5000);
-    } else if (this.stats.clientsCounter === 0 && this.stats.interval_sendinfo) {
+    } else if (this.clients.stats.clientsCounter === 0 && this.stats.interval_sendinfo) {
       clearInterval(this.stats.interval_sendinfo);
       this.stats.interval_sendinfo = null;
-    }
-  }
-  // public startTimer() {
-  //   this.startIntervalIfNeeded();
-  //   setInterval(() => {
-  //     this.eV.emit('createTimer');
-  
-  //       updateStats();
-  //       updateClients();
-  //   }, 20000); // Adjust interval as needed
-  // }
-// Event listener to start the timer (from EventManager)
-
-  private async gatherAndSendStats() {
-    await this.statsService.updateAllStats();
-
-    Object.values(this.clients).forEach((client: any) => {
-      if (client.readyState === client.OPEN) {
-        // . detailed logic to build and send the stats payload.
-        const statsData = { ...this.stats, ...client.info };
-        client.send(JSON.stringify(statsData));
-
-      }
-    });
-  }
-
-  // private async updateStats() {
-  //   await this.statsService.updateAllStats();
-  //   this.eV.emit('statsUpdated', { message: 'stats updated' });
-  // }
-  private async handleClose(ws: any, code: any) {
-    console.log("dead ip(" + ws.ip + ") alive(" + ws.readyState + ") code(" + code + ") count(" + this.stats.clientsCounter + ")");
-    await this.clientsService.removeClient(ws.id); // Assuming you have removeClient
-    // this.clientsService.destroyClient(ws.id); // TODO: If applicable
-    ws.terminate();
-  }
-
-  private async handleConnection(ws: serverI.MyWebSocket) {
-    this.handleGreeting(ws); // Integrate with your client management 
-    this.setupWebSocketEvents(ws);
-  }
-
-  private async setupWebSocketEvents(ws: serverI.MyWebSocket) {
-    ws.on('close', this.handleClose.bind(this, ws));
-    ws.on('message', this.handleMessage.bind(this, ws));
-    ws.on('greeting', this.handleGreeting.bind(this, ws));
-    this.IntervalStartStop();
-    WebSocket.OPEN;
-  }
-
-  private async handleGreeting(client: serverI.MyWebSocket) {
-    let newIP: string = '';
-  if ('_socket' in client) {
-    newIP = (client as any)._socket.remoteAddress;
-  }
-    const type = 'basic'
-    if (!this.serverService.isMyWebSocketWithId(client)) {
-      this.stats.clientsCounter++;
-      const newID = this.stats.clientsCounter;
-      const type = 'basic'
-      this.clientsService.addClient(`${newID}`, newIP, type, client);
-    }
-    if (this.serverService.isMyWebSocketWithId(client)) {
-      const createdClient = this.clients[client.id];
-      if (createdClient) {
-        // createdClient.info.type = ; // Update isAdmin
-        await this.clientsService.updateClientStats(createdClient);
-      }
     } else {
-      console.error("Could not create Client " + newIP)
+      console.log(`IntervalStartStop: no action taken. clientsCounter: ${this.clients.stats.clientsCounter}`);
     }
   }
 
-  private async handleMessage(ws: any, data: any, isBinary: any) {
-    const decodedData = Buffer.from(data, 'base64').toString();
-    const messageObject = JSON.parse(decodedData);
+  // private async gatherAndSendStats() {
+  //   await this.statsService.updateAllStats();
 
-    if (messageObject.type) {
-      switch (messageObject.type) {
-        case 'greeting':
-          this.handleGreeting(ws, messageObject);
-          break;
-        // Add other cases for message types 
-        default:
-          console.log("Unknown message type");
-      }
-    }
-  }
+  //   Object.values(this.clients).forEach((client: any) => {
+  //     if (client.readyState === client.OPEN) {
+  //       // . detailed logic to build and send the stats payload.
+  //       const statsData = { ...this.stats, ...client.info };
+  //       client.send(JSON.stringify(statsData));
+
+  //     }
+  //   });
+  // }
 }
 
-const TYPES = {
-  Main: Symbol.for('Main'),
-};
-// Create the container
-const container = new Container();
-
-container.bind<Main>(TYPES.Main).to(Main);
-
-const mainApp = container.get<Main>(TYPES.Main);
-export default mainApp;
