@@ -2,37 +2,29 @@
 
 import 'reflect-metadata';
 import { readFile } from 'node:fs/promises';
-import { inject, injectable } from 'inversify';
+import { inject, injectable, postConstruct } from 'inversify';
 import pidusage from 'pidusage';
 import si from 'systeminformation';
 
 import * as eventI from "../global/eventInterface";
 import { EventEmitterMixin } from "../global/EventEmitterMixin";
-import { IStats } from "./statsInstance";
-import { IprivateSettings } from '../settings/settingsInstance';
-
-export const PRIVATE_SETTINGS_TOKEN = Symbol('Settings');
-export const STATS_WRAPPER_TOKEN = Symbol('Stats');
+import { IStats, statsWrapper } from "./statsInstance";
+import { IprivateSettings, privateSettings } from '../settings/settingsInstance';
 
 const EventMixin = EventEmitterMixin.getInstance();
 
 @injectable()
 export class Stats {
   private eV: EventEmitterMixin = EventMixin;
-  protected stats: IStats;
-  protected settings: IprivateSettings;
-  constructor(
-    @inject(STATS_WRAPPER_TOKEN) statsInstance: IStats,
-    @inject(PRIVATE_SETTINGS_TOKEN) settingsInstance: IprivateSettings
-  ) {
+  public stats: IStats = new statsWrapper();
+  private settings: IprivateSettings = new privateSettings();
+  constructor() {
     this.eV = EventMixin;
-    this.stats = statsInstance;
-    this.settings = settingsInstance;
-    
     this.stats.lastUpdates = { "createStats": Date.now() };
     this.updateAllStats();
     this.eV.on(eventI.MainEventTypes.STATS, this.handleStatsEvent);
   }
+  @postConstruct()
   private handleStatsEvent(event: eventI.IEventTypes) {
     switch (event.subType) {
       case eventI.SubEventTypes.STATS.UPDATE_ALL:

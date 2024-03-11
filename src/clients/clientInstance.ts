@@ -86,7 +86,7 @@ export interface IClientsWrapper {
   stats: IClientsStats;
 }
 
-export class clientsWrapper extends Clients {
+export class clientsWrapper {
   client: Record<string, IClientWrapper> = {};
   stats: IClientsStats = {
     webHandle: { connectedClients: 0 },
@@ -94,12 +94,12 @@ export class clientsWrapper extends Clients {
     clientsCounter: 0,
     activeClients: 0,
   }
-  constructor() {
-    super();
-  }
+  constructor() { }
   public createClient(id: string, ip: string, type: ClientType, ws: MyWebSocket): void {
     this.client[id] = new clientWrapper(id, ip, type, ws);
-    
+  }
+  public removeClient(id: string): void {
+    delete this.client[id];
   }
 }
 

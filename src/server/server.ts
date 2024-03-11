@@ -5,26 +5,27 @@ import { readFileSync } from 'fs';
 import { IncomingMessage } from 'http';
 import { Duplex } from 'stream';
 import { WebSocket, WebSocketServer, createWebSocketStream } from 'ws';
-import { inject, injectable } from 'inversify';
+import { inject, injectable, postConstruct } from 'inversify';
 
 import { EventEmitterMixin } from "../global/EventEmitterMixin";
-import { IServerWrapper } from "../server/serverInstance";
+import serverWrapper, { IServerWrapper } from "../server/serverInstance";
 import { MainEventTypes, IEventTypes, SubEventTypes, IBaseEvent } from "../global/eventInterface";
 import { MyWebSocket } from "../clients/clientInstance";
-export const SERVER_WRAPPER_TOKEN = Symbol('Server');
 
 
 @injectable()
 export class Server {
   private eV: EventEmitterMixin = EventEmitterMixin.getInstance();
-  @inject(SERVER_WRAPPER_TOKEN) server!: IServerWrapper;
+  protected server: IServerWrapper;
   constructor() {
+    this.server = new serverWrapper();
     this.server.handle.web = new WebSocketServer({ noServer: true });
     this.server.handle.file = new WebSocketServer({ noServer: true });
     this.setupWebSocketListeners();
     this.eV.on(MainEventTypes.SERVER, this.handleServerEvent);
   }
 
+  @postConstruct()
   private setupWebSocketListeners() {
     this.server.handle.web.on('connection', (client: any, obj: any) => this.handleConnection.bind(this));
     this.server.handle.web.on('message', (client: any, obj: any, isBinary: any) => this.handleMessage.bind(this));

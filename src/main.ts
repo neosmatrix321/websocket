@@ -1,6 +1,6 @@
 "use strict";
 import "reflect-metadata";
-import { inject, injectable } from "inversify";
+import { Container, inject, injectable, postConstruct } from "inversify";
 import { EventEmitterMixin } from "./global/EventEmitterMixin";
 // import Stats from "./stats/stats";
 // import Server from "./server/server";
@@ -10,6 +10,9 @@ import { DebugEvent, SubEventTypes, MainEventTypes, IEventTypes } from "./global
 import { Stats } from "./stats/stats";
 import { Server } from "./server/server";
 import { Clients } from "./clients/clients";
+export const STATS_WRAPPER_TOKEN = Symbol('Stats');
+export const CLIENTS_WRAPPER_TOKEN = Symbol('Clients');
+export const SERVER_WRAPPER_TOKEN = Symbol('Server');
 
 const FirstEvent = new DebugEvent({
   subType: SubEventTypes.BASIC.FIRST,
@@ -41,10 +44,10 @@ const EventMixin = EventEmitterMixin.getInstance();
 export class Main {
   protected eV: EventEmitterMixin = EventMixin;
   private sendInfoInterval: any;
+  @inject(STATS_WRAPPER_TOKEN) protected stats!: Stats;
+  @inject(SERVER_WRAPPER_TOKEN) protected server!: Server;
+  @inject(CLIENTS_WRAPPER_TOKEN) protected clients!: Clients;
   public constructor(
-    @inject(Stats) private stats?: Stats,
-    @inject(Server) private server?: Server,
-    @inject(Clients) private clients?: Clients,
   ) {
     this.eV = EventMixin;
     this.sendInfoInterval = undefined;
@@ -57,6 +60,8 @@ export class Main {
     //   this.startTimer();
     // });  
   }
+
+  @postConstruct()
   protected setupEventHandlers() {
     // ... (your other event handlers)
     // Main event handler
@@ -89,7 +94,7 @@ export class Main {
   public initialize() {
     console.log(this);
     try {
-      this.server?.createServer();
+      this.server.createServer();
     } catch (err) {
       console.error("Main Initialization Error: ", err);
     }

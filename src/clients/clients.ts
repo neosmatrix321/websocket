@@ -1,23 +1,23 @@
 "use strict";
-import { inject, injectable } from "inversify";
+import { inject, injectable, postConstruct } from "inversify";
 import { clientsWrapper, MyWebSocket, ClientType, IClientInfo, IClientSettings, clientWrapper } from "./clientInstance";
 import si from 'systeminformation';
 import * as eventI from "../global/eventInterface";
 import { WebSocket } from 'ws';
 import { EventEmitterMixin } from "../global/EventEmitterMixin";
 
-export const CLIENTS_WRAPPER_TOKEN = Symbol('Clients');
 
 
 @injectable()
 export class Clients {
   private eV: EventEmitterMixin = EventEmitterMixin.getInstance();
-  @inject(CLIENTS_WRAPPER_TOKEN) protected clients!: clientsWrapper
+  protected clients: clientsWrapper;
   constructor() {
+    this.clients = new clientsWrapper();
     this.eV.on(eventI.MainEventTypes.CLIENTS, this.handleClientsEvent.bind(this));
   }
 
-
+  @postConstruct()
   public isMyWebSocketWithId(ws: WebSocket): ws is MyWebSocket {
     return 'id' in ws;
   }

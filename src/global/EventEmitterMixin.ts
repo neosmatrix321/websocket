@@ -25,6 +25,10 @@ export class EventEmitterMixin {
     if (!this._events.has(event)) {
       if (eventData[0] && !this.isValidEvent(event, eventData[0])) {
         const { customKey, customData } = this.createEvent(event, eventData);
+        if (EventEmitterMixin.stats.activeEvents > 10) {
+          process.exit(1);
+        }
+        EventEmitterMixin.stats.activeEvents++;
         this._events.set(customKey, customData);
       }
     } else {
@@ -91,6 +95,7 @@ export class EventEmitterMixin {
         data: error
       }
     };
+    EventEmitterMixin.stats.activeEvents--;
     this._emitter.emit(event as string, newEvent);
   }
 
