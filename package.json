@@ -30,9 +30,12 @@
   "description": "websocket test",
   "main": "index.js",
   "devDependencies": {
+    "@jest/globals": "^29.7.0",
     "@tsconfig/node18": "^18.2.2",
     "@types/jest": "^29.5.12",
     "@types/ws": "^8.5.10",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.2",
     "ts-node": "^10.9.2",
     "tsx": "^4.7.1",
     "typescript": "^5.4.2"

@@ -1,22 +1,18 @@
 "use strict";
 import "reflect-metadata";
-import { Container, inject, injectable } from "inversify";
+import { inject, injectable } from "inversify";
 import { EventEmitterMixin } from "./global/EventEmitterMixin";
 // import Stats from "./stats/stats";
 // import Server from "./server/server";
 // import Clients from "./clients/clients";
-import * as statsI from "./stats/statsInstance";
-import * as serverI from "./server/serverInstance";
-import * as clientsI from "./clients/clientInstance";
-import * as settingsI from "./settings/settingsInstance";
-import * as eventI from "./global/eventInterface";
-import { Stats, STATS_WRAPPER_TOKEN } from "./stats/stats";
-import { Server, SERVER_WRAPPER_TOKEN } from "./server/server";
-import { Clients, CLIENTS_WRAPPER_TOKEN } from "./clients/clients";
-import { Settings, PRIVATE_SETTINGS_TOKEN } from "./settings/settings";
+import { ClientType } from "./clients/clientInstance";
+import { DebugEvent, SubEventTypes, MainEventTypes, IEventTypes } from "./global/eventInterface";
+import { Stats } from "./stats/stats";
+import { Server } from "./server/server";
+import { Clients } from "./clients/clients";
 
-const FirstEvent = new eventI.DebugEvent({
-  subType: eventI.SubEventTypes.BASIC.FIRST,
+const FirstEvent = new DebugEvent({
+  subType: SubEventTypes.BASIC.FIRST,
   message: "First event",
   success: true,
   data: "First event data",
@@ -34,7 +30,7 @@ const FirstEvent = new eventI.DebugEvent({
     endTime: 0,
     duration: 0
   },
-  clientsEvent: { id: "", ip: "", clientType: clientsI.ClientType.Unknown },
+  clientsEvent: { id: "", ip: "", clientType: ClientType.Unknown },
   errorEvent: { errCode: 0, error: new Error("First event error") },
   debugEvent: { enabled: true }
 });
@@ -44,27 +40,18 @@ const EventMixin = EventEmitterMixin.getInstance();
 @injectable()
 export class Main {
   protected eV: EventEmitterMixin = EventMixin;
-  protected stats: statsI.IStats;
-  protected server: serverI.IServerWrapper;
-  protected clients: clientsI.IClientsWrapper;
-
+  private sendInfoInterval: any;
   public constructor(
-    @inject(STATS_WRAPPER_TOKEN) statsInstance: statsI.IStats,
-    @inject(SERVER_WRAPPER_TOKEN) serverInstance: serverI.IServerWrapper,
-    @inject(CLIENTS_WRAPPER_TOKEN) clientsInstance: clientsI.IClientsWrapper,
-    @inject(Stats) private statsService: Stats,
-    @inject(Server) private serverService: Server,
-    @inject(Clients) private clientsService: Clients,
-    @inject(Settings) private settingsService: Settings,
-
+    @inject(Stats) private stats?: Stats,
+    @inject(Server) private server?: Server,
+    @inject(Clients) private clients?: Clients,
   ) {
     this.eV = EventMixin;
-    this.stats = statsInstance;
-    this.server = serverInstance;
-    this.clients = clientsInstance;
-    console.log("Main constructor: ", this.stats, this.server, this.clients, this.settingsService.settings.pid);
+    this.sendInfoInterval = undefined;
+
+    console.log("Main constructor: ", this.eV, this.stats, this.server, this.clients);
     this.setupEventHandlers();
-    this.eV.emit(eventI.MainEventTypes.BASIC, FirstEvent);
+    this.eV.emit(MainEventTypes.BASIC, FirstEvent);
     // this.initialize();
     // this.eV.on('createTimer', () => {
     //   this.startTimer();
@@ -73,8 +60,8 @@ export class Main {
   protected setupEventHandlers() {
     // ... (your other event handlers)
     // Main event handler
-    this.eV.on(eventI.MainEventTypes.MAIN, this.handleMainEvent);
-    this.eV.on(eventI.MainEventTypes.ERROR, (errorEvent: eventI.IEventTypes) => {
+    this.eV.on(MainEventTypes.MAIN, this.handleMainEvent);
+    this.eV.on(MainEventTypes.ERROR, (errorEvent: IEventTypes) => {
       console.error("Global Error Handler:", errorEvent);
     });
     // Stats event handler
@@ -82,7 +69,7 @@ export class Main {
     // Client event handler
 
     // TODO: alternate Debug event handler ?
-    // this.eV.on('DEBUG',  (event: eventI.IEventTypes) => {
+    // this.eV.on('DEBUG',  (event: IEventTypes) => {
     //   if (event.subType === 'START') {
     //     console.log(`Debug event started: ${event.debugEvent.eventName}`);
     //   } else if (event.subType === 'STOP') {
@@ -92,7 +79,7 @@ export class Main {
     // });
 
     // Unknown event handler // TODO: catch rest of events
-    // this.onAny((mainType: string, event: eventI.IEventTypes) => {
+    // this.onAny((mainType: string, event: IEventTypes) => {
     //   if (!event.subType) return; // Safety check
 
     //   console.warn(`Unknown event: ${mainType}.${event.subType}`);
@@ -102,16 +89,19 @@ export class Main {
   public initialize() {
     console.log(this);
     try {
-      this.serverService.createServer();
+      this.server?.createServer();
     } catch (err) {
       console.error("Main Initialization Error: ", err);
     }
   }
 
-  private handleMainEvent(event: eventI.IEventTypes) {
+  private handleMainEvent(event: IEventTypes) {
     switch (event.subType?.[0]) {
-      case eventI.SubEventTypes.MAIN.START_STOP_INTERVAL:
-        this.IntervalStartStop();
+      case SubEventTypes.MAIN.START_INTERVAL:
+        this.IntervalStart();
+        break;
+      case SubEventTypes.MAIN.STOP_INTERVAL:
+        this.IntervalStop();
         break;
       // ... other MAIN subType
       default:
@@ -119,22 +109,22 @@ export class Main {
     }
   }
 
-  public IntervalStartStop() {
-    if (this.clients.stats.clientsCounter > 0 && !this.stats.interval_sendinfo) {
-      this.stats.interval_sendinfo = setInterval(() => {
-        this.statsService.updateAndGetPidIfNecessary().then((result) => {
+  public IntervalStart() {
+    if (!this.sendInfoInterval) {
+      this.sendInfoInterval = setInterval(() => {
+        this.stats?.updateAndGetPidIfNecessary().then((result) => {
           if (result) {
-            this.eV.emit(eventI.MainEventTypes.STATS, {
-              subType: eventI.SubEventTypes.STATS.UPDATE_ALL
+            this.eV.emit(MainEventTypes.STATS, {
+              subType: SubEventTypes.STATS.UPDATE_ALL
             });
-            this.eV.emit(eventI.MainEventTypes.CLIENTS, {
-              subType: eventI.SubEventTypes.CLIENTS.UPDATE_ALL_STATS
+            this.eV.emit(MainEventTypes.CLIENTS, {
+              subType: SubEventTypes.CLIENTS.UPDATE_ALL_STATS
             });
-            this.clientsService.handleClientsUpdateStats();
+            this.clients?.handleClientsUpdateStats();
           }
         }).catch((error) => {
-          this.eV.emit(eventI.MainEventTypes.ERROR, {
-            mainTypes: [eventI.SubEventTypes.ERROR.INFO],
+          this.eV.emit(MainEventTypes.ERROR, {
+            mainTypes: [SubEventTypes.ERROR.INFO],
             subType: ["IntervalStartStop"],
             message: 'Error updating stats',
             success: false,
@@ -142,16 +132,21 @@ export class Main {
           });
         });
       }, 5000);
-    } else if (this.clients.stats.clientsCounter === 0 && this.stats.interval_sendinfo) {
-      clearInterval(this.stats.interval_sendinfo);
-      this.stats.interval_sendinfo = null;
     } else {
-      console.log(`IntervalStartStop: no action taken. clientsCounter: ${this.clients.stats.clientsCounter}`);
+      console.log("IntervalStartStop: no action taken. clientsCounter:", this.sendInfoInterval);
+    }
+  }
+  public IntervalStop() {
+    if (this.sendInfoInterval) {
+      clearInterval(this.sendInfoInterval);
+      this.sendInfoInterval = null;
+    } else {
+      console.log("IntervalStartStop: no action taken. clientsCounter:", this.sendInfoInterval);
     }
   }
 
   // private async gatherAndSendStats() {
-  //   await this.statsService.updateAllStats();
+  //   await this.stats.updateAllStats();
 
   //   Object.values(this.clients).forEach((client: any) => {
   //     if (client.readyState === client.OPEN) {

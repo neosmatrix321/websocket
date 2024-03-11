@@ -1,19 +1,6 @@
-import { IncomingMessage } from "http";
 import { EventEmitter } from "events";
 import "reflect-metadata";
-import { WebSocket, WebSocketServer } from "ws";
-// import * as statsC from "../stats/stats";
-// import * as statsI from "../stats/statsInstance";
-// import * as serverI from "../server/serverInstance";
-// import * as clientsI from "../clients/clientInstance";
-// import * as settingsI from "../settings/settingsInstance";
-// import * as serverC from "../server/server";
-// import * as clientsC from "../clients/clients";
-import * as eventI from "./eventInterface";
-// import Stats from "../stats/stats";
-// import Server from "../server/server";
-// import Clients from "../clients/clients";
-// import mainApp from "../main";
+import { MainEventTypes, IEventTypes, SubEventTypes, IEventStats, DebugEvent, BaseEvent } from "./eventInterface";
 
 
 export const DEFAULT_VALUE_CALLBACKS = {
@@ -25,7 +12,7 @@ export const DEFAULT_VALUE_CALLBACKS = {
 
 export class EventEmitterMixin {
   private static _instance: EventEmitterMixin;
-  public static stats: eventI.IEventStats = { eventCounter: 0, activeEvents: 0 };
+  public static stats: IEventStats = { eventCounter: 0, activeEvents: 0 };
   private _emitter: EventEmitter;
   private _events: Map<string, any> = new Map(); // Store default events
   // private _listeners: Map<string, ((...args: any[]) => void)[]> = new Map();
@@ -43,7 +30,7 @@ export class EventEmitterMixin {
     } else {
     }
   }
-  private updateDebugData( ...customData: eventI.DebugEvent[] ): eventI.IEventTypes {
+  private updateDebugData( ...customData: DebugEvent[] ): IEventTypes {
     if (customData[0] && customData[0].debugEvent && customData[0].debugEvent.enabled) {
       let debugEvent;
       if (customData[0].debugEvent.eventName) {
@@ -61,7 +48,7 @@ export class EventEmitterMixin {
     }
     return customData[0];
   }
-  private createEvent(event: string, ...args: any[]): { customKey: string, customData: eventI.IEventTypes } {
+  private createEvent(event: string, ...args: any[]): { customKey: string, customData: IEventTypes } {
     try {
       // Ensure args[0] conforms to the expected event interface
       if (args[0] && !this.isValidEvent(event, args[0])) {
@@ -69,35 +56,35 @@ export class EventEmitterMixin {
       }
       const originalEvent = this._events.get(event);
       if (!originalEvent) {
-        const newData = new eventI.BaseEvent({data: JSON.stringify(event)});
+        const newData = new BaseEvent({data: JSON.stringify(event)});
         newData.errorEvent = { errCode: 6, data: { event, args } };
-        this.emitError(eventI.MainEventTypes.ERROR, newData);
-        return { customKey: eventI.SubEventTypes.ERROR.WARNING, customData: newData };
+        this.emitError(MainEventTypes.ERROR, newData);
+        return { customKey: SubEventTypes.ERROR.WARNING, customData: newData };
       }
       const updatedData = this.updateDebugData(originalEvent);
 
-      // Get the stored event (could be eventI.BaseEvent for unknown ones) and merge
+      // Get the stored event (could be BaseEvent for unknown ones) and merge
       return { ...this._events.get(event), ...updatedData };
     } catch (error) {
-      const newData = new eventI.BaseEvent({data: JSON.stringify(event)});
-      this.emitError(eventI.MainEventTypes.ERROR, newData);
-      return { customKey: eventI.SubEventTypes.ERROR.WARNING, customData: newData };
+      const newData = new BaseEvent({data: JSON.stringify(event)});
+      this.emitError(MainEventTypes.ERROR, newData);
+      return { customKey: SubEventTypes.ERROR.WARNING, customData: newData };
     }
   }
   private isValidEvent(event: string, eventData?: any): boolean {
     switch (event) {
 
-      case typeof eventI.MainEventTypes:
+      case typeof MainEventTypes:
         return true;
       default:
-        const newEvent: eventI.BaseEvent = { subType: eventI.SubEventTypes.ERROR.FATAL, success: false, message: 'Fatal: Invalid event type', errorEvent: { errCode: 4, data: { event, eventData } } };
-        this.emit(eventI.MainEventTypes.ERROR, newEvent);
+        const newEvent: BaseEvent = { subType: SubEventTypes.ERROR.FATAL, success: false, message: 'Fatal: Invalid event type', errorEvent: { errCode: 4, data: { event, eventData } } };
+        this.emit(MainEventTypes.ERROR, newEvent);
         return false;
     }
   }
   private emitError(event: string, error?: any): void {
-    const newEvent: eventI.BaseEvent = {
-      ...(new eventI.BaseEvent({ subType: eventI.MainEventTypes.ERROR }) as eventI.BaseEvent),
+    const newEvent: BaseEvent = {
+      ...(new BaseEvent({ subType: MainEventTypes.ERROR }) as BaseEvent),
       errorEvent: {
         errCode: 2, // A sample error code
         error: new Error('Something went wrong'), // A sample error
@@ -111,7 +98,7 @@ export class EventEmitterMixin {
   public handleError(error: any, errorBlob?: any): void {
     const errorData: any = { ...errorBlob || error };
     console.error('Error from eventManager:', error);
-    this.emitError(`${eventI.MainEventTypes.ERROR}.${eventI.MainEventTypes.ERROR}`, errorData); // Emit the error for wider handling
+    this.emitError(`${MainEventTypes.ERROR}.${MainEventTypes.ERROR}`, errorData); // Emit the error for wider handling
   }
 
   public async on(event: string, listener: (...args: any[]) => void) {
@@ -167,32 +154,32 @@ https://github.com/neosmatrix321/websocket/tree/master
 
 // export interface IeventManager {
 //   stats: { eventCounter: number; activeEvents: number; };
-//   handleTimerCreated(event: eH.eventI.IEventTypes): void;
-//   handleStartTimer(event: eH.eventI.IEventTypes): void;
-//   handleTimerStarted(event: eH.eventI.IEventTypes): void;
-//   handleStartStopTimer(event: eH.eventI.IEventTypes): void;
+//   handleTimerCreated(event: eH.IEventTypes): void;
+//   handleStartTimer(event: eH.IEventTypes): void;
+//   handleTimerStarted(event: eH.IEventTypes): void;
+//   handleStartStopTimer(event: eH.IEventTypes): void;
 //   gatherAndSendStats(): void;
-//   handleStatsUpdated(event: eH.eventI.IEventTypes): void;
-//   serverActive(event: eH.eventI.IEventTypes): void;
-//   handleClientConnected(event: eH.eventI.IEventTypes): void;
-//   clientMessageReady(event: eH.eventI.IEventTypes): void;
+//   handleStatsUpdated(event: eH.IEventTypes): void;
+//   serverActive(event: eH.IEventTypes): void;
+//   handleClientConnected(event: eH.IEventTypes): void;
+//   clientMessageReady(event: eH.IEventTypes): void;
 //   updateClientStats(): void;
 //   broadcastMessage(clientId: string, message?: string): void;
-//   handleClientDisconnected(event: eH.eventI.IEventTypes): void;
-//   handleLatencyStopped(event: eH.eventI.IEventTypes): void;
-//   clientBye(event: eH.eventI.IEventTypes): void;
-//   clientSettingsUpdated(event: eH.eventI.IEventTypes): void;
+//   handleClientDisconnected(event: eH.IEventTypes): void;
+//   handleLatencyStopped(event: eH.IEventTypes): void;
+//   clientBye(event: eH.IEventTypes): void;
+//   clientSettingsUpdated(event: eH.IEventTypes): void;
 // }
 
   // private setupEventHandlers() {
-  //   this.registerEventHandler(eH.eventI.MainEventTypes.MAIN, this.handleMainEvent);
-  //   this.registerEventHandler(eH.eventI.MainEventTypes.STATS, this.handleStatsEvent);
-  //   this.registerEventHandler(eH.eventI.MainEventTypes.SERVER, this.handleServerEvent);
+  //   this.registerEventHandler(eH.MainEventTypes.MAIN, this.handleMainEvent);
+  //   this.registerEventHandler(eH.MainEventTypes.STATS, this.handleStatsEvent);
+  //   this.registerEventHandler(eH.MainEventTypes.SERVER, this.handleServerEvent);
   //   // ... register other top-level event handlers 
   // }
 
-  // private registerEventHandler(eventType: string, handler: (event: eH.eventI.IEventTypes) => void) {
-  //   this.on(eventType, (event: eH.eventI.IEventTypes) => {
+  // private registerEventHandler(eventType: string, handler: (event: eH.IEventTypes) => void) {
+  //   this.on(eventType, (event: eH.IEventTypes) => {
   //     if (event.subType) { // Assuming your events have subType
   //       handler.call(this, event); // Call the handler in the context of 'this'
   //     } else {
@@ -201,8 +188,8 @@ https://github.com/neosmatrix321/websocket/tree/master
   //   });
   // }
 
-  // private handleDebugEvent(event: eH.eventI.IEventTypes) {
-  //   this.on(eH.eventI.MainEventTypes.DEBUG, (event: eH.eventI.DebugEvent) => {
+  // private handleDebugEvent(event: eH.IEventTypes) {
+  //   this.on(eH.MainEventTypes.DEBUG, (event: eH.DebugEvent) => {
   //     if (event.debug.endTime) { // Check if timing completed
   //       const duration = event.debug.endTime - event.debug.startTime;
   //       console.log(`Debug Event '${event.debug.eventName}' took ${duration}ms`);
@@ -210,45 +197,45 @@ https://github.com/neosmatrix321/websocket/tree/master
   //   });
   // }
 
-  // handleStartStopTimer(event: eH.eventI.IEventTypes) {
+  // handleStartStopTimer(event: eH.IEventTypes) {
   //   throw new Error("Method not implemented.");
   // }
 
-  // private handleStatsUpdated(event: eH.eventI.IEventTypes): void {
+  // private handleStatsUpdated(event: eH.IEventTypes): void {
   //   try {
   //     this.clientMessageReady(event);
-  //     //  this.on(eH.eventI.MainEventTypes.PID_AVAILABLE, this.handleStatsUpdated.bind(this));
+  //     //  this.on(eH.MainEventTypes.PID_AVAILABLE, this.handleStatsUpdated.bind(this));
   //   } catch (error) {
   //     this.handleError(new Error('statsUpdated'), error); // Or a custom error type
   //   }
   // }
 
-  // private handleStartTimer(event: eH.eventI.IEventTypes): void {
+  // private handleStartTimer(event: eH.IEventTypes): void {
   //   console.log('Start timer event received:', event);
   //   // You can start a timer here
   //   const timerId = setTimeout(() => {
   //     console.log('Timer ended');
   //     // Emit timer ended event
-  //     this.emit(eH.eventI.MainEventTypes.MAIN, { subType: eH.SubEventTypes.MAIN.TIMER_STOPPED, timestamp: Date.now() });
+  //     this.emit(eH.MainEventTypes.MAIN, { subType: eH.SubEventTypes.MAIN.TIMER_STOPPED, timestamp: Date.now() });
   //   }, 1000); // For example, wait for 1 second
   //   // Store timerId if you need to clear it later
   // }
 
-  // private serverActive(event: eH.eventI.IEventTypes): void {
+  // private serverActive(event: eH.IEventTypes): void {
   //   console.error("Method not implemented.");
   // }
 
-  // private handleTimerStarted(event: eH.eventI.IEventTypes): void {
-  //   if (!event[eH.eventI.MainEventTypes.MAIN]) return;
-  //   const timerEvent = event[eH.eventI.MainEventTypes.MAIN] as MainEvent;
+  // private handleTimerStarted(event: eH.IEventTypes): void {
+  //   if (!event[eH.MainEventTypes.MAIN]) return;
+  //   const timerEvent = event[eH.MainEventTypes.MAIN] as MainEvent;
   //   // 1. Store timer information (you might use a database or in-memory structure)
   //   this.activeTimers.set(timerEvent.mainEvent.pid, {
   //     startTime: timerEvent.timestamp
   //   });
   // }
 
-  // public async handleClientConnected(event: eH.eventI.IEventTypes): Promise<void> {
-  //   const newEvent: eH.eventI.IEventTypes = {
+  // public async handleClientConnected(event: eH.IEventTypes): Promise<void> {
+  //   const newEvent: eH.IEventTypes = {
   //     subType: eH.SubEventTypes.CLIENT_CONNECTED, // or another appropriate type
   //     message: 'Client connected',
   //     success: false,
@@ -258,7 +245,7 @@ https://github.com/neosmatrix321/websocket/tree/master
   //       blob: event
   //     }
   //   };
-  //   this.emit(eH.eventI.MainEventTypes.SERVER, newEvent);
+  //   this.emit(eH.MainEventTypes.SERVER, newEvent);
   // }
 
 
@@ -273,9 +260,9 @@ https://github.com/neosmatrix321/websocket/tree/master
   //   }
   // }
 
-  // public handleClientMessage(event: eH.eventI.IEventTypes): void {
-  //   if (event[eH.eventI.MainEventTypes.CLIENTS] && event[eH.eventI.MainEventTypes.CLIENTS].clientId) {
-  //     const clientId = event[eH.eventI.MainEventTypes.CLIENTS].clientId;
+  // public handleClientMessage(event: eH.IEventTypes): void {
+  //   if (event[eH.MainEventTypes.CLIENTS] && event[eH.MainEventTypes.CLIENTS].clientId) {
+  //     const clientId = event[eH.MainEventTypes.CLIENTS].clientId;
   //     // Example 1: Update stats based on message
   //     if (event.data && event.data.type === 'update_stats') {
   //       Main.clients._clients.updateClientStats(clientId, event.data.stats);
@@ -287,7 +274,7 @@ https://github.com/neosmatrix321/websocket/tree/master
   //   } else {
   //     console.warn('Invalid client message format');
   //   }
-  //   this.emit(eH.eventI.MainEventTypes.SERVER, newEvent);
+  //   this.emit(eH.MainEventTypes.SERVER, newEvent);
   // }
   // public updateClientStats() {
   //   console.error("Method not implemented.");
@@ -296,8 +283,8 @@ https://github.com/neosmatrix321/websocket/tree/master
   //   console.error("Method not implemented.");
   // }
 
-  // public handleClientDisconnected(event: eH.eventI.IEventTypes): void {
-  //   const newEvent: eH.eventI.IEventTypes = {
+  // public handleClientDisconnected(event: eH.IEventTypes): void {
+  //   const newEvent: eH.IEventTypes = {
   //     subType: eH.SubEventTypes.CLIENT_DISCONNECTED, // or another appropriate type
   //     message: 'Client disconnected',
   //     success: true,
@@ -310,16 +297,16 @@ https://github.com/neosmatrix321/websocket/tree/master
   //   this.handleError(new Error(newEvent.message)); // Or a custom error type
   // }
 
-  // private clientBye(event: eH.eventI.IEventTypes): void {
-  //   if (event[eH.eventI.MainEventTypes.CLIENTS]) {
+  // private clientBye(event: eH.IEventTypes): void {
+  //   if (event[eH.MainEventTypes.CLIENTS]) {
   //     // Example logic - you'll need to replace with your specific functionality
-  //     console.log(eH.eventI.MainEventTypes.CLIENTS, `Client disconnected: ${event[eH.eventI.MainEventTypes.CLIENTS]}`);
+  //     console.log(eH.MainEventTypes.CLIENTS, `Client disconnected: ${event[eH.MainEventTypes.CLIENTS]}`);
   //   } else {
   //     console.error("Client disconnection event missing clientId");
   //   }
   // }
 
-  // public clientMessageReady(event: eH.eventI.IEventTypes): void {
+  // public clientMessageReady(event: eH.IEventTypes): void {
   //   console.error("Method not implemented.");
   // }
   // handleLatencyStopped(event: any) {

@@ -10,22 +10,13 @@ export interface IprivateSettings {
   debug: boolean,
 }
 export class privateSettings implements IprivateSettings {
-  adminPassword: string;
-  pidFile: string;
-  pid: number;
-  pidFileExists: boolean;
-  pidFileReadable: boolean;
-  debug: boolean;
-  public constructor(
-    adminPassword?: string, pidFile?: string, pid?: number, pidFileExists?: boolean, pidFileReadable?: boolean, debug?: boolean
-  ) {
-    this.adminPassword = adminPassword || "Descent3$",
-    this.pidFile = pidFile || "/var/www/html/pal_server/erver/pal_server.pid",
-    this.pid = pid || -1,
-    this.pidFileExists = pidFileExists || false,
-    this.pidFileReadable = pidFileReadable || false,
-    this.debug = debug || false
-  }
+  adminPassword: string = "Descent3$";
+  pidFile: string = "/var/www/html/pal_server/erver/pal_server.pid";
+  pid: number = -1;
+  pidFileExists: boolean = false;
+  pidFileReadable: boolean = false;
+  debug: boolean = false;
+  public constructor() { }
 }
 
 // export interface ISettingsExtra {

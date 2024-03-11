@@ -1,8 +1,7 @@
 "use strict";
 
-import * as clientI from "../clients/clientInstance";
+import { ClientType } from "../clients/clientInstance";
 import { DEFAULT_VALUE_CALLBACKS } from "../global/EventEmitterMixin";
-import { WebSocket, WebSocketServer } from "ws";
 
 export const MainEventTypes = {
   BASIC: 'BASIC',
@@ -21,7 +20,8 @@ export const SubEventTypes = {
     DEFAULT: 'DEFAULT'
   },
   MAIN: {
-    START_STOP_INTERVAL: 'START_STOP_INTERVAL',
+    START_INTERVAL: 'START_INTERVAL',
+    STOP_INTERVAL: 'STOP_INTERVAL',
     PID_AVAILABLE: 'PID_AVAILABLE'
   },
   STATS: {
@@ -62,7 +62,7 @@ export interface IBaseEvent {
   statsEvent?: { statsId?: number, newValue?: any, oldValue?: any, updatedFields?: any };
   mainEvent?: { pid?: number };
   serverEvent?: { timerId?: number, startTime?: number, endTime?: number, duration?: number };
-  clientsEvent?: { id?: string, ip?: string, clientType: clientI.ClientType, message?: string };
+  clientsEvent?: { id?: string, ip?: string, clientType: ClientType, message?: string };
   errorEvent?: { errCode: number, error?: Error, message?: string, data?: any };
 }
 
@@ -87,9 +87,9 @@ export class BaseEvent implements IBaseEvent {
       timerId: -1, startTime: -1, endTime: -1, duration: -1
     };
   clientsEvent?: {
-    id: string, ip: string, clientType: clientI.ClientType, message?: string
+    id: string, ip: string, clientType: ClientType, message?: string
   } = {
-      id: "", ip: "", clientType: clientI.ClientType.Unknown, message: ""
+      id: "", ip: "", clientType: ClientType.Unknown, message: ""
     };
   errorEvent?: {
     errCode: number, error?: Error, data?: any, message?: string

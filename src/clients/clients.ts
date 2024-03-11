@@ -1,28 +1,28 @@
 "use strict";
 import { inject, injectable } from "inversify";
-import * as clientI from "./clientInstance";
+import { clientsWrapper, MyWebSocket, ClientType, IClientInfo, IClientSettings, clientWrapper } from "./clientInstance";
 import si from 'systeminformation';
 import * as eventI from "../global/eventInterface";
 import { WebSocket } from 'ws';
 import { EventEmitterMixin } from "../global/EventEmitterMixin";
 
-export const CLIENTS_WRAPPER_TOKEN = Symbol('clientsWrapper');
+export const CLIENTS_WRAPPER_TOKEN = Symbol('Clients');
 
 
 @injectable()
 export class Clients {
   private eV: EventEmitterMixin = EventEmitterMixin.getInstance();
-  @inject(CLIENTS_WRAPPER_TOKEN) protected clients!: clientI.clientsWrapper
+  @inject(CLIENTS_WRAPPER_TOKEN) protected clients!: clientsWrapper
   constructor() {
     this.eV.on(eventI.MainEventTypes.CLIENTS, this.handleClientsEvent.bind(this));
   }
 
 
-  public isMyWebSocketWithId(ws: WebSocket): ws is clientI.MyWebSocket {
+  public isMyWebSocketWithId(ws: WebSocket): ws is MyWebSocket {
     return 'id' in ws;
   }
 
-  private handleClientsEvent(event: eventI.IEventTypes, client: clientI.MyWebSocket, obj: any, isBinary: boolean) {
+  private handleClientsEvent(event: eventI.IEventTypes, client: MyWebSocket, obj: any, isBinary: boolean) {
     switch (event.subType) {
       case eventI.SubEventTypes.CLIENTS.SUBSCRIBE:
         this.handleClientSubscribe(client);
@@ -75,28 +75,28 @@ export class Clients {
   } // Add more conditional event emissions as needed
 
   public handleClientSubscribe(wsClient: WebSocket) { // Adjust 'any' type later
-    let typeFinal: clientI.ClientType;
+    let typeFinal: ClientType;
     let newIP: string = '';
     if ('_socket' in wsClient) {
       newIP = (wsClient as any)._socket.remoteAddress;
     }
     switch (newIP) {
       case 'admin':
-        typeFinal = clientI.ClientType.Admin;
+        typeFinal = ClientType.Admin;
         break;
       case '192.168.228.7':
       case 'neo.dnsfor.me':
-        typeFinal = clientI.ClientType.Server;
+        typeFinal = ClientType.Server;
         break;
       default:
-        typeFinal = clientI.ClientType.Basic;
+        typeFinal = ClientType.Basic;
     }
 
     this.clients.stats.clientsCounter++;
-    let newClient = wsClient as unknown as clientI.MyWebSocket;
+    let newClient = wsClient as unknown as MyWebSocket;
     newClient.id = `${this.clients.stats.clientsCounter}`;
     //public create(newID: string, newIP: string, type: ClientType): void {
-    const newClientInfo: clientI.IClientInfo = { id: newClient.id, ip: newIP, type: typeFinal };
+    const newClientInfo: IClientInfo = { id: newClient.id, ip: newIP, type: typeFinal };
     let newResult: { errCode: number, message?: string, data?: any } = { errCode: 1 };
     try {
       this.clients.createClient(newClient.id, newIP, typeFinal, newClient);
@@ -110,6 +110,8 @@ export class Clients {
       success: newResult.errCode == 0 ? true : false,
       clientsEvent: { id: newClientInfo.id, ip: newClientInfo.ip, clientType: newClientInfo.type }
     };
+    if (this.clients.stats.clientsCounter > 0)
+      this.eV.emit(eventI.MainEventTypes.MAIN, { subType: eventI.SubEventTypes.MAIN.START_INTERVAL, message: 'Start interval' });
     this.eV.emit(eventI.MainEventTypes.BASIC, newEvent);
   }
   public async handleClientUpdateStats(id: string): Promise<void> {
@@ -138,7 +140,7 @@ export class Clients {
   //     client.stats.lastUpdates.updateConfig = Date.now();
   //   }
   // }
-  public handleClientModifySettings(id: string, settings: clientI.IClientSettings) {
+  public handleClientModifySettings(id: string, settings: IClientSettings) {
     const client = this.clients.client[id];
     if (client) {
       client.settings = { ...settings }; // Update settings
@@ -158,6 +160,9 @@ export class Clients {
     if (this.clients.client[id]) {
       this.clients.removeClient(id);
       this.clients.stats.clientsCounter--;
+      if (this.clients.stats.clientsCounter == 0)
+        this.eV.emit(eventI.MainEventTypes.MAIN, { subType: eventI.SubEventTypes.MAIN.STOP_INTERVAL, message: 'Stop interval' });
+  
       // this.eV.emit(eventI.SubEventTypes.CLIENTS.UNSUBSCRIBE, client.info.id);
     }
   }
@@ -166,7 +171,7 @@ export class Clients {
     delete this.clients.client[clientId];
   }
 
-  public getClient(clientId: string): clientI.clientWrapper | undefined {
+  public getClient(clientId: string): clientWrapper | undefined {
     return this.clients.client[clientId];
   }
 }

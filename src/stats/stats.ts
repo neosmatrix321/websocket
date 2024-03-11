@@ -8,10 +8,10 @@ import si from 'systeminformation';
 
 import * as eventI from "../global/eventInterface";
 import { EventEmitterMixin } from "../global/EventEmitterMixin";
-import * as settingsI from '../settings/settingsInstance'; // Import settings interface/class
-import * as statsI from "./statsInstance";
-import { Settings, PRIVATE_SETTINGS_TOKEN } from "../settings/settings";
+import { IStats } from "./statsInstance";
+import { IprivateSettings } from '../settings/settingsInstance';
 
+export const PRIVATE_SETTINGS_TOKEN = Symbol('Settings');
 export const STATS_WRAPPER_TOKEN = Symbol('Stats');
 
 const EventMixin = EventEmitterMixin.getInstance();
@@ -19,13 +19,15 @@ const EventMixin = EventEmitterMixin.getInstance();
 @injectable()
 export class Stats {
   private eV: EventEmitterMixin = EventMixin;
-  private stats!: statsI.IStats;
+  protected stats: IStats;
+  protected settings: IprivateSettings;
   constructor(
-    @inject(STATS_WRAPPER_TOKEN) statsInstance: statsI.IStats,
-    @inject(Settings) private settingsService: Settings,
+    @inject(STATS_WRAPPER_TOKEN) statsInstance: IStats,
+    @inject(PRIVATE_SETTINGS_TOKEN) settingsInstance: IprivateSettings
   ) {
     this.eV = EventMixin;
     this.stats = statsInstance;
+    this.settings = settingsInstance;
     
     this.stats.lastUpdates = { "createStats": Date.now() };
     this.updateAllStats();
@@ -80,9 +82,9 @@ export class Stats {
 
   public async getPid(): Promise<boolean> {
     this.stats.lastUpdates = { "getPid": Date.now() };
-    readFile(this.settingsService.settings.pidFile, 'utf-8' as BufferEncoding).then((data) => { this.settingsService.settings.pid = parseInt(data, 10) }).then(() => {
-      this.settingsService.settings.pidFileExists = true;
-      this.settingsService.settings.pidFileReadable = true;
+    readFile(this.settings.pidFile, 'utf-8' as BufferEncoding).then((data) => { this.settings.pid = parseInt(data, 10) }).then(() => {
+      this.settings.pidFileExists = true;
+      this.settings.pidFileReadable = true;
       // const resultData: eventI.IBaseEvent = {
       //   mainTypes: [eventI.MainEventTypes.MAIN],
       //   subType: ["getPid"],
@@ -92,8 +94,8 @@ export class Stats {
       //   this.eV.emit(eventI.MainEventTypes.MAIN, resultData);
       return true;
       }).catch((error) => {
-      this.settingsService.settings.pidFileExists = false;
-      this.settingsService.settings.pidFileReadable = false;
+      this.settings.pidFileExists = false;
+      this.settings.pidFileReadable = false;
       const resultData: eventI.IBaseEvent = {
         subType: eventI.SubEventTypes.ERROR.INFO,
         message: '',
@@ -106,7 +108,7 @@ export class Stats {
   }
   public async updateAndGetPidIfNecessary(): Promise<boolean> {
     this.stats.lastUpdates = { "updateAndGetPidIfNecessary": Date.now() };
-    if (!this.settingsService.settings.pid || typeof this.settingsService.settings.pid !== "number" || !this.comparePids()) {
+    if (!this.settings.pid || typeof this.settings.pid !== "number" || !this.comparePids()) {
       this.stats.lastUpdates = { getpid: Date.now() };
       await this.getPid().then(() => {this.comparePids()}).then(() => { return true; }).catch((error) => {
         this.eV.emit(eventI.MainEventTypes.ERROR, {
@@ -124,9 +126,9 @@ export class Stats {
   async comparePids(): Promise<boolean> {
     this.stats.lastUpdates['comparePids'] = Date.now();
     try {
-      if (this.settingsService.settings.pid) {
+      if (this.settings.pid) {
         this.getSI().then(() => {
-          if (this.stats.si.pid == this.settingsService.settings.pid) this.getPU();
+          if (this.stats.si.pid == this.settings.pid) this.getPU();
         }).then(() => {
           return true;
         });
@@ -146,7 +148,7 @@ export class Stats {
   async getSI(): Promise<boolean> {
     this.stats.lastUpdates = { "getLatencyGoogle": Date.now() };
     try {
-      const targetProcess = (await si.processLoad("PalServer-Linux")).find((p) => p.pid === this.settingsService.settings.pid);
+      const targetProcess = (await si.processLoad("PalServer-Linux")).find((p) => p.pid === this.settings.pid);
       if (targetProcess) {
         this.stats.si = { proc: targetProcess.proc, pid: targetProcess.mem, cpu: targetProcess.pid, mem: targetProcess.mem };
         return true;
@@ -166,7 +168,7 @@ export class Stats {
   async getPU(): Promise<boolean> {
     this.stats.lastUpdates = { 'getPU': Date.now() };
     try {
-      const usage = await pidusage(this.settingsService.settings.pid);
+      const usage = await pidusage(this.settings.pid);
       if (usage) {
         this.stats.pu = { cpu: usage.cpu, memory: usage.memory, pid: usage.pid, ctime: usage.ctime, elapsed: usage.elapsed, timestamp: usage.timestamp }; // Map relevant properties
         return true;
