@@ -1,16 +1,12 @@
 "use strict";
 import "reflect-metadata";
-import { inject, injectable, optional } from 'inversify';
-import * as eM from "../global/EventEmitterMixin";
-import * as eH from "../global/eventInterface";
-import * as clientI from "../clients/clientInstance";
 
 // Interfaces (potentially in a separate file, interfaces.ts)
 import { WebSocketServer, WebSocket } from 'ws'
 
 interface IHandle {
   web: WebSocketServer;
-  file: any;
+  file: WebSocketServer;
 }
 interface IHandleStats {
   dummy: number;
@@ -22,42 +18,30 @@ interface IHandleSettings {
   rconPort: number;
   streamServerPort: number;
 }
-export interface IHandleWrapper {
-  _handle: IHandle;
-  _stats: IHandleStats;
-  _settings: IHandleSettings;
+export interface IServerWrapper {
+  handle: IHandle;
+  stats: IHandleStats;
+  settings: IHandleSettings;
 }
 
-export interface IserverWrapper {
-  killAll(): void;
-}
+export default class serverWrapper implements IServerWrapper{
+  handle: IHandle = {
+    web: new WebSocketServer({ noServer: true }),
+    file: new WebSocketServer({ noServer: true })
+  };
+  stats: IHandleStats = { dummy: 0 };
+  settings: IHandleSettings = {
+    certPath: '/etc/letsencrypt/live/neo.dnsfor.me/cert.pem',
+    keyPath: '/etc/letsencrypt/live/neo.dnsfor.me/privkey.pem',
+    ip: "192.168.228.7",
+    rconPort: 25575,
+    streamServerPort: 8080
+  };
+  public constructor() { }
 
-@injectable()
-export default class serverWrapper {
-  protected server: IHandleWrapper;
-  public constructor(@inject(SERVER_WRAPPER_TOKEN) @optional() server: IHandleWrapper) {
-    this.server = server || {
-      _handle: {
-        web: null,
-        file: null
-      },
-      _stats: {
-        dummy: 0
-      },
-      _settings: {
-        certPath: '/etc/letsencrypt/live/neo.dnsfor.me/cert.pem',
-        keyPath: '/etc/letsencrypt/live/neo.dnsfor.me/privkey.pem',
-        ip: "192.168.228.7",
-        rconPort: 25575,
-        streamServerPort: 8080
-      }
-    };
-  }
-
-  
-  public killAll() {
-    console.log('no please!');
-  }
+  // public killAll() {
+  //   console.log('no please!');
+  // }
   // getHandleProperty(property: string): any {
   //    return this.server.getHandleProperty(property);
   // }
@@ -66,4 +50,3 @@ export default class serverWrapper {
   //   this.server.setHandleProperty(property, value);
   // }
 }
-export const SERVER_WRAPPER_TOKEN = Symbol('serverWrapper');

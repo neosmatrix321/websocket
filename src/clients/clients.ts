@@ -2,18 +2,16 @@
 import { inject, injectable } from "inversify";
 import * as clientI from "./clientInstance";
 import si from 'systeminformation';
-import * as eM from "../global/EventEmitterMixin";
 import * as eventI from "../global/eventInterface";
 import { WebSocket } from 'ws';
 import { EventEmitterMixin } from "../global/EventEmitterMixin";
 
-const EventMixin = EventEmitterMixin.getInstance();
 export const CLIENTS_WRAPPER_TOKEN = Symbol('clientsWrapper');
 
 
 @injectable()
-export default class Clients {
-  private eV: eM.EventEmitterMixin = EventMixin;
+export class Clients {
+  private eV: EventEmitterMixin = EventEmitterMixin.getInstance();
   @inject(CLIENTS_WRAPPER_TOKEN) protected clients!: clientI.clientsWrapper
   constructor() {
     this.eV.on(eventI.MainEventTypes.CLIENTS, this.handleClientsEvent.bind(this));

@@ -1,8 +1,6 @@
 "use strict";
 import "reflect-metadata";
 import { Container, inject, injectable } from "inversify";
-import { WebSocket } from 'ws'
-import { Server as httpsServer } from "http";
 import { EventEmitterMixin } from "./global/EventEmitterMixin";
 // import Stats from "./stats/stats";
 // import Server from "./server/server";
@@ -12,9 +10,10 @@ import * as serverI from "./server/serverInstance";
 import * as clientsI from "./clients/clientInstance";
 import * as settingsI from "./settings/settingsInstance";
 import * as eventI from "./global/eventInterface";
-import Stats from "./stats/stats";
-import Server from "./server/server";
-import Clients, { CLIENTS_WRAPPER_TOKEN } from "./clients/clients";
+import { Stats, STATS_WRAPPER_TOKEN } from "./stats/stats";
+import { Server, SERVER_WRAPPER_TOKEN } from "./server/server";
+import { Clients, CLIENTS_WRAPPER_TOKEN } from "./clients/clients";
+import { Settings, PRIVATE_SETTINGS_TOKEN } from "./settings/settings";
 
 const FirstEvent = new eventI.DebugEvent({
   subType: eventI.SubEventTypes.BASIC.FIRST,
@@ -44,27 +43,26 @@ const EventMixin = EventEmitterMixin.getInstance();
 
 @injectable()
 export class Main {
-  protected eV: typeof EventMixin;
+  protected eV: EventEmitterMixin = EventMixin;
   protected stats: statsI.IStats;
-  protected server: serverI.IHandleWrapper;
+  protected server: serverI.IServerWrapper;
   protected clients: clientsI.IClientsWrapper;
-  protected settings: settingsI.ISettings;
 
   public constructor(
-    @inject(statsI.STATS_WRAPPER_TOKEN) statsInstance: statsI.IStats,
-    @inject(serverI.SERVER_WRAPPER_TOKEN) serverInstance: serverI.IHandleWrapper,
+    @inject(STATS_WRAPPER_TOKEN) statsInstance: statsI.IStats,
+    @inject(SERVER_WRAPPER_TOKEN) serverInstance: serverI.IServerWrapper,
     @inject(CLIENTS_WRAPPER_TOKEN) clientsInstance: clientsI.IClientsWrapper,
-    @inject(settingsI.PRIVATE_SETTINGS_TOKEN) settingsInstance: settingsI.ISettings,
     @inject(Stats) private statsService: Stats,
     @inject(Server) private serverService: Server,
-    @inject(Clients) private clientsService: Clients
+    @inject(Clients) private clientsService: Clients,
+    @inject(Settings) private settingsService: Settings,
+
   ) {
     this.eV = EventMixin;
     this.stats = statsInstance;
     this.server = serverInstance;
     this.clients = clientsInstance;
-    this.settings = settingsInstance;
-    console.log("Main constructor: ", this.stats, this.server, this.clients, this.settings);
+    console.log("Main constructor: ", this.stats, this.server, this.clients, this.settingsService.settings.pid);
     this.setupEventHandlers();
     this.eV.emit(eventI.MainEventTypes.BASIC, FirstEvent);
     // this.initialize();
@@ -165,4 +163,3 @@ export class Main {
   //   });
   // }
 }
-

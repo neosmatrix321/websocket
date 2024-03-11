@@ -1,7 +1,6 @@
 "use strict";
 import 'reflect-metadata';
-import { inject, injectable } from "inversify";
-import Clients from './clients';
+import { Clients } from './clients';
 import { WebSocket } from 'ws';
 
 export enum ClientType {
@@ -87,7 +86,6 @@ export interface IClientsWrapper {
   stats: IClientsStats;
 }
 
-@injectable()
 export class clientsWrapper extends Clients {
   client: Record<string, IClientWrapper> = {};
   stats: IClientsStats = {
