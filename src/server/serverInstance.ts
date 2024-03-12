@@ -15,8 +15,9 @@ interface IHandleSettings {
   certPath: string;
   keyPath: string;
   ip: string;
-  rconPort: number;
   streamServerPort: number;
+  rconIP: string;
+  rconPort: number;
 }
 export interface IServerWrapper {
   handle: IHandle;
@@ -34,8 +35,9 @@ export default class serverWrapper implements IServerWrapper{
     certPath: '/etc/letsencrypt/live/neo.dnsfor.me/cert.pem',
     keyPath: '/etc/letsencrypt/live/neo.dnsfor.me/privkey.pem',
     ip: "0.0.0.0",
+    streamServerPort: 8080,
+    rconIP: "192.168.228.7",
     rconPort: 25575,
-    streamServerPort: 8080
   };
   public constructor() { }
 
