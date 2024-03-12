@@ -12,9 +12,9 @@ export enum ClientType {
 }
 
 export interface MyWebSocket extends WebSocket {
-  id: string;
-  ip: string;
-  type: string;
+  id: string | undefined;
+  ip: string | undefined;
+  type: string | undefined;
 }
 
 export interface IClientInfo {

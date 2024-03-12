@@ -6,7 +6,7 @@ import { EventEmitterMixin } from "./global/EventEmitterMixin";
 // import Server from "./server/server";
 // import Clients from "./clients/clients";
 import { ClientType } from "./clients/clientInstance";
-import { DebugEvent, SubEventTypes, MainEventTypes, IEventTypes } from "./global/eventInterface";
+import { DebugEvent, SubEventTypes, MainEventTypes, IEventTypes, createCustomDebugEvent } from "./global/eventInterface";
 import { Stats } from "./stats/stats";
 import { Server } from "./server/server";
 import { Clients } from "./clients/clients";
@@ -19,9 +19,11 @@ const FirstEvent = new DebugEvent({
   message: "First event",
   success: true,
   data: "First event data",
+  debugEvent: { enabled: true }
+});
+/*
   statsEvent: {
     statsId: 1,
-    newValue: 100,
     updatedFields: ["newValue"]
   },
   mainEvent: {
@@ -35,9 +37,7 @@ const FirstEvent = new DebugEvent({
   },
   clientsEvent: { id: "", ip: "", clientType: ClientType.Unknown },
   errorEvent: { errCode: 0, error: new Error("First event error") },
-  debugEvent: { enabled: true }
-});
-
+*/
 const EventMixin = EventEmitterMixin.getInstance();
 
 @injectable()
@@ -61,13 +61,25 @@ export class Main {
     // });  
   }
 
-  @postConstruct()
   protected setupEventHandlers() {
     // ... (your other event handlers)
     // Main event handler
-    this.eV.on(MainEventTypes.MAIN, this.handleMainEvent);
+    this.eV.on(MainEventTypes.BASIC, (event: IEventTypes) => {
+      console.log(`BASIC message: ${event.message} with type: ${event.subType}`);
+      // console.log(createCustomDebugEvent(event, ...data));
+      if (event.data)
+        console.dir(createCustomDebugEvent(event.data), { depth: null, colors: true });
+    });
+    this.eV.on(MainEventTypes.MAIN, this.handleMainEvent.bind(this));
     this.eV.on(MainEventTypes.ERROR, (errorEvent: IEventTypes) => {
-      console.error("Global Error Handler:", errorEvent);
+      // console.log(errorEvent);
+      console.error(`Global ERROR Handler: ${errorEvent.message}`);
+      // console.dir(errorEvent, { depth: null, colors: true });
+    });
+    this.eV.on(MainEventTypes.DEBUG, (errorEvent: IEventTypes) => {
+      // console.log(errorEvent);
+      console.error(`Global DEBUG Handler: ${errorEvent.message}`);
+      // console.dir(errorEvent, { depth: null, colors: true });
     });
     // Stats event handler
     // Server event handler
@@ -101,53 +113,54 @@ export class Main {
   }
 
   private handleMainEvent(event: IEventTypes) {
-    switch (event.subType?.[0]) {
+    switch (event.subType) {
       case SubEventTypes.MAIN.START_INTERVAL:
-        this.IntervalStart();
+        this.intervalStart();
         break;
       case SubEventTypes.MAIN.STOP_INTERVAL:
-        this.IntervalStop();
+        this.intervalStop();
         break;
       // ... other MAIN subType
       default:
-        console.warn('Unknown main event subtype:', event.subType?.[0]);
+        console.warn('Unknown main event subtype:', event.subType);
     }
   }
 
-  public IntervalStart() {
+  private intervalStart() {
     if (!this.sendInfoInterval) {
+      console.log(`intervalStart: Interval started.`);
       this.sendInfoInterval = setInterval(() => {
-        this.stats?.updateAndGetPidIfNecessary().then((result) => {
-          if (result) {
-            this.eV.emit(MainEventTypes.STATS, {
-              subType: SubEventTypes.STATS.UPDATE_ALL
-            });
-            this.eV.emit(MainEventTypes.CLIENTS, {
-              subType: SubEventTypes.CLIENTS.UPDATE_ALL_STATS
-            });
-            this.clients?.handleClientsUpdateStats();
-          }
-        }).catch((error) => {
+        try {
+          this.eV.emit(MainEventTypes.STATS, {
+            subType: SubEventTypes.STATS.UPDATE_ALL
+          });
+          this.eV.emit(MainEventTypes.CLIENTS, {
+            subType: SubEventTypes.CLIENTS.UPDATE_ALL_STATS
+          });
+          // this.clients.handleClientsUpdateStats();
+        } catch (error) {
           this.eV.emit(MainEventTypes.ERROR, {
-            mainTypes: [SubEventTypes.ERROR.INFO],
-            subType: ["IntervalStartStop"],
+            subType: SubEventTypes.ERROR.INFO,
             message: 'Error updating stats',
             success: false,
             errorEvent: { errCode: 2, data: { error } }
           });
-        });
+        }
       }, 5000);
-    } else {
-      console.log("IntervalStartStop: no action taken. clientsCounter:", this.sendInfoInterval);
     }
+    //  else {
+    //   console.log("intervalStart: no action taken. clientsCounter:");
+    // }
   }
-  public IntervalStop() {
+  private intervalStop() {
     if (this.sendInfoInterval) {
       clearInterval(this.sendInfoInterval);
       this.sendInfoInterval = null;
-    } else {
-      console.log("IntervalStartStop: no action taken. clientsCounter:", this.sendInfoInterval);
+      console.log("intervalStop: Interval stopped.");
     }
+    //  else {
+    //   console.log("intervalStop: no action taken. clientsCounter:");
+    // }
   }
 
   // private async gatherAndSendStats() {

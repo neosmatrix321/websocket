@@ -1,6 +1,6 @@
 "use strict";
 
-import { ClientType } from "../clients/clientInstance";
+import { ClientType, MyWebSocket } from "../clients/clientInstance";
 import { DEFAULT_VALUE_CALLBACKS } from "../global/EventEmitterMixin";
 
 export const MainEventTypes = {
@@ -45,6 +45,7 @@ export const SubEventTypes = {
     UPDATE_SETTINGS: 'UPDATE_SETTINGS',
     MESSAGE: 'MESSAGE',
     GREETING: 'GREETING',
+    OTHER: 'OTHER'
   },
   ERROR: {
     INFO: 'INFO',
@@ -55,14 +56,14 @@ export const SubEventTypes = {
 
 
 export interface IBaseEvent {
-  subType?: string;
-  success?: boolean;
+  subType: string;
+  success: boolean;
   message: string;
   data?: any;
   statsEvent?: { statsId?: number, newValue?: any, oldValue?: any, updatedFields?: any };
   mainEvent?: { pid?: number };
   serverEvent?: { timerId?: number, startTime?: number, endTime?: number, duration?: number };
-  clientsEvent?: { id?: string, ip?: string, clientType: ClientType, message?: string };
+  clientsEvent?: { id: string, ip?: string, clientType?: ClientType, message?: string, client?: MyWebSocket };
   errorEvent?: { errCode: number, error?: Error, message?: string, data?: any };
 }
 
@@ -87,9 +88,9 @@ export class BaseEvent implements IBaseEvent {
       timerId: -1, startTime: -1, endTime: -1, duration: -1
     };
   clientsEvent?: {
-    id: string, ip: string, clientType: ClientType, message?: string
+    id: string, ip?: string, clientType?: ClientType, message?: string, client?: MyWebSocket
   } = {
-      id: "", ip: "", clientType: ClientType.Unknown, message: ""
+      id: "", ip: "", clientType: ClientType.Unknown, message: "", client: undefined
     };
   errorEvent?: {
     errCode: number, error?: Error, data?: any, message?: string
@@ -149,6 +150,19 @@ export interface IEventStats {
 export interface IEventManager {
   stats: IEventStats;
 }
+export function createCustomDebugEvent(event: any, data?: any) {
+  const customDebugEvent = new DebugEvent({
+    subType: SubEventTypes.BASIC.DEFAULT,
+    message: event,
+    success: false,
+    data: data || "No data provided",
+    clientsEvent: { id: "", ip: "", clientType: ClientType.Unknown },
+    errorEvent: { errCode: 0, error: new Error("First event error") },
+    debugEvent: { enabled: true }
+  });
+  return customDebugEvent;
+}
+
 // export interface IEventTypes {
 //   [key: string]: { // Main event categories
 //     [key: string]: any; // subType

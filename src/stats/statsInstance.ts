@@ -32,7 +32,7 @@ export class statsWrapper implements IStats {
   public si = { proc: '', pid: 0, cpu: 0, mem: 0 };
   public pu = { cpu: 0, memory: 0, pid: 0, ctime: 0, elapsed: 0, timestamp: 0 };
   public rcon = {};
-  public lastUpdates = {};
+  public lastUpdates = { "init": Date.now()};
   public interval_sendinfo = false;
   constructor() { }
 }

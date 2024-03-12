@@ -1,6 +1,6 @@
 import { EventEmitter } from "events";
 import "reflect-metadata";
-import { MainEventTypes, IEventTypes, SubEventTypes, IEventStats, DebugEvent, BaseEvent } from "./eventInterface";
+import { MainEventTypes, IEventTypes, SubEventTypes, IEventStats, DebugEvent, BaseEvent, createCustomDebugEvent } from "./eventInterface";
 
 
 export const DEFAULT_VALUE_CALLBACKS = {
@@ -34,14 +34,15 @@ export class EventEmitterMixin {
     } else {
     }
   }
-  private updateDebugData( ...customData: DebugEvent[] ): IEventTypes {
+  private updateDebugData(...customData: DebugEvent[]): IEventTypes {
     if (customData[0] && customData[0].debugEvent && customData[0].debugEvent.enabled) {
       let debugEvent;
       if (customData[0].debugEvent.eventName) {
         customData[0].updateData(); // Calculate debug data
         debugEvent = customData[0].debugEvent;
       } else if (!customData[0].debugEvent.eventName) {
-        debugEvent = { debugEvent: {
+        debugEvent = {
+          debugEvent: {
             enabled: true,
             eventName: "debugEvent",
           }
@@ -60,7 +61,7 @@ export class EventEmitterMixin {
       }
       const originalEvent = this._events.get(event);
       if (!originalEvent) {
-        const newData = new BaseEvent({data: JSON.stringify(event)});
+        const newData = new BaseEvent({ data: JSON.stringify(event) });
         newData.errorEvent = { errCode: 6, data: { event, args } };
         this.emitError(MainEventTypes.ERROR, newData);
         return { customKey: SubEventTypes.ERROR.WARNING, customData: newData };
@@ -70,7 +71,7 @@ export class EventEmitterMixin {
       // Get the stored event (could be BaseEvent for unknown ones) and merge
       return { ...this._events.get(event), ...updatedData };
     } catch (error) {
-      const newData = new BaseEvent({data: JSON.stringify(event)});
+      const newData = new BaseEvent({ data: JSON.stringify(event) });
       this.emitError(MainEventTypes.ERROR, newData);
       return { customKey: SubEventTypes.ERROR.WARNING, customData: newData };
     }
@@ -88,7 +89,7 @@ export class EventEmitterMixin {
   }
   private emitError(event: string, error?: any): void {
     const newEvent: BaseEvent = {
-      ...(new BaseEvent({ subType: MainEventTypes.ERROR }) as BaseEvent),
+      ...(new BaseEvent({ subType: SubEventTypes.ERROR.INFO }) as BaseEvent),
       errorEvent: {
         errCode: 2, // A sample error code
         error: new Error('Something went wrong'), // A sample error
@@ -109,34 +110,41 @@ export class EventEmitterMixin {
   public async on(event: string, listener: (...args: any[]) => void) {
     EventEmitterMixin.stats.activeEvents++;
     EventEmitterMixin.stats.eventCounter++;
-    const eventData = this.createEvent(event, listener);
-    this.storeEvent(event, listener); // Ensure the event is registered
-    this._emitter.on(event.toString(), listener);
+    if (!this._events.has(event)) {
+      this.storeEvent(event, listener); // Ensure the event is registered
+    }
+    console.warn('EventEmitterMixin.on:', createCustomDebugEvent(event, listener));	
+    this._emitter.on(event, listener);
   }
   public async prepend(event: string, listener: (...args: any[]) => void) {
-    this.storeEvent(event, listener);
-    this._emitter.prependListener(event.toString(), listener); // Use prependListener
+    // this.storeEvent(event, listener);
+    console.warn('EventEmitterMixin.prepend:', createCustomDebugEvent(event, listener));	
+    this._emitter.prependListener(event, listener); // Use prependListener
   }
 
   public async off(event: string, listener: (...args: any[]) => void) {
     EventEmitterMixin.stats.activeEvents--;
-    this._emitter.off(event.toString(), listener);
+    console.warn('EventEmitterMixin.off:', createCustomDebugEvent(event, listener));	
+    this._emitter.off(event, listener);
   }
 
   public async emit(event: string, ...args: any[]) {
-    const eventData = this.createEvent(event, ...args);
-    if (!eventData) {
-      return; // Handle event creation failure
-    }
+    // const eventData = this.createEvent(event, ...args);
+    // if (!eventData) {
+    //   return; // Handle event creation failure
+    // }
 
     // this._events.push(eventData); // ??
-    this._emitter.emit(event.toString(), eventData);
+    // this.emit(MainEventTypes.ERROR, createCustomDebugEvent(event, ...args));	
+
+    // console.warn('EventEmitterMixin.emit:', createCustomDebugEvent(event, ...args));	
+    this._emitter.emit(event, ...args);
   }
   public static getInstance(): EventEmitterMixin {
-      if (!EventEmitterMixin._instance) {
-          EventEmitterMixin._instance = new EventEmitterMixin();
-      }
-      return EventEmitterMixin._instance;
+    if (!EventEmitterMixin._instance) {
+      EventEmitterMixin._instance = new EventEmitterMixin();
+    }
+    return EventEmitterMixin._instance;
   }
 }
 
@@ -153,7 +161,7 @@ export class EventEmitterMixin {
 //   }
 // }
 
-/* 
+/*
 https://github.com/neosmatrix321/websocket/tree/master
 */
 
@@ -176,147 +184,147 @@ https://github.com/neosmatrix321/websocket/tree/master
 //   clientSettingsUpdated(event: eH.IEventTypes): void;
 // }
 
-  // private setupEventHandlers() {
-  //   this.registerEventHandler(eH.MainEventTypes.MAIN, this.handleMainEvent);
-  //   this.registerEventHandler(eH.MainEventTypes.STATS, this.handleStatsEvent);
-  //   this.registerEventHandler(eH.MainEventTypes.SERVER, this.handleServerEvent);
-  //   // ... register other top-level event handlers 
-  // }
+// private setupEventHandlers() {
+//   this.registerEventHandler(eH.MainEventTypes.MAIN, this.handleMainEvent);
+//   this.registerEventHandler(eH.MainEventTypes.STATS, this.handleStatsEvent);
+//   this.registerEventHandler(eH.MainEventTypes.SERVER, this.handleServerEvent);
+//   // ... register other top-level event handlers
+// }
 
-  // private registerEventHandler(eventType: string, handler: (event: eH.IEventTypes) => void) {
-  //   this.on(eventType, (event: eH.IEventTypes) => {
-  //     if (event.subType) { // Assuming your events have subType
-  //       handler.call(this, event); // Call the handler in the context of 'this'
-  //     } else {
-  //       this.handleError(new Error(`${eventType} event data missing`));
-  //     }
-  //   });
-  // }
+// private registerEventHandler(eventType: string, handler: (event: eH.IEventTypes) => void) {
+//   this.on(eventType, (event: eH.IEventTypes) => {
+//     if (event.subType) { // Assuming your events have subType
+//       handler.call(this, event); // Call the handler in the context of 'this'
+//     } else {
+//       this.handleError(new Error(`${eventType} event data missing`));
+//     }
+//   });
+// }
 
-  // private handleDebugEvent(event: eH.IEventTypes) {
-  //   this.on(eH.MainEventTypes.DEBUG, (event: eH.DebugEvent) => {
-  //     if (event.debug.endTime) { // Check if timing completed
-  //       const duration = event.debug.endTime - event.debug.startTime;
-  //       console.log(`Debug Event '${event.debug.eventName}' took ${duration}ms`);
-  //     }
-  //   });
-  // }
+// private handleDebugEvent(event: eH.IEventTypes) {
+//   this.on(eH.MainEventTypes.DEBUG, (event: eH.DebugEvent) => {
+//     if (event.debug.endTime) { // Check if timing completed
+//       const duration = event.debug.endTime - event.debug.startTime;
+//       console.log(`Debug Event '${event.debug.eventName}' took ${duration}ms`);
+//     }
+//   });
+// }
 
-  // handleStartStopTimer(event: eH.IEventTypes) {
-  //   throw new Error("Method not implemented.");
-  // }
+// handleStartStopTimer(event: eH.IEventTypes) {
+//   throw new Error("Method not implemented.");
+// }
 
-  // private handleStatsUpdated(event: eH.IEventTypes): void {
-  //   try {
-  //     this.clientMessageReady(event);
-  //     //  this.on(eH.MainEventTypes.PID_AVAILABLE, this.handleStatsUpdated.bind(this));
-  //   } catch (error) {
-  //     this.handleError(new Error('statsUpdated'), error); // Or a custom error type
-  //   }
-  // }
+// private handleStatsUpdated(event: eH.IEventTypes): void {
+//   try {
+//     this.clientMessageReady(event);
+//     //  this.on(eH.MainEventTypes.PID_AVAILABLE, this.handleStatsUpdated.bind(this));
+//   } catch (error) {
+//     this.handleError(new Error('statsUpdated'), error); // Or a custom error type
+//   }
+// }
 
-  // private handleStartTimer(event: eH.IEventTypes): void {
-  //   console.log('Start timer event received:', event);
-  //   // You can start a timer here
-  //   const timerId = setTimeout(() => {
-  //     console.log('Timer ended');
-  //     // Emit timer ended event
-  //     this.emit(eH.MainEventTypes.MAIN, { subType: eH.SubEventTypes.MAIN.TIMER_STOPPED, timestamp: Date.now() });
-  //   }, 1000); // For example, wait for 1 second
-  //   // Store timerId if you need to clear it later
-  // }
+// private handleStartTimer(event: eH.IEventTypes): void {
+//   console.log('Start timer event received:', event);
+//   // You can start a timer here
+//   const timerId = setTimeout(() => {
+//     console.log('Timer ended');
+//     // Emit timer ended event
+//     this.emit(eH.MainEventTypes.MAIN, { subType: eH.SubEventTypes.MAIN.TIMER_STOPPED, timestamp: Date.now() });
+//   }, 1000); // For example, wait for 1 second
+//   // Store timerId if you need to clear it later
+// }
 
-  // private serverActive(event: eH.IEventTypes): void {
-  //   console.error("Method not implemented.");
-  // }
+// private serverActive(event: eH.IEventTypes): void {
+//   console.error("Method not implemented.");
+// }
 
-  // private handleTimerStarted(event: eH.IEventTypes): void {
-  //   if (!event[eH.MainEventTypes.MAIN]) return;
-  //   const timerEvent = event[eH.MainEventTypes.MAIN] as MainEvent;
-  //   // 1. Store timer information (you might use a database or in-memory structure)
-  //   this.activeTimers.set(timerEvent.mainEvent.pid, {
-  //     startTime: timerEvent.timestamp
-  //   });
-  // }
+// private handleTimerStarted(event: eH.IEventTypes): void {
+//   if (!event[eH.MainEventTypes.MAIN]) return;
+//   const timerEvent = event[eH.MainEventTypes.MAIN] as MainEvent;
+//   // 1. Store timer information (you might use a database or in-memory structure)
+//   this.activeTimers.set(timerEvent.mainEvent.pid, {
+//     startTime: timerEvent.timestamp
+//   });
+// }
 
-  // public async handleClientConnected(event: eH.IEventTypes): Promise<void> {
-  //   const newEvent: eH.IEventTypes = {
-  //     subType: eH.SubEventTypes.CLIENT_CONNECTED, // or another appropriate type
-  //     message: 'Client connected',
-  //     success: false,
-  //     timestamp: Date.now(),
-  //     data: {
-  //       errCode: 0, // or another appropriate code
-  //       blob: event
-  //     }
-  //   };
-  //   this.emit(eH.MainEventTypes.SERVER, newEvent);
-  // }
+// public async handleClientConnected(event: eH.IEventTypes): Promise<void> {
+//   const newEvent: eH.IEventTypes = {
+//     subType: eH.SubEventTypes.CLIENT_CONNECTED, // or another appropriate type
+//     message: 'Client connected',
+//     success: false,
+//     timestamp: Date.now(),
+//     data: {
+//       errCode: 0, // or another appropriate code
+//       blob: event
+//     }
+//   };
+//   this.emit(eH.MainEventTypes.SERVER, newEvent);
+// }
 
 
-  // private processClientMessage(message: string): any {
-  //   // Implement your message parsing and processing logic here
-  //   // Example - assume a simple JSON format
-  //   try {
-  //     return JSON.parse(message);
-  //   } catch (error) {
-  //     this.handleError(error);
-  //     return { subType: 'unknown' }; // Default to unknown type 
-  //   }
-  // }
+// private processClientMessage(message: string): any {
+//   // Implement your message parsing and processing logic here
+//   // Example - assume a simple JSON format
+//   try {
+//     return JSON.parse(message);
+//   } catch (error) {
+//     this.handleError(error);
+//     return { subType: 'unknown' }; // Default to unknown type
+//   }
+// }
 
-  // public handleClientMessage(event: eH.IEventTypes): void {
-  //   if (event[eH.MainEventTypes.CLIENTS] && event[eH.MainEventTypes.CLIENTS].clientId) {
-  //     const clientId = event[eH.MainEventTypes.CLIENTS].clientId;
-  //     // Example 1: Update stats based on message
-  //     if (event.data && event.data.type === 'update_stats') {
-  //       Main.clients._clients.updateClientStats(clientId, event.data.stats);
-  //     }
-  //     // Example 2: Forward message to other clients (hypothetical)
-  //     if (event.data && event.data.type === 'broadcast') {
-  //       this.broadcastMessage(clientId, event.data.message);
-  //     }
-  //   } else {
-  //     console.warn('Invalid client message format');
-  //   }
-  //   this.emit(eH.MainEventTypes.SERVER, newEvent);
-  // }
-  // public updateClientStats() {
-  //   console.error("Method not implemented.");
-  // }
-  // public broadcastMessage(clientId: string, message?: string) {
-  //   console.error("Method not implemented.");
-  // }
+// public handleClientMessage(event: eH.IEventTypes): void {
+//   if (event[eH.MainEventTypes.CLIENTS] && event[eH.MainEventTypes.CLIENTS].clientId) {
+//     const clientId = event[eH.MainEventTypes.CLIENTS].clientId;
+//     // Example 1: Update stats based on message
+//     if (event.data && event.data.type === 'update_stats') {
+//       Main.clients._clients.updateClientStats(clientId, event.data.stats);
+//     }
+//     // Example 2: Forward message to other clients (hypothetical)
+//     if (event.data && event.data.type === 'broadcast') {
+//       this.broadcastMessage(clientId, event.data.message);
+//     }
+//   } else {
+//     console.warn('Invalid client message format');
+//   }
+//   this.emit(eH.MainEventTypes.SERVER, newEvent);
+// }
+// public updateClientStats() {
+//   console.error("Method not implemented.");
+// }
+// public broadcastMessage(clientId: string, message?: string) {
+//   console.error("Method not implemented.");
+// }
 
-  // public handleClientDisconnected(event: eH.IEventTypes): void {
-  //   const newEvent: eH.IEventTypes = {
-  //     subType: eH.SubEventTypes.CLIENT_DISCONNECTED, // or another appropriate type
-  //     message: 'Client disconnected',
-  //     success: true,
-  //     timestamp: Date.now(),
-  //     data: {
-  //       errCode: 0, // or another appropriate code
-  //       blob: event
-  //     }
-  //   };
-  //   this.handleError(new Error(newEvent.message)); // Or a custom error type
-  // }
+// public handleClientDisconnected(event: eH.IEventTypes): void {
+//   const newEvent: eH.IEventTypes = {
+//     subType: eH.SubEventTypes.CLIENT_DISCONNECTED, // or another appropriate type
+//     message: 'Client disconnected',
+//     success: true,
+//     timestamp: Date.now(),
+//     data: {
+//       errCode: 0, // or another appropriate code
+//       blob: event
+//     }
+//   };
+//   this.handleError(new Error(newEvent.message)); // Or a custom error type
+// }
 
-  // private clientBye(event: eH.IEventTypes): void {
-  //   if (event[eH.MainEventTypes.CLIENTS]) {
-  //     // Example logic - you'll need to replace with your specific functionality
-  //     console.log(eH.MainEventTypes.CLIENTS, `Client disconnected: ${event[eH.MainEventTypes.CLIENTS]}`);
-  //   } else {
-  //     console.error("Client disconnection event missing clientId");
-  //   }
-  // }
+// private clientBye(event: eH.IEventTypes): void {
+//   if (event[eH.MainEventTypes.CLIENTS]) {
+//     // Example logic - you'll need to replace with your specific functionality
+//     console.log(eH.MainEventTypes.CLIENTS, `Client disconnected: ${event[eH.MainEventTypes.CLIENTS]}`);
+//   } else {
+//     console.error("Client disconnection event missing clientId");
+//   }
+// }
 
-  // public clientMessageReady(event: eH.IEventTypes): void {
-  //   console.error("Method not implemented.");
-  // }
-  // handleLatencyStopped(event: any) {
-  //   console.error("Method not implemented.");
-  // }
-  // handleTimerCreated(event: any) {
-  //   console.error("Method not implemented.");
-  // }
+// public clientMessageReady(event: eH.IEventTypes): void {
+//   console.error("Method not implemented.");
+// }
+// handleLatencyStopped(event: any) {
+//   console.error("Method not implemented.");
+// }
+// handleTimerCreated(event: any) {
+//   console.error("Method not implemented.");
+// }
