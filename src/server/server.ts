@@ -9,7 +9,7 @@ import { inject, injectable, postConstruct } from 'inversify';
 
 import { EventEmitterMixin } from "../global/EventEmitterMixin";
 import serverWrapper, { IServerWrapper } from "../server/serverInstance";
-import { MainEventTypes, IEventTypes, SubEventTypes, IBaseEvent, BaseEvent } from "../global/eventInterface";
+import { MainEventTypes, IEventTypes, SubEventTypes, IBaseEvent, BaseEvent, IClientsEvent, debugDataCallback } from "../global/eventInterface";
 import { MyWebSocket } from "../clients/clientInstance";
 
 
@@ -34,7 +34,7 @@ export class Server {
   private setupWebSocketListeners() {
     this.server.handle.web.on('connection', (client: WebSocket, request: IncomingMessage) => {
       // Emit your 'connect' event
-      const connectEvent: BaseEvent = {
+      const connectEvent: IClientsEvent = {
         subType: SubEventTypes.CLIENTS.SUBSCRIBE,
         message: "Client Connected",
         success: true,
@@ -63,7 +63,7 @@ export class Server {
       // Consider emitting a client-specific error event here too
     });
   }
-  private handleServerEvent(event: IEventTypes) {
+  private handleServerEvent(event: IClientsEvent) {
     switch (event.subType) {
       // case SubEventTypes.SERVER.LISTEN:
       //   this.handleStartTimer(event);
@@ -101,6 +101,12 @@ export class Server {
   // }
 
   public async createServer() {
+    const idleEvent = new BaseEvent({
+      subType: SubEventTypes.BASIC.DEFAULT,
+      message: "Idle event",
+      success: true,
+      debugEvent: debugDataCallback,
+    });
     try {
       const _serverCert = createServer({
         cert: readFileSync(this.server.settings.certPath),
@@ -111,7 +117,7 @@ export class Server {
         //  ... adjust upgrade handling as needed ...
         this.server.handle.web.handleUpgrade(request, socket, head, (client: WebSocket, request: IncomingMessage) => {
           const webSocketStream = createWebSocketStream(client as MyWebSocket, { objectMode: true });
-          const connectEvent: BaseEvent = {
+          const connectEvent: IClientsEvent = {
             subType: `${SubEventTypes.CLIENTS.SUBSCRIBE}`,
             message: `Client connected id: ${request.headers['sec-websocket-key']}`,
             success: true,
@@ -121,7 +127,7 @@ export class Server {
           this.eV.emit(MainEventTypes.CLIENTS, connectEvent);
           webSocketStream.on('end', () => {
             console.log('WebSocket connection ended');
-            const disconnectEvent: BaseEvent = {
+            const disconnectEvent: IClientsEvent = {
               subType: `${SubEventTypes.CLIENTS.UNSUBSCRIBE}`,
               message: `Client disconnected id: ${request.headers['sec-websocket-key']}`,
               success: true,
@@ -132,7 +138,7 @@ export class Server {
           });
 
           webSocketStream.on('error', (error) => {
-            const connectEvent: BaseEvent = {
+            const connectEvent: IClientsEvent = {
               subType: `${SubEventTypes.CLIENTS.UNSUBSCRIBE}`,
               message: `Client error id: ${request.headers['sec-websocket-key']}`,
               success: true,
@@ -146,7 +152,7 @@ export class Server {
             try {
               const message = JSON.parse(data.toString());
               if (message.greeting) {
-                const greetingEvent: BaseEvent = {
+                const greetingEvent: IClientsEvent = {
                   subType: `${SubEventTypes.CLIENTS.GREETING}`.toString(), // Define an appropriate subType
                   message: message.greeting,
                   success: true,
@@ -155,16 +161,15 @@ export class Server {
                 };
                 this.eV.emit(MainEventTypes.CLIENTS, greetingEvent);
               } else {
-                const otherEvent: BaseEvent = {
+                const otherEvent: IClientsEvent = {
                   subType: `${SubEventTypes.CLIENTS.OTHER}`, // Define an appropriate subType
-                  message: "Extra message",
+                  message: message,
                   success: true,
                   clientsEvent: { id: request.headers['sec-websocket-key'] as string, client: client as MyWebSocket },
                   data: request // Include the client reference
                 };
                 this.eV.emit(MainEventTypes.CLIENTS, otherEvent);
               }
-              console.log("connected:", message);
             } catch (error) {
               console.error("Error parsing message:", error);
             }
@@ -181,7 +186,7 @@ export class Server {
         console.log(this.server.handle.web.eventNames());
         console.log(`HTTPS server ${this.server.settings.ip} listening on ${this.server.settings.streamServerPort}`);
         const serverEvent: IBaseEvent = {
-          subType: SubEventTypes.BASIC.DEFAULT,
+          subType: SubEventTypes.SERVER.LISTEN,
           message: 'serverCreated',
           success: true,
         };

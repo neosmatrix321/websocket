@@ -1,7 +1,7 @@
 "use strict";
 
 import { ClientType, MyWebSocket } from "../clients/clientInstance";
-import { DEFAULT_VALUE_CALLBACKS } from "../global/EventEmitterMixin";
+import { EventEmitterMixin } from "./EventEmitterMixin";
 
 export const MainEventTypes = {
   BASIC: 'BASIC',
@@ -54,111 +54,147 @@ export const SubEventTypes = {
   },
 };
 
+export interface DebugDataCallback {
+  (): Partial<IDebugEvent>;
+  updateDuration(): void;
+}
+
+export const DEFAULT_VALUE_CALLBACKS = {
+  timestamp: () => Date.now(),
+  time: () => {
+    const currentDate = new Date();
+    return `${currentDate.getHours()}:${currentDate.getMinutes()}:${currentDate.getSeconds()}`;
+  },
+  // clientName: (clientId: string) => `Client-${clientId}`,
+  activeEvents: (() => EventEmitterMixin.stats.activeEvents),
+  eventCounter: (() => EventEmitterMixin.stats.eventCounter++)
+};
+
+export class DebugEventGenerator {
+  private startTime: number;
+
+  constructor() {
+    this.startTime = DEFAULT_VALUE_CALLBACKS.timestamp();
+  }
+
+  generateDebugData(): IDebugEvent {
+    return  {
+      debugEvent: {
+        timestamp: DEFAULT_VALUE_CALLBACKS.time(),
+        eventName: "Debug Event",
+        startTime: this.startTime,
+        endTime: DEFAULT_VALUE_CALLBACKS.timestamp(),
+        duration: 0,
+        activeEvents: -1,
+        eventCounter: -1
+      }
+    };
+  }
+  updateDuration(): void {
+    const endTime = Date.now();
+    const duration = endTime - this.startTime;
+
+    // Assuming your IDebugEvent has a nested structure like debugEvent.debugEvent  
+    this.generateDebugData().debugEvent.endTime = endTime;
+    this.generateDebugData().debugEvent.duration = duration;
+    this.generateDebugData().debugEvent.activeEvents = DEFAULT_VALUE_CALLBACKS.activeEvents();
+    this.generateDebugData().debugEvent.eventCounter = DEFAULT_VALUE_CALLBACKS.eventCounter();
+  }
+}
+
+export const debugDataCallback: IDebugEvent = new DebugEventGenerator().generateDebugData();
+
 
 export interface IBaseEvent {
   subType: string;
-  success: boolean;
   message: string;
   data?: any;
-  statsEvent?: { statsId?: number, newValue?: any, oldValue?: any, updatedFields?: any };
-  mainEvent?: { pid?: number };
-  serverEvent?: { timerId?: number, startTime?: number, endTime?: number, duration?: number };
-  clientsEvent?: { id: string, ip?: string, clientType?: ClientType, message?: string, client?: MyWebSocket };
+  success?: boolean;
   errorEvent?: { errCode: number, error?: Error, message?: string, data?: any };
+  debugEvent?: Partial<IDebugEvent>;
 }
+
+export interface IMainEvent extends IBaseEvent {
+  mainEvent: { pid: number | undefined };
+}
+
+export interface IStatsEvent extends IBaseEvent {
+  statsEvent: { statsId?: number, newValue?: any, oldValue?: any, updatedFields?: any };
+}
+
+export interface IServerEvent extends IBaseEvent {
+  serverEvent: { timerId?: number, startTime?: number, endTime?: number, duration?: number };
+}
+
+export interface IClientsEvent extends IBaseEvent {
+  clientsEvent: { id: string, ip?: string, clientType?: ClientType, message?: string, client?: MyWebSocket };
+}
+
+export interface IDebugEvent {
+  debugEvent: {
+    timestamp: string;
+    eventName: string;
+    startTime: number;
+    endTime: number;
+    duration: number;
+    activeEvents: number;
+    eventCounter: number;
+  };
+  updateDuration?(): void;
+}
+
+export type IEventTypes = IBaseEvent | IMainEvent | IStatsEvent | IServerEvent | IClientsEvent;
 
 export class BaseEvent implements IBaseEvent {
   subType: string = SubEventTypes.BASIC.DEFAULT;
-  success: boolean = true;
   message: string = "";
   data?: any;
-  statsEvent?: {
-    statsId?: number, newValue?: any, oldValue?: any, updatedFields?: any
-  } = {
-      statsId: -1, newValue: -1, oldValue: -1, updatedFields: {}
-    };
-  mainEvent?: {
-    pid?: number
-  } = {
-      pid: -1
-    };
-  serverEvent?: {
-    timerId?: number, startTime?: number, endTime?: number, duration?: number
-  } = {
-      timerId: -1, startTime: -1, endTime: -1, duration: -1
-    };
-  clientsEvent?: {
-    id: string, ip?: string, clientType?: ClientType, message?: string, client?: MyWebSocket
-  } = {
-      id: "", ip: "", clientType: ClientType.Unknown, message: "", client: undefined
-    };
-  errorEvent?: {
-    errCode: number, error?: Error, data?: any, message?: string
-  } = {
-      error: new Error(), errCode: -1
-    };
+  success: boolean = false;
+  errorEvent?: { errCode: number, error?: Error, message?: string, data?: any };
+  debugEvent?: IDebugEvent;
+
   constructor(data?: Partial<IBaseEvent>) {
     Object.assign(this, data);
   }
 }
 
-interface IDebugEvent extends IBaseEvent {
-  debugEvent: {
-    timestamp?: number;
-    success?: boolean;
-    eventName?: string;
-    enabled: boolean;
-    startTime?: number;
-    endTime?: number;
-    duration?: number;
-    activeEvents?: number;
-    eventCounter?: number;
-  };
-}
-export class DebugEvent extends BaseEvent implements IDebugEvent {
-  debugEvent = {
-      timestamp: DEFAULT_VALUE_CALLBACKS.timestamp(),
-      success: false,
-      eventName: "Debug Event",
-      enabled: true,
-      startTime: Date.now(),
-      endTime: 0,
-      duration: 0,
-      activeEvents: DEFAULT_VALUE_CALLBACKS.activeEvents(),
-      eventCounter: DEFAULT_VALUE_CALLBACKS.eventCounter()
-    };
+export class MainEvent extends BaseEvent implements IMainEvent {
+  mainEvent: { pid: number | undefined } = { pid: undefined }; // Default to the current process ID
 
-  constructor(data?: Partial<IDebugEvent>) {
+  constructor(data?: Partial<IMainEvent>) {
     super(data);
-    Object.assign(this.debugEvent, data?.debugEvent);
-    this.updateData();
-  }
-
-  updateData() { // Method to update debugEvent
-    this.debugEvent.endTime = Date.now();
-    this.debugEvent.duration = this.debugEvent.endTime - this.debugEvent.startTime;
+    Object.assign(this.mainEvent, data?.mainEvent);
   }
 }
 
-export type IEventTypes = IBaseEvent | IDebugEvent;
+export class StatsEvent extends BaseEvent implements IStatsEvent {
+  statsEvent: { statsId?: number, newValue?: any, oldValue?: any, updatedFields?: any } = {};
+
+  constructor(data?: Partial<IStatsEvent>) {
+    super(data);
+    Object.assign(this.statsEvent, data?.statsEvent);
+  }
+}
+
+export class ServerEvent extends BaseEvent implements IServerEvent {
+  serverEvent: { timerId?: number, startTime?: number, endTime?: number, duration?: number } = {};
+
+  constructor(data?: Partial<IServerEvent>) {
+    super(data);
+    Object.assign(this.serverEvent, data?.serverEvent);
+  }
+}
+
+export class ClientsEvent extends BaseEvent implements IClientsEvent {
+  clientsEvent: { id: string, ip?: string, clientType?: ClientType, message?: string, client?: MyWebSocket } = { id: "" };
+
+  constructor(data?: Partial<IClientsEvent>) {
+    super(data);
+    Object.assign(this.clientsEvent, data?.clientsEvent);
+  }
+}
 
 export interface IEventStats {
   eventCounter: number;
   activeEvents: number;
-}
-
-export interface IEventManager {
-  stats: IEventStats;
-}
-export function createCustomDebugEvent(event: any, data?: any) {
-  const customDebugEvent = new DebugEvent({
-    subType: SubEventTypes.BASIC.DEFAULT,
-    message: event,
-    success: false,
-    data: data || "No data provided",
-    clientsEvent: { id: "", ip: "", clientType: ClientType.Unknown },
-    errorEvent: { errCode: 0, error: new Error("First event error") },
-    debugEvent: { enabled: true }
-  });
-  return customDebugEvent;
 }

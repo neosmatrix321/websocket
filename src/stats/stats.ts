@@ -6,7 +6,7 @@ import { inject, injectable, postConstruct } from 'inversify';
 import pidusage from 'pidusage';
 import si from 'systeminformation';
 
-import * as eventI from "../global/eventInterface";
+import { IBaseEvent, IMainEvent, IStatsEvent, MainEventTypes, SubEventTypes, debugDataCallback } from "../global/eventInterface";
 import { EventEmitterMixin } from "../global/EventEmitterMixin";
 import { IStats, statsWrapper } from "./statsInstance";
 import { IprivateSettings, privateSettings } from '../settings/settingsInstance';
@@ -22,13 +22,13 @@ export class Stats {
     this.eV = EventMixin;
     this.stats.lastUpdates = { ...this.stats.lastUpdates, "createStats": Date.now() };
     // this.updateAllStats();
-    this.eV.on(eventI.MainEventTypes.STATS, (data: eventI.IEventTypes) => { this.handleStatsEvent(data); });
+    this.eV.on(MainEventTypes.STATS, (data: IStatsEvent) => { this.handleStatsEvent(data); });
   }
-  private handleStatsEvent(event: eventI.IEventTypes) {
+  private handleStatsEvent(event: IStatsEvent) {
     const type = event.subType;
     if (!type) throw new Error('No event type provided');
     switch (type) {
-      case eventI.SubEventTypes.STATS.UPDATE_ALL:
+      case SubEventTypes.STATS.UPDATE_ALL:
         this.updateAndGetPidIfNecessary().then(() => this.updateAllStats());
         break;
       default:
@@ -37,8 +37,8 @@ export class Stats {
   }
   public async updateAllStats() {
     this.stats.lastUpdates = { ...this.stats.lastUpdates, "updateAllStats": Date.now() };
-    // let statsUpdated: eventI.IBaseEvent = {
-    //   subType: eventI.SubEventTypes.STATS.ALL_STATS_UPDATED,
+    // let statsUpdated: IBaseEvent = {
+    //   subType: SubEventTypes.STATS.ALL_STATS_UPDATED,
     //   message: '',
     //   success: false,
     // };
@@ -49,12 +49,12 @@ export class Stats {
       result = await this.getPU();
     } catch (error) {
       const statsUpdated = {
-        subType: eventI.SubEventTypes.ERROR.INFO,
+        subType: SubEventTypes.ERROR.INFO,
         message: 'Error updating stats',
         success: false,
         errorEvent: { errCode: 2, data: error }
       };
-      console.error(eventI.MainEventTypes.ERROR, statsUpdated);
+      console.error(MainEventTypes.ERROR, statsUpdated);
       this.stats.latencyGoogle = null;
     }
     // console.dir(this.settings);
@@ -68,8 +68,8 @@ export class Stats {
       this.stats.latencyGoogle = latency;
       return true;
     } catch (error) {
-      this.eV.emit(eventI.MainEventTypes.ERROR, {
-        subType: eventI.SubEventTypes.ERROR.INFO,
+      this.eV.emit(MainEventTypes.ERROR, {
+        subType: SubEventTypes.ERROR.INFO,
         message: '',
         success: false,
         errorEvent: { errCode: 2, data: error }
@@ -83,25 +83,25 @@ export class Stats {
     readFile(this.settings.pidFile, 'utf-8' as BufferEncoding).then((data) => { this.settings.pid = parseInt(data, 10) }).then(() => {
       this.settings.pidFileExists = true;
       this.settings.pidFileReadable = true;
-      // const resultData: eventI.IBaseEvent = {
-      //   mainTypes: [eventI.MainEventTypes.MAIN],
-      //   subType: ["getPid"],
-      //   message: '',
-      //   success: true,
-      // };
-      //   this.eV.emit(eventI.MainEventTypes.MAIN, resultData);
+      const resultData: IBaseEvent = {
+        subType: SubEventTypes.BASIC.DEFAULT,
+        message: `updated pid to ${this.settings.pid}`,
+        success: true,
+      };
+      this.eV.emit(MainEventTypes.BASIC, resultData);
       return true;
     }).catch((error) => {
       this.settings.pidFileExists = false;
       this.settings.pidFileReadable = false;
-      const resultData: eventI.IBaseEvent = {
-        subType: eventI.SubEventTypes.ERROR.INFO,
+      const resultData: IMainEvent = {
+        subType: SubEventTypes.ERROR.INFO,
         message: '',
         success: true,
         mainEvent: { pid: this.settings.pid },
-        errorEvent: { errCode: 2, data: error }
+        errorEvent: { errCode: 2, data: error },
+        debugEvent: debugDataCallback,
       };
-      this.eV.emit(eventI.MainEventTypes.ERROR, resultData);
+      this.eV.emit(MainEventTypes.ERROR, resultData);
     });
     return false;
   }
@@ -109,7 +109,7 @@ export class Stats {
     this.stats.lastUpdates = { ...this.stats.lastUpdates, "updateAndGetPidIfNecessary": Date.now() };
     if (!this.settings.pid || typeof this.settings.pid !== "number" || !this.comparePids()) {
       this.getPid().then(() => { this.comparePids() }).then(() => { return true; }).catch((error) => {
-        this.eV.emit(eventI.MainEventTypes.ERROR, {
+        this.eV.emit(MainEventTypes.ERROR, {
           subType: "updateAndGetPidIfNecessary",
           message: '',
           success: false,
@@ -131,7 +131,7 @@ export class Stats {
         });
       }
     } catch (error) {
-      this.eV.emit(eventI.MainEventTypes.ERROR, {
+      this.eV.emit(MainEventTypes.ERROR, {
         subType: "comparePids",
         message: '',
         success: false,
@@ -153,7 +153,7 @@ export class Stats {
         }
       }
     } catch (error) {
-      this.eV.emit(eventI.MainEventTypes.ERROR, {
+      this.eV.emit(MainEventTypes.ERROR, {
         subType: "getSI",
         message: '',
         success: false,
@@ -173,7 +173,7 @@ export class Stats {
           return true;
         }
       } catch (error) {
-        this.eV.emit(eventI.MainEventTypes.ERROR, {
+        this.eV.emit(MainEventTypes.ERROR, {
           subType: "getPU",
           message: '',
           success: false,

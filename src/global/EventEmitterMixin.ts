@@ -1,14 +1,7 @@
 import { EventEmitter } from "events";
 import "reflect-metadata";
-import { MainEventTypes, IEventTypes, SubEventTypes, IEventStats, DebugEvent, BaseEvent, createCustomDebugEvent } from "./eventInterface";
+import { MainEventTypes, IEventTypes, SubEventTypes, IEventStats, BaseEvent, debugDataCallback} from './eventInterface';
 
-
-export const DEFAULT_VALUE_CALLBACKS = {
-  timestamp: () => Date.now(),
-  clientName: (clientId: string) => `Client-${clientId}`,
-  activeEvents: (() => EventEmitterMixin.stats.activeEvents),
-  eventCounter: (() => EventEmitterMixin.stats.eventCounter++)
-};
 
 export class EventEmitterMixin {
   private static _instance: EventEmitterMixin;
@@ -25,34 +18,16 @@ export class EventEmitterMixin {
     if (!this._events.has(event)) {
       if (eventData[0] && !this.isValidEvent(event, eventData[0])) {
         const { customKey, customData } = this.createEvent(event, eventData);
-        if (EventEmitterMixin.stats.activeEvents > 10) {
-          process.exit(1);
-        }
+        // if (EventEmitterMixin.stats.activeEvents > 10) {
+        //   process.exit(1);
+        // }
         EventEmitterMixin.stats.activeEvents++;
         this._events.set(customKey, customData);
       }
     } else {
     }
   }
-  private updateDebugData(...customData: DebugEvent[]): IEventTypes {
-    if (customData[0] && customData[0].debugEvent && customData[0].debugEvent.enabled) {
-      let debugEvent;
-      if (customData[0].debugEvent.eventName) {
-        customData[0].updateData(); // Calculate debug data
-        debugEvent = customData[0].debugEvent;
-      } else if (!customData[0].debugEvent.eventName) {
-        debugEvent = {
-          debugEvent: {
-            enabled: true,
-            eventName: "debugEvent",
-          }
-        }
-      }
-      const finalData = { ...customData[0], ...debugEvent };
-      return finalData;
-    }
-    return customData[0];
-  }
+
   private createEvent(event: string, ...args: any[]): { customKey: string, customData: IEventTypes } {
     try {
       // Ensure args[0] conforms to the expected event interface
@@ -62,14 +37,12 @@ export class EventEmitterMixin {
       const originalEvent = this._events.get(event);
       if (!originalEvent) {
         const newData = new BaseEvent({ data: JSON.stringify(event) });
-        newData.errorEvent = { errCode: 6, data: { event, args } };
+        // newData.errorEvent = { errCode: 6, data: { event, args } };
         this.emitError(MainEventTypes.ERROR, newData);
         return { customKey: SubEventTypes.ERROR.WARNING, customData: newData };
       }
-      const updatedData = this.updateDebugData(originalEvent);
-
       // Get the stored event (could be BaseEvent for unknown ones) and merge
-      return { ...this._events.get(event), ...updatedData };
+      return { customKey: event, customData: { ...args[0] }};
     } catch (error) {
       const newData = new BaseEvent({ data: JSON.stringify(event) });
       this.emitError(MainEventTypes.ERROR, newData);
@@ -92,12 +65,14 @@ export class EventEmitterMixin {
       ...(new BaseEvent({ subType: SubEventTypes.ERROR.INFO }) as BaseEvent),
       errorEvent: {
         errCode: 2, // A sample error code
+        message: event as string,
         error: new Error('Something went wrong'), // A sample error
         data: error
-      }
+      },
+      debugEvent: debugDataCallback,
     };
     EventEmitterMixin.stats.activeEvents--;
-    this._emitter.emit(event as string, newEvent);
+    this._emitter.emit(MainEventTypes.ERROR, newEvent);
   }
 
   // ... other EventEmitter methods
@@ -108,24 +83,26 @@ export class EventEmitterMixin {
   }
 
   public async on(event: string, listener: (...args: any[]) => void) {
-    EventEmitterMixin.stats.activeEvents++;
+    // EventEmitterMixin.stats.activeEvents++;
     EventEmitterMixin.stats.eventCounter++;
     if (!this._events.has(event)) {
       this.storeEvent(event, listener); // Ensure the event is registered
     }
-    console.warn('EventEmitterMixin.on:', createCustomDebugEvent(event, listener));	
+    // console.warn('EventEmitterMixin.on:', createCustomDebugEvent(event, listener));  
     this._emitter.on(event, listener);
   }
   public async prepend(event: string, listener: (...args: any[]) => void) {
     // this.storeEvent(event, listener);
-    console.warn('EventEmitterMixin.prepend:', createCustomDebugEvent(event, listener));	
+    // console.warn('EventEmitterMixin.prepend:', createCustomDebugEvent(event, listener));  
     this._emitter.prependListener(event, listener); // Use prependListener
   }
 
   public async off(event: string, listener: (...args: any[]) => void) {
-    EventEmitterMixin.stats.activeEvents--;
-    console.warn('EventEmitterMixin.off:', createCustomDebugEvent(event, listener));	
+    // console.warn('EventEmitterMixin.off:', createCustomDebugEvent(event, listener));  
     this._emitter.off(event, listener);
+    if (this._events.has(event)) {
+      this._events.delete(event); // Remove the event from the stored events
+    }
   }
 
   public async emit(event: string, ...args: any[]) {
@@ -135,9 +112,10 @@ export class EventEmitterMixin {
     // }
 
     // this._events.push(eventData); // ??
-    // this.emit(MainEventTypes.ERROR, createCustomDebugEvent(event, ...args));	
+    // this.emit(MainEventTypes.ERROR, createCustomDebugEvent(event, ...args));  
 
-    // console.warn('EventEmitterMixin.emit:', createCustomDebugEvent(event, ...args));	
+    // console.warn('EventEmitterMixin.emit:', createCustomDebugEvent(event, ...args));  
+    EventEmitterMixin.stats.activeEvents--;
     this._emitter.emit(event, ...args);
   }
   public static getInstance(): EventEmitterMixin {

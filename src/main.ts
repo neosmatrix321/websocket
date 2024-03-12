@@ -6,7 +6,7 @@ import { EventEmitterMixin } from "./global/EventEmitterMixin";
 // import Server from "./server/server";
 // import Clients from "./clients/clients";
 import { ClientType } from "./clients/clientInstance";
-import { DebugEvent, SubEventTypes, MainEventTypes, IEventTypes, createCustomDebugEvent } from "./global/eventInterface";
+import { SubEventTypes, MainEventTypes, IEventTypes, IMainEvent, BaseEvent, IBaseEvent, debugDataCallback, DebugEventGenerator } from './global/eventInterface';
 import { Stats } from "./stats/stats";
 import { Server } from "./server/server";
 import { Clients } from "./clients/clients";
@@ -14,13 +14,15 @@ export const STATS_WRAPPER_TOKEN = Symbol('Stats');
 export const CLIENTS_WRAPPER_TOKEN = Symbol('Clients');
 export const SERVER_WRAPPER_TOKEN = Symbol('Server');
 
-const FirstEvent = new DebugEvent({
+const FirstEvent = new BaseEvent({
   subType: SubEventTypes.BASIC.FIRST,
   message: "First event",
   success: true,
-  data: "First event data",
-  debugEvent: { enabled: true }
+  debugEvent: debugDataCallback,
 });
+
+
+
 /*
   statsEvent: {
     statsId: 1,
@@ -44,6 +46,7 @@ const EventMixin = EventEmitterMixin.getInstance();
 export class Main {
   protected eV: EventEmitterMixin = EventMixin;
   private sendInfoInterval: any;
+  private intvalStats = { idleStart: 0, idleEnd: 0, duration: 0 };
   @inject(STATS_WRAPPER_TOKEN) protected stats!: Stats;
   @inject(SERVER_WRAPPER_TOKEN) protected server!: Server;
   @inject(CLIENTS_WRAPPER_TOKEN) protected clients!: Clients;
@@ -52,7 +55,7 @@ export class Main {
     this.eV = EventMixin;
     this.sendInfoInterval = undefined;
 
-    console.log("Main constructor: ", this.eV, this.stats, this.server, this.clients);
+    // console.log("Main constructor: ", this.eV, this.stats, this.server, this.clients);
     this.setupEventHandlers();
     this.eV.emit(MainEventTypes.BASIC, FirstEvent);
     // this.initialize();
@@ -64,26 +67,27 @@ export class Main {
   protected setupEventHandlers() {
     // ... (your other event handlers)
     // Main event handler
-    this.eV.on(MainEventTypes.BASIC, (event: IEventTypes) => {
-      console.log(`BASIC message: ${event.message} with type: ${event.subType}`);
+    this.eV.on(MainEventTypes.BASIC, (event: IBaseEvent) => {
+      if (event.subType === SubEventTypes.SERVER.LISTEN) this.intvalStats.idleStart = Date.now();
+      console.log(`type: ${event.subType} | message: ${event.message}`);
       // console.log(createCustomDebugEvent(event, ...data));
-      if (event.data)
-        console.dir(createCustomDebugEvent(event.data), { depth: null, colors: true });
+      if (event.debugEvent !== undefined) {
+        event.debugEvent.updateDuration;
+        console.dir(event.debugEvent, { depth: null, colors: true });
+      }
     });
     this.eV.on(MainEventTypes.MAIN, this.handleMainEvent.bind(this));
     this.eV.on(MainEventTypes.ERROR, (errorEvent: IEventTypes) => {
       // console.log(errorEvent);
-      console.error(`Global ERROR Handler: ${errorEvent.message}`);
+      console.error(`Global ERROR Handler: ${errorEvent}`);
       // console.dir(errorEvent, { depth: null, colors: true });
     });
     this.eV.on(MainEventTypes.DEBUG, (errorEvent: IEventTypes) => {
       // console.log(errorEvent);
-      console.error(`Global DEBUG Handler: ${errorEvent.message}`);
+      console.error(`Global DEBUG Handler: ${errorEvent}`);
       // console.dir(errorEvent, { depth: null, colors: true });
     });
-    // Stats event handler
-    // Server event handler
-    // Client event handler
+
 
     // TODO: alternate Debug event handler ?
     // this.eV.on('DEBUG',  (event: IEventTypes) => {
@@ -112,7 +116,7 @@ export class Main {
     }
   }
 
-  private handleMainEvent(event: IEventTypes) {
+  private handleMainEvent(event: IMainEvent) {
     switch (event.subType) {
       case SubEventTypes.MAIN.START_INTERVAL:
         this.intervalStart();
@@ -128,7 +132,8 @@ export class Main {
 
   private intervalStart() {
     if (!this.sendInfoInterval) {
-      console.log(`intervalStart: Interval started.`);
+      this.intvalStats.idleEnd = Date.now();
+      console.log(`intervalStart: Interval started, idle time: ${this.intvalStats.idleEnd - this.intvalStats.idleStart}ms.`);
       this.sendInfoInterval = setInterval(() => {
         try {
           this.eV.emit(MainEventTypes.STATS, {
@@ -154,6 +159,8 @@ export class Main {
   }
   private intervalStop() {
     if (this.sendInfoInterval) {
+      this.intvalStats.idleStart = Date.now();
+
       clearInterval(this.sendInfoInterval);
       this.sendInfoInterval = null;
       console.log("intervalStop: Interval stopped.");

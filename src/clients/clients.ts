@@ -2,7 +2,7 @@
 import { inject, injectable, postConstruct } from "inversify";
 import { clientsWrapper, MyWebSocket, ClientType, IClientInfo, IClientSettings, clientWrapper } from "./clientInstance";
 import si from 'systeminformation';
-import { BaseEvent, IBaseEvent, IEventTypes, MainEventTypes, SubEventTypes, createCustomDebugEvent } from "../global/eventInterface";
+import { BaseEvent, IClientsEvent, IEventTypes, MainEventTypes, SubEventTypes } from "../global/eventInterface";
 import { WebSocket } from 'ws';
 import { EventEmitterMixin } from "../global/EventEmitterMixin";
 
@@ -24,23 +24,28 @@ export class Clients {
     return 'id' in ws;
   }
 
-  private handleClientsEvent(event: IEventTypes) {
+  private handleClientsEvent(event: IClientsEvent) {
     // console.log("Clients event received:", event);
     if (event) {
+      const newID = event.clientsEvent?.id;
       switch (event.subType) {
         case SubEventTypes.CLIENTS.SUBSCRIBE:
           this.handleClientSubscribe(event);
           break;
         case SubEventTypes.CLIENTS.UNSUBSCRIBE:
-          const newID = event.clientsEvent?.id;
+          console.log("bye bye... :", event.message, "From:", newID);
+          console.dir(this.clients.client[newID].info);
+          console.dir(this.clients.client[newID].stats);
           if (newID) this.handleClientUnsubscribe(newID);
           else console.log("handleClientsEvent: no id found", event.clientsEvent);
+          break;
+
           break;
         case SubEventTypes.CLIENTS.UPDATE_SETTINGS:
           this.handleClientModifySettings(event.data.id, event.data);
           break;
         case SubEventTypes.CLIENTS.UPDATE_STATS:
-          this.handleClientUpdateStats(event);
+          if (newID) this.handleClientUpdateStats(newID);
           break;
         case SubEventTypes.CLIENTS.UPDATE_ALL_STATS:
           this.handleClientsUpdateStats();
@@ -49,16 +54,18 @@ export class Clients {
           this.handleClientMessage(event.data.id, event.data, event.data.isBinary);
           break;
         case SubEventTypes.CLIENTS.GREETING:
-          console.log("Client Greeting Received:", event.message, "From:", event.clientsEvent?.id, "Stats:", this.clients.stats);
+          console.log("Client Greeting Received:", event.message, "From:", newID);
+          console.dir(this.clients.client[newID].info);
+          console.dir(this.clients.client[newID].stats);
           break;
         case SubEventTypes.CLIENTS.OTHER:
           console.log("other Clients Event ?");
           break;
         default:
-          this.eV.emit(MainEventTypes.ERROR, createCustomDebugEvent(event, "no subType found"));	
+          this.eV.emit(MainEventTypes.ERROR, `no ${event.subType} found in ${MainEventTypes.CLIENTS}`);
       }
     } else {
-      this.eV.emit(MainEventTypes.ERROR, createCustomDebugEvent(event, "no event found"));	
+      this.eV.emit(MainEventTypes.ERROR, `no ${event} found in ${MainEventTypes.CLIENTS}`);
     }
   }
 
@@ -89,7 +96,7 @@ export class Clients {
     // 2. Trigger other events based on the processed message
   } // Add more conditional event emissions as needed
 
-  public handleClientSubscribe(event: IEventTypes) { // Adjust 'any' type later
+  public handleClientSubscribe(event: IClientsEvent) { // Adjust 'any' type later
     let typeFinal: ClientType;
     let newIP: string = ''; //  sessionIdContext: '390d00b3ece4b72c30c8da7f7862c2ea'
     const wsClient = event.clientsEvent?.client;
@@ -113,6 +120,7 @@ export class Clients {
     }
     const id = event.clientsEvent?.id;
     this.clients.stats.clientsCounter++;
+    this.clients.stats.activeClients++;
     let newClient = wsClient as unknown as MyWebSocket;
     newClient.id = `${id}`;
     //public create(newID: string, newIP: string, type: ClientType): void {
@@ -124,34 +132,36 @@ export class Clients {
     } catch (error) {
       newResult = { errCode: 2, message: `create client with id ${newClient.id} failed`, data: error };
     }
-    const newEvent: IBaseEvent = {
+    const newEvent: IClientsEvent = {
       subType: SubEventTypes.BASIC.DEFAULT,
       message: `Created client with id ${newClient.id}`,
       success: newResult.errCode == 0 ? true : false,
       clientsEvent: { id: newClientInfo.id, ip: newClientInfo.ip, clientType: newClientInfo.type }
     };
-    if (this.clients.stats.clientsCounter > 0)
+    this.handleClientUpdateStats(newClient.id);
+
+    if (this.clients.stats.activeClients == 1)
       this.eV.emit(MainEventTypes.MAIN, { subType: SubEventTypes.MAIN.START_INTERVAL, message: 'Start interval' });
     this.eV.emit(MainEventTypes.BASIC, newEvent);
   }
-  public async handleClientUpdateStats(event: IEventTypes): Promise<void> {
-    const id = event.clientsEvent?.id;
+  public async handleClientUpdateStats(id: string): Promise<void> {
     if (id) {
       const clientData = this.clients.client[id];
-      clientData.stats.lastUpdates = { "statsUpdated": Date.now() };
       // Your existing client update logic from `createTimer` will go here
       if (clientData && clientData.ws.readyState === WebSocket.OPEN) {
-        const time_diff = Date.now() - clientData.stats.lastUpdates.timerUpdated;
-        if (time_diff > 20000) {
+        const time_diff = Date.now() - clientData.stats.lastUpdates.statsUpdated;
+        if (!clientData.stats.lastUpdates.statsUpdated || time_diff > 20000) {
           // this.eV.emit(SubEventTypes.CLIENTS.UPDATE_CLIENT_STATS, client.info.id);
           clientData.stats.latency = await si.inetLatency(clientData.info.ip);
           clientData.stats.eventCount++;
-          clientData.stats.lastUpdates['getClientLatency'] = Date.now();
-          this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.DEFAULT, message: `client ${clientData.info.id} updated`});
+          clientData.stats.lastUpdates['statsUpdated'] = Date.now();
+          this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.DEFAULT, message: `ID: ${clientData.info.id} updated, time_diff: ${time_diff}` });
         }
+        //  else {
+        //   this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.DEFAULT, message: `client ${clientData.info.id} not updated, time_diff: ${time_diff}` });
+        // }
       }
-    }      
-
+    }
   }
 
   // public updateClientConfig(id: string, info: IClientInfo): void {
@@ -173,9 +183,9 @@ export class Clients {
   }
 
   public async handleClientsUpdateStats(): Promise<void> {
-    console.log("Update all clients stats, clientsCount: ", this.clients.stats.clientsCounter);
-    Object.values(this.clients).forEach((client) => {
-      this.handleClientUpdateStats(client);
+    console.log(`Update all clients stats, clientsCount: ${this.clients.stats.clientsCounter} | activeClients: ${this.clients.stats.activeClients}`);
+    Object.values(this.clients.client).forEach((client) => {
+      this.handleClientUpdateStats(client.info.id);
     });
   }
 
@@ -183,8 +193,8 @@ export class Clients {
   public handleClientUnsubscribe(id: string): void {
     if (this.clients.client[id]) {
       this.clients.removeClient(id);
-      this.clients.stats.clientsCounter--;
-      if (this.clients.stats.clientsCounter == 0)
+      this.clients.stats.activeClients--;
+      if (this.clients.stats.activeClients == 0)
         this.eV.emit(MainEventTypes.MAIN, { subType: SubEventTypes.MAIN.STOP_INTERVAL, message: 'Stop interval' });
 
       // this.eV.emit(SubEventTypes.CLIENTS.UNSUBSCRIBE, client.info.id);
