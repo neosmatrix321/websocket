@@ -45,7 +45,8 @@ export const SubEventTypes = {
     UPDATE_SETTINGS: 'UPDATE_SETTINGS',
     MESSAGE: 'MESSAGE',
     GREETING: 'GREETING',
-    OTHER: 'OTHER'
+    OTHER: 'OTHER',
+    MESSAGE_READY: 'MESSAGE_READY',
   },
   ERROR: {
     INFO: 'INFO',

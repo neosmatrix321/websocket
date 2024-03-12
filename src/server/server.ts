@@ -124,7 +124,10 @@ export class Server {
             data: request,
             clientsEvent: { id: request.headers['sec-websocket-key'] as string, client: client as MyWebSocket }
           };
-          this.eV.emit(MainEventTypes.CLIENTS, connectEvent);
+          this.eV.emit(MainEventTypes.CLIENTS, connectEvent).catch((error) => {
+            console.error("Error emitting message ready event:", error);
+          });
+
           webSocketStream.on('end', () => {
             console.log('WebSocket connection ended');
             const disconnectEvent: IClientsEvent = {

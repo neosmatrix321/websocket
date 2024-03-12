@@ -39,10 +39,8 @@ export class Clients {
           if (newID) this.handleClientUnsubscribe(newID);
           else console.log("handleClientsEvent: no id found", event.clientsEvent);
           break;
-
-          break;
         case SubEventTypes.CLIENTS.UPDATE_SETTINGS:
-          this.handleClientModifySettings(event.data.id, event.data);
+          this.handleClientModifySettings(newID, event.data);
           break;
         case SubEventTypes.CLIENTS.UPDATE_STATS:
           if (newID) this.handleClientUpdateStats(newID);
@@ -51,12 +49,30 @@ export class Clients {
           this.handleClientsUpdateStats();
           break;
         case SubEventTypes.CLIENTS.MESSAGE:
-          this.handleClientMessage(event.data.id, event.data, event.data.isBinary);
+          this.handleClientMessage(newID, event.data, event.data.isBinary);
+          break;
+        case SubEventTypes.CLIENTS.MESSAGE_READY:
+          if (newID == "ALL") this.clientsMessageReady(event.message, event.data, event.data.isBinary)
+          else this.clientMessageReady(newID, event.message, event.data, event.data.isBinary);
           break;
         case SubEventTypes.CLIENTS.GREETING:
-          console.log("Client Greeting Received:", event.message, "From:", newID);
-          console.dir(this.clients.client[newID].info);
-          console.dir(this.clients.client[newID].stats);
+          const client = this.clients.client[newID];
+          if (client) {
+            const newIP = client.ws.ip;
+
+            console.log("Client Greeting Received:", event.message, "From:", newID);
+            console.dir(this.clients.client[newID].info);
+            // console.dir(this.clients.client[newID].stats);
+
+            const helloEvent: IClientsEvent = {
+              subType: `${SubEventTypes.CLIENTS.MESSAGE_READY}`,
+              message: `chatMessage`,
+              success: true,
+              data: `Welcome ${newID} from ${newIP} | activeClients: ${this.clients.stats.activeClients} | clientsCounter: ${this.clients.stats.clientsCounter}`,
+              clientsEvent: { id: newID as string }
+            };
+            this.eV.emit(MainEventTypes.CLIENTS, helloEvent);
+          }
           break;
         case SubEventTypes.CLIENTS.OTHER:
           console.log("other Clients Event ?");
@@ -85,16 +101,31 @@ export class Clients {
     }
   }
   handleGreeting(id: string, messageObject: any) {
-    throw new Error("handleGreeting: Method not implemented.");
+    throw new Error("Method not implemented.");
   }
-
-  public clientMessageReady(ws: IEventTypes): void {
-    if (!ws) return; // Safety check
-    const clientEvent = ws as BaseEvent;
-    // 1. Process message (replace with your application logic)
-    // const processedData = this.processClientMessage(clientEvent.message);
-    // 2. Trigger other events based on the processed message
-  } // Add more conditional event emissions as needed
+  public clientsMessageReady(type: string, data: string, isBinary: boolean) {
+    Object.values(this.clients.client).forEach((client) => {
+      this.clientMessageReady(client.info.id, type, data, isBinary);
+    });
+  }
+  public clientMessageReady(id: string, type: string, data: string, isBinary: boolean): void {
+    const client = this.clients.client[id];
+    if (client && client.ws && client.ws.readyState === WebSocket.OPEN) {
+      console.log(`sending ${JSON.stringify(data)} to client ${id}`);
+      switch (type) {
+        case "pidInfo":
+        case "chatMessage":
+        case "extras":
+        case "latencyGoogle":
+        case "latencyUser":
+          client.ws.send(JSON.stringify({ "ip": client.info.ip, "type": type, "obj": { [type]: data } }), { binary: isBinary });
+          break;
+        default:
+          console.warn("clientMessageReady: unknown type", type);
+          break;
+      }
+    } else { console.log("clientMessageReady: no ws obj found with id", id); }
+  }
 
   public handleClientSubscribe(event: IClientsEvent) { // Adjust 'any' type later
     let typeFinal: ClientType;
@@ -123,6 +154,7 @@ export class Clients {
     this.clients.stats.activeClients++;
     let newClient = wsClient as unknown as MyWebSocket;
     newClient.id = `${id}`;
+    newClient.ip = `${newIP}`;
     //public create(newID: string, newIP: string, type: ClientType): void {
     const newClientInfo: IClientInfo = { id: newClient.id, ip: newIP, type: typeFinal };
     let newResult: { errCode: number, message?: string, data?: any } = { errCode: 1 };
@@ -156,7 +188,15 @@ export class Clients {
           clientData.stats.eventCount++;
           clientData.stats.lastUpdates['statsUpdated'] = Date.now();
           this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.DEFAULT, message: `ID: ${clientData.info.id} updated, time_diff: ${time_diff}` });
-        }
+          const latencyUserEvent: IClientsEvent = {
+            subType: `${SubEventTypes.CLIENTS.MESSAGE_READY}`,
+            message: `latencyUser`,
+            success: true,
+            data: clientData.stats.latency,
+            clientsEvent: { id: id }
+          };
+          this.eV.emit(MainEventTypes.CLIENTS, latencyUserEvent);
+          }
         //  else {
         //   this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.DEFAULT, message: `client ${clientData.info.id} not updated, time_diff: ${time_diff}` });
         // }

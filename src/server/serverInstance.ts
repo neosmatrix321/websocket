@@ -33,7 +33,7 @@ export default class serverWrapper implements IServerWrapper{
   settings: IHandleSettings = {
     certPath: '/etc/letsencrypt/live/neo.dnsfor.me/cert.pem',
     keyPath: '/etc/letsencrypt/live/neo.dnsfor.me/privkey.pem',
-    ip: "192.168.228.7",
+    ip: "0.0.0.0",
     rconPort: 25575,
     streamServerPort: 8080
   };

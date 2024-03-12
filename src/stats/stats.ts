@@ -6,7 +6,7 @@ import { inject, injectable, postConstruct } from 'inversify';
 import pidusage from 'pidusage';
 import si from 'systeminformation';
 
-import { IBaseEvent, IMainEvent, IStatsEvent, MainEventTypes, SubEventTypes, debugDataCallback } from "../global/eventInterface";
+import { IBaseEvent, IClientsEvent, IMainEvent, IStatsEvent, MainEventTypes, SubEventTypes, debugDataCallback } from "../global/eventInterface";
 import { EventEmitterMixin } from "../global/EventEmitterMixin";
 import { IStats, statsWrapper } from "./statsInstance";
 import { IprivateSettings, privateSettings } from '../settings/settingsInstance';
@@ -42,23 +42,14 @@ export class Stats {
     //   message: '',
     //   success: false,
     // };
-    let result: boolean = false;
-    try {
-      result = await this.getLatencyGoogle();
-      result = await this.getSI();
-      result = await this.getPU();
-    } catch (error) {
-      const statsUpdated = {
-        subType: SubEventTypes.ERROR.INFO,
-        message: 'Error updating stats',
-        success: false,
-        errorEvent: { errCode: 2, data: error }
-      };
-      console.error(MainEventTypes.ERROR, statsUpdated);
-      this.stats.latencyGoogle = null;
+    const time_diff = Date.now() - this.stats.lastUpdates.getLatencyGoogle;
+    if (!this.stats.lastUpdates.getLatencyGoogle || time_diff > 5000) {
+      this.getLatencyGoogle();
     }
+    this.getPU();
     // console.dir(this.settings);
-    // console.dir(this.stats);
+    // console.dir(this.stats.si);
+    // console.dir(this.stats.pu);
   }
 
   async getLatencyGoogle(): Promise<boolean> {
@@ -66,6 +57,14 @@ export class Stats {
     try {
       const latency = await si.inetLatency();
       this.stats.latencyGoogle = latency;
+      const latencyGoogleEvent: IClientsEvent = {
+        subType: `${SubEventTypes.CLIENTS.MESSAGE_READY}`,
+        message: `latencyGoogle`,
+        success: true,
+        data: this.stats.latencyGoogle,
+        clientsEvent: { id: "ALL" }
+      };
+      this.eV.emit(MainEventTypes.CLIENTS, latencyGoogleEvent);
       return true;
     } catch (error) {
       this.eV.emit(MainEventTypes.ERROR, {
@@ -74,6 +73,7 @@ export class Stats {
         success: false,
         errorEvent: { errCode: 2, data: error }
       });
+      this.stats.latencyGoogle = null;
     }
     return false;
   }
@@ -89,6 +89,7 @@ export class Stats {
         success: true,
       };
       this.eV.emit(MainEventTypes.BASIC, resultData);
+      this.updateAllStats();
       return true;
     }).catch((error) => {
       this.settings.pidFileExists = false;
@@ -145,8 +146,8 @@ export class Stats {
     this.stats.lastUpdates = { ...this.stats.lastUpdates, "getSI": Date.now() };
     try {
       const targetProcesses = await si.processLoad("PalServer-Linux");
-    if (targetProcesses && targetProcesses.length > 0) {
-    const processInfo = targetProcesses.find((p) => p.pid === this.settings.pid);
+      if (targetProcesses && targetProcesses.length > 0) {
+        const processInfo = targetProcesses.find((p) => p.pid === this.settings.pid);
         if (processInfo) {
           this.stats.si = { proc: processInfo.proc, pid: processInfo.pid, cpu: processInfo.cpu, mem: processInfo.mem };
           return true;
@@ -170,6 +171,14 @@ export class Stats {
         const usage = await pidusage(this.settings.pid);
         if (usage) {
           this.stats.pu = { cpu: usage.cpu, memory: usage.memory, pid: usage.pid, ctime: usage.ctime, elapsed: usage.elapsed, timestamp: usage.timestamp }; // Map relevant properties
+          const puEvent: IClientsEvent = {
+            subType: `${SubEventTypes.CLIENTS.MESSAGE_READY}`,
+            message: `pidInfo`,
+            success: true,
+            data: this.stats.pu,
+            clientsEvent: { id: "ALL" }
+          };
+          this.eV.emit(MainEventTypes.CLIENTS, puEvent);
           return true;
         }
       } catch (error) {

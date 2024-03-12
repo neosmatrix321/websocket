@@ -151,7 +151,7 @@ export class Main {
             errorEvent: { errCode: 2, data: { error } }
           });
         }
-      }, 5000);
+      }, 1000);
     }
     //  else {
     //   console.log("intervalStart: no action taken. clientsCounter:");
