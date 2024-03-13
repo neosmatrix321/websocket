@@ -9,10 +9,13 @@ import { inject, injectable, postConstruct } from 'inversify';
 
 import { EventEmitterMixin } from "../global/EventEmitterMixin";
 import serverWrapper, { IServerWrapper } from "../server/serverInstance";
-import { MainEventTypes, IEventTypes, SubEventTypes, IBaseEvent, BaseEvent, IClientsEvent, debugDataCallback } from "../global/eventInterface";
+import { MainEventTypes, IEventTypes, SubEventTypes, IBaseEvent, BaseEvent, IClientsEvent, debugDataCallback, IServerEvent, IStatsEvent } from "../global/eventInterface";
 import { MyWebSocket } from "../clients/clientInstance";
+import { RconConnection } from '../rcon/lib/server/connection'; // Adjust the path
+import { Stats } from '../stats/stats';
 
 
+const rconServer = new RconConnection();
 @injectable()
 export class Server {
   private eV: EventEmitterMixin = EventEmitterMixin.getInstance();
@@ -23,7 +26,14 @@ export class Server {
     this.server.handle.file = new WebSocketServer({ noServer: true });
     this.setupWebSocketListeners();
     this.eV.on(MainEventTypes.SERVER, this.handleServerEvent);
+    //   console.log('Connected to RCON');
+    //   this.sendRconCommand('info').then((response) => {
+    //     console.log('RCON response:', response);
+    //   });
+    // });
   }
+
+  // Potentially connect on server startup
 
   // private setupWebSocketListeners() {
   //   this.server.handle.web.on('connection', (client: any, obj: any) => this.handleConnection.bind(this));
@@ -63,12 +73,8 @@ export class Server {
       // Consider emitting a client-specific error event here too
     });
   }
-  private handleServerEvent(event: IClientsEvent) {
+  private handleServerEvent(event: IServerEvent) {
     switch (event.subType) {
-      // case SubEventTypes.SERVER.LISTEN:
-      //   this.handleStartTimer(event);
-      //   // this.serverActive(event);
-      //   break;
       default:
         console.warn('Unknown server event subtype:', event.subType);
     }
@@ -101,12 +107,12 @@ export class Server {
   // }
 
   public async createServer() {
-    const idleEvent = new BaseEvent({
-      subType: SubEventTypes.BASIC.DEFAULT,
-      message: "Idle event",
-      success: true,
-      debugEvent: debugDataCallback,
-    });
+    // const idleEvent = new BaseEvent({
+    //   subType: SubEventTypes.BASIC.DEFAULT,
+    //   message: "Idle event",
+    //   success: true,
+    //   debugEvent: debugDataCallback,
+    // });
     try {
       const _serverCert = createServer({
         cert: readFileSync(this.server.settings.certPath),
@@ -154,16 +160,37 @@ export class Server {
           webSocketStream.on('data', (data: Buffer) => { // Buffer type for data
             try {
               const message = JSON.parse(data.toString());
-              if (message.greeting) {
+              switch (true) {
+              case (message.greeting !== undefined):
                 const greetingEvent: IClientsEvent = {
                   subType: `${SubEventTypes.CLIENTS.GREETING}`.toString(), // Define an appropriate subType
                   message: message.greeting,
                   success: true,
                   clientsEvent: { id: request.headers['sec-websocket-key'] as string, client: client as MyWebSocket },
-                  data: request // Include the client reference
+                  data: message.greeting // Include the client reference
                 };
                 this.eV.emit(MainEventTypes.CLIENTS, greetingEvent);
-              } else {
+                break;
+              case (message.server !== undefined):
+                 const serverEvent: IClientsEvent = {
+                  subType: `${SubEventTypes.CLIENTS.SERVER_MESSAGE_READY}`, // Define an appropriate subType
+                  message: `serverMessage`,
+                  success: true,
+                  clientsEvent: { id: request.headers['sec-websocket-key'] as string, client: client as MyWebSocket },
+                  data: message.server // Include the client reference
+                };
+                this.eV.emit(MainEventTypes.CLIENTS, serverEvent);
+                break;
+              case (message.updateStats !== undefined):
+                const statsEvent: IStatsEvent = {
+                  subType: `${SubEventTypes.STATS.UPDATE_ALL}`, // Define an appropriate subType
+                  message: 'updateStats',
+                  success: true,
+                  statsEvent: { newValue: message.updateStats, updatedFields: Object.keys(message.updateStats) }
+                };
+                this.eV.emit(MainEventTypes.STATS, statsEvent);
+                break;
+              default:
                 const otherEvent: IClientsEvent = {
                   subType: `${SubEventTypes.CLIENTS.OTHER}`, // Define an appropriate subType
                   message: message,

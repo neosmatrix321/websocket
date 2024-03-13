@@ -5,6 +5,7 @@ import si from 'systeminformation';
 import { BaseEvent, IClientsEvent, IEventTypes, MainEventTypes, SubEventTypes } from "../global/eventInterface";
 import { WebSocket } from 'ws';
 import { EventEmitterMixin } from "../global/EventEmitterMixin";
+import { Server } from '../server/server';
 
 
 const myDebugConsolePrint = () => {
@@ -51,8 +52,12 @@ export class Clients {
         case SubEventTypes.CLIENTS.MESSAGE:
           this.handleClientMessage(newID, event.data, event.data.isBinary);
           break;
+        case SubEventTypes.CLIENTS.SERVER_MESSAGE_READY:
+          this.clientsMessageReady(newID, event.message, event.data, event.data.isBinary);
+          break;
         case SubEventTypes.CLIENTS.MESSAGE_READY:
-          if (newID == "ALL") this.clientsMessageReady(event.message, event.data, event.data.isBinary)
+          const wsClient = event.clientsEvent.client;
+          if (newID == "ALL" || (wsClient && wsClient?.type == `${ClientType.Admin}`)) this.clientsMessageReady(newID, event.message, event.data, event.data.isBinary)
           else this.clientMessageReady(newID, event.message, event.data, event.data.isBinary);
           break;
         case SubEventTypes.CLIENTS.GREETING:
@@ -75,7 +80,8 @@ export class Clients {
           }
           break;
         case SubEventTypes.CLIENTS.OTHER:
-          console.log("other Clients Event ?");
+          console.log("other Clients Event ?", event);
+          // console.dir(event);
           break;
         default:
           this.eV.emit(MainEventTypes.ERROR, `no ${event.subType} found in ${MainEventTypes.CLIENTS}`);
@@ -103,9 +109,9 @@ export class Clients {
   handleGreeting(id: string, messageObject: any) {
     throw new Error("Method not implemented.");
   }
-  public clientsMessageReady(type: string, data: string, isBinary: boolean) {
+  public clientsMessageReady(id: string, type: string, data: string, isBinary: boolean) {
     Object.values(this.clients.client).forEach((client) => {
-      this.clientMessageReady(client.info.id, type, data, isBinary);
+      if (type === "serverMessage" && id != client.info.id) this.clientMessageReady(client.info.id, type, data, isBinary);
     });
   }
   public clientMessageReady(id: string, type: string, data: string, isBinary: boolean): void {
@@ -113,6 +119,7 @@ export class Clients {
     if (client && client.ws && client.ws.readyState === WebSocket.OPEN) {
       console.log(`sending ${JSON.stringify(data)} to client ${id}`);
       switch (type) {
+        case "serverMessage":
         case "pidInfo":
         case "chatMessage":
         case "extras":
@@ -143,7 +150,6 @@ export class Clients {
         typeFinal = ClientType.Admin;
         break;
       case '192.168.228.7':
-      case 'neo.dnsfor.me':
         typeFinal = ClientType.Server;
         break;
       default:
@@ -155,6 +161,7 @@ export class Clients {
     let newClient = wsClient as unknown as MyWebSocket;
     newClient.id = `${id}`;
     newClient.ip = `${newIP}`;
+    newClient.type = `${typeFinal}`;
     //public create(newID: string, newIP: string, type: ClientType): void {
     const newClientInfo: IClientInfo = { id: newClient.id, ip: newIP, type: typeFinal };
     let newResult: { errCode: number, message?: string, data?: any } = { errCode: 1 };

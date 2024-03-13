@@ -14,7 +14,7 @@ container.bind<Clients>(CLIENTS_WRAPPER_TOKEN).to(Clients);
 container.bind<Server>(SERVER_WRAPPER_TOKEN).to(Server);
 
 // Get an instance of Main
-const main = container.get<Main>(Main);
+export const main = container.get<Main>(Main);
 function startApplication() {
   main.initialize();
 }

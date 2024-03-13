@@ -1,6 +1,6 @@
 import { EventEmitter } from "events";
 import "reflect-metadata";
-import { MainEventTypes, IEventTypes, SubEventTypes, IEventStats, BaseEvent, debugDataCallback} from './eventInterface';
+import { MainEventTypes, IEventTypes, SubEventTypes, IEventStats, BaseEvent, debugDataCallback } from './eventInterface';
 
 
 export class EventEmitterMixin {
@@ -15,25 +15,23 @@ export class EventEmitterMixin {
   }
 
   private storeEvent(event: string, eventData: any) {  // Modified parameter
+    // console.log('EventEmitterMixin.storeEvent:', event);
+    // console.dir(eventData);
+    if (!this.isValidEvent(event, eventData)) {
+      return;
+    }
     if (!this._events.has(event)) {
-      if (eventData[0] && !this.isValidEvent(event, eventData[0])) {
-        const { customKey, customData } = this.createEvent(event, eventData);
-        // if (EventEmitterMixin.stats.activeEvents > 10) {
-        //   process.exit(1);
-        // }
-        EventEmitterMixin.stats.activeEvents++;
-        this._events.set(customKey, customData);
-      }
-    } else {
+      const { customKey, customData } = this.createEvent(event, eventData);
+      // if (EventEmitterMixin.stats.activeEvents > 10) {
+      //   process.exit(1);
+      // }
+      EventEmitterMixin.stats.activeEvents++;
+      this._events.set(customKey, customData);
     }
   }
 
   private createEvent(event: string, ...args: any[]): { customKey: string, customData: IEventTypes } {
     try {
-      // Ensure args[0] conforms to the expected event interface
-      if (args[0] && !this.isValidEvent(event, args[0])) {
-        console.error(`Invalid event data for event type ${event as string}`);
-      }
       const originalEvent = this._events.get(event);
       if (!originalEvent) {
         const newData = new BaseEvent({ data: JSON.stringify(event) });
@@ -42,7 +40,7 @@ export class EventEmitterMixin {
         return { customKey: SubEventTypes.ERROR.WARNING, customData: newData };
       }
       // Get the stored event (could be BaseEvent for unknown ones) and merge
-      return { customKey: event, customData: { ...args[0] }};
+      return { customKey: event, customData: { ...args[0] } };
     } catch (error) {
       const newData = new BaseEvent({ data: JSON.stringify(event) });
       this.emitError(MainEventTypes.ERROR, newData);
@@ -50,8 +48,9 @@ export class EventEmitterMixin {
     }
   }
   private isValidEvent(event: string, eventData?: any): boolean {
+    // console.log('EventEmitterMixin.isValidEvent:', event);
+    // console.dir(eventData);
     switch (event) {
-
       case typeof MainEventTypes:
         return true;
       default:
@@ -85,6 +84,7 @@ export class EventEmitterMixin {
   public async on(event: string, listener: (...args: any[]) => void) {
     // EventEmitterMixin.stats.activeEvents++;
     EventEmitterMixin.stats.eventCounter++;
+    console.log(`EventEmitterMixin.on: ${event} - ${EventEmitterMixin.stats.eventCounter}`);
     if (!this._events.has(event)) {
       this.storeEvent(event, listener); // Ensure the event is registered
     }
@@ -110,11 +110,11 @@ export class EventEmitterMixin {
     // if (!eventData) {
     //   return; // Handle event creation failure
     // }
+    console.log(`EventEmitterMixin.emit: ${event} - ${EventEmitterMixin.stats.activeEvents}`);
 
     // this._events.push(eventData); // ??
     // this.emit(MainEventTypes.ERROR, createCustomDebugEvent(event, ...args));  
 
-    // console.warn('EventEmitterMixin.emit:', createCustomDebugEvent(event, ...args));  
     EventEmitterMixin.stats.activeEvents--;
     this._emitter.emit(event, ...args);
   }
