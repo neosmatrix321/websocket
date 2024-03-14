@@ -47,7 +47,6 @@ export class RconConnection {
           }
           this.authenticated = true;
           if (!this.connectedWithoutError) {
-            console.log(`RCON: Connected to ${hostname}:${port}`);
             this.connectedWithoutError = true;
           }
           resolve();

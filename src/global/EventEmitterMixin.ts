@@ -1,11 +1,11 @@
 import { EventEmitter } from "events";
 import "reflect-metadata";
-import { MainEventTypes, IEventTypes, SubEventTypes, IEventStats, BaseEvent, debugDataCallback } from './eventInterface';
+import { MainEventTypes, IEventTypes, SubEventTypes, IEventStats, BaseEvent, debugDataCallback, CustomErrorEvent } from './eventInterface';
 
 
 export class EventEmitterMixin {
   private static _instance: EventEmitterMixin;
-  public static stats: IEventStats = { eventCounter: 0, activeEvents: 0 };
+  public static stats: IEventStats = { eventCounter: 0, activeEvents: 0, errorCounter: 0 };
   private _emitter: EventEmitter;
   private _events: Map<string, any> = new Map(); // Store default events
   // private _listeners: Map<string, ((...args: any[]) => void)[]> = new Map();
@@ -17,68 +17,55 @@ export class EventEmitterMixin {
   private storeEvent(event: string, eventData: any) {  // Modified parameter
     // console.log('EventEmitterMixin.storeEvent:', event);
     // console.dir(eventData);
-    if (!this.isValidEvent(event, eventData)) {
-      return;
-    }
-    if (!this._events.has(event)) {
-      const { customKey, customData } = this.createEvent(event, eventData);
+    let Key = event;
+    let Data = eventData;
+    if (!this._events.has(Key)) {
+      if (!this.isValidEvent(Key, Data)) {
+        const { customKey, customData } = this.createEvent(Key, Data);
+        Key = customKey;
+        Data = customData;
+      }
       // if (EventEmitterMixin.stats.activeEvents > 10) {
       //   process.exit(1);
       // }
       EventEmitterMixin.stats.activeEvents++;
-      this._events.set(customKey, customData);
+      this._events.set(Key, Data);
     }
   }
 
   private createEvent(event: string, ...args: any[]): { customKey: string, customData: IEventTypes } {
-    try {
-      const originalEvent = this._events.get(event);
-      if (!originalEvent) {
-        const newData = new BaseEvent({ data: JSON.stringify(event) });
-        // newData.errorEvent = { errCode: 6, data: { event, args } };
-        this.emitError(MainEventTypes.ERROR, newData);
-        return { customKey: SubEventTypes.ERROR.WARNING, customData: newData };
-      }
-      // Get the stored event (could be BaseEvent for unknown ones) and merge
-      return { customKey: event, customData: { ...args[0] } };
-    } catch (error) {
-      const newData = new BaseEvent({ data: JSON.stringify(event) });
-      this.emitError(MainEventTypes.ERROR, newData);
-      return { customKey: SubEventTypes.ERROR.WARNING, customData: newData };
+    let originalEvent = this._events.get(event);
+    if (!originalEvent) {
+      this.handleError(SubEventTypes.ERROR.WARNING, `EventEmitterMixin.createEvent`, new CustomErrorEvent(`from ${event}`, MainEventTypes.EVENT, { ...args[0] } ));
     }
+    return { customKey: event, customData: { ...args[0] } };
   }
   private isValidEvent(event: string, eventData?: any): boolean {
-    // console.log('EventEmitterMixin.isValidEvent:', event);
-    // console.dir(eventData);
-    switch (event) {
-      case typeof MainEventTypes:
-        return true;
-      default:
-        const newEvent: BaseEvent = { subType: SubEventTypes.ERROR.FATAL, success: false, message: 'Fatal: Invalid event type', errorEvent: { errCode: 4, data: { event, eventData } } };
-        this.emit(MainEventTypes.ERROR, newEvent);
-        return false;
+    if (Object.keys(MainEventTypes).includes(event)) {
+      console.log('EventEmitterMixin.isValidEvent:', event);
+      return true;
+    } else {
+      this.handleError(SubEventTypes.ERROR.WARNING, "EventEmitterMixin.isValidEvent", new CustomErrorEvent(`from ${event}`, MainEventTypes.EVENT, { ...eventData }));
+      return false;
     }
   }
-  private emitError(event: string, error?: any): void {
+  private emitError(subType: string, message: string, errorBlob: CustomErrorEvent, errorCounter: number): void {
     const newEvent: BaseEvent = {
-      ...(new BaseEvent({ subType: SubEventTypes.ERROR.INFO }) as BaseEvent),
-      errorEvent: {
-        errCode: 2, // A sample error code
-        message: event as string,
-        error: new Error('Something went wrong'), // A sample error
-        data: error
-      },
+      ...(new BaseEvent({ subType: subType, message: message, counter: errorCounter }) as BaseEvent),
+      errorEvent: { ...errorBlob }, // A sample error
       debugEvent: debugDataCallback,
     };
     EventEmitterMixin.stats.activeEvents--;
+    // console.log(`Error from eventManager: ${type}`, newEvent);
     this._emitter.emit(MainEventTypes.ERROR, newEvent);
   }
 
   // ... other EventEmitter methods
-  public handleError(error: any, errorBlob?: any): void {
-    const errorData: any = { ...errorBlob || error };
-    console.error('Error from eventManager:', error);
-    this.emitError(`${MainEventTypes.ERROR}.${MainEventTypes.ERROR}`, errorData); // Emit the error for wider handling
+  public handleError(subType: string, message: string, errorBlob: any): void {
+    // console.error(`handleError type: ${type}, message: ${message}`);
+    // console.dir(errorBlob, { depth: null, colors: true });
+    EventEmitterMixin.stats.errorCounter++;
+    this.emitError(subType, message, errorBlob, EventEmitterMixin.stats.errorCounter); // Emit the error for wider handling
   }
 
   public async on(event: string, listener: (...args: any[]) => void) {
@@ -92,8 +79,12 @@ export class EventEmitterMixin {
     this._emitter.on(event, listener);
   }
   public async prepend(event: string, listener: (...args: any[]) => void) {
+    EventEmitterMixin.stats.eventCounter++;
     // this.storeEvent(event, listener);
     // console.warn('EventEmitterMixin.prepend:', createCustomDebugEvent(event, listener));  
+    if (!this._events.has(event)) {
+      this.storeEvent(event, listener); // Ensure the event is registered
+    }
     this._emitter.prependListener(event, listener); // Use prependListener
   }
 
@@ -101,6 +92,7 @@ export class EventEmitterMixin {
     // console.warn('EventEmitterMixin.off:', createCustomDebugEvent(event, listener));  
     this._emitter.off(event, listener);
     if (this._events.has(event)) {
+      EventEmitterMixin.stats.activeEvents--;
       this._events.delete(event); // Remove the event from the stored events
     }
   }
@@ -110,19 +102,18 @@ export class EventEmitterMixin {
     // if (!eventData) {
     //   return; // Handle event creation failure
     // }
-    console.log(`EventEmitterMixin.emit: ${event} - ${EventEmitterMixin.stats.activeEvents}`);
-
+    // console.log(`--> EventEmitterMixin.emit: ${event} - ${EventEmitterMixin.stats.activeEvents}`);
+    // console.dir(args[0], { depth: 1, colors: true })
     // this._events.push(eventData); // ??
     // this.emit(MainEventTypes.ERROR, createCustomDebugEvent(event, ...args));  
 
-    EventEmitterMixin.stats.activeEvents--;
     this._emitter.emit(event, ...args);
   }
   public static getInstance(): EventEmitterMixin {
-    if (!EventEmitterMixin._instance) {
-      EventEmitterMixin._instance = new EventEmitterMixin();
+    if (!this._instance) {
+      this._instance = new EventEmitterMixin();
     }
-    return EventEmitterMixin._instance;
+    return this._instance;
   }
 }
 

@@ -11,34 +11,46 @@ export const MainEventTypes = {
   CLIENTS: 'CLIENTS',
   ERROR: 'ERROR',
   DEBUG: 'DEBUG',
+  EVENT: 'EVENT',
 };
-
 export const SubEventTypes = {
   BASIC: {
     FIRST: 'FIRST',
     LAST: 'LAST',
-    DEFAULT: 'DEFAULT'
+    DEFAULT: 'DEFAULT',
+    MAIN: 'MAIN',
+    STATS: 'STATS',
+    SERVER: 'SERVER',
+    CLIENTS: 'CLIENTS',
+    EVENT: 'EVENT',
   },
   MAIN: {
     START_INTERVAL: 'START_INTERVAL',
     STOP_INTERVAL: 'STOP_INTERVAL',
-    PID_AVAILABLE: 'PID_AVAILABLE'
+    PID_AVAILABLE: 'PID_AVAILABLE',
+    PID_UNAVAILABLE: 'PID_UNAVAILABLE',
+    PRINT_DEBUG: 'PRINT_DEBUG',
   },
   STATS: {
     UPDATE_ALL: 'UPDATE_ALL',
     UPDATE_PI: 'UPDATE_PI',
     UPDATE_PU: 'UPDATE_PU',
     UPDATE_OTHER: 'UPDATE_OTHER',
+    GET_PID: 'GET_PID',
     RCON_CONNECT: 'RCON_CONNECT',
     RCON_DISCONNECT: 'RCON_DISCONNECT',
     RCON_MESSAGE: 'RCON_MESSAGE',
     RCON_GET_STATS: 'RCON_GET_STATS',
+    PRINT_DEBUG: 'PRINT_DEBUG',
+    FORCE_UPDATE_ALL: 'FORCE_UPDATE_ALL',
+    FORCE_UPDATE_ALL_FOR_ME: 'FORCE_UPDATE_ALL_FOR_ME',
   },
   SERVER: {
     LISTEN: 'LISTEN',
     CONNECT: 'CONNECT',
     DISCONNECT: 'DISCONNECT',
     MESSAGE: 'MESSAGE',
+    PRINT_DEBUG: 'PRINT_DEBUG',
   },
   CLIENTS: {
     SUBSCRIBE: 'SUBSCRIBE',
@@ -52,6 +64,8 @@ export const SubEventTypes = {
     OTHER: 'OTHER',
     MESSAGE_READY: 'MESSAGE_READY',
     SERVER_MESSAGE_READY: 'SERVER_MESSAGE_READY',
+    PRINT_DEBUG: 'PRINT_DEBUG',
+    MESSAGE_PAKET_READY: 'MESSAGE_PAKET_READY',
   },
   ERROR: {
     INFO: 'INFO',
@@ -110,13 +124,28 @@ export class DebugEventGenerator {
 
 export const debugDataCallback: IDebugEvent = new DebugEventGenerator().generateDebugData();
 
+export class CustomErrorEvent extends Error {
+  message: string;
+  mainSource: string;
+  data?: any;
 
+  constructor(
+    message: string,
+    mainSource: string,
+    data?: any
+  ) {
+    super();
+    this.message = message;
+    this.mainSource = mainSource;
+    this.data = { ...data };
+  }
+}
 export interface IBaseEvent {
   subType: string;
   message: string;
+  counter?: number;
   data?: any;
   success?: boolean;
-  errorEvent?: { errCode: number, error?: Error, message?: string, data?: any };
   debugEvent?: Partial<IDebugEvent>;
 }
 
@@ -133,7 +162,11 @@ export interface IServerEvent extends IBaseEvent {
 }
 
 export interface IClientsEvent extends IBaseEvent {
-  clientsEvent: { id: string, ip?: string, clientType?: ClientType, message?: string, client?: MyWebSocket };
+  clientsEvent: { id: string, ip: string, clientType: ClientType, message?: string, client: MyWebSocket };
+}
+
+export interface IErrorEvent extends IBaseEvent {
+  errorEvent: CustomErrorEvent;
 }
 
 export interface IDebugEvent {
@@ -149,14 +182,14 @@ export interface IDebugEvent {
   updateDuration?(): void;
 }
 
-export type IEventTypes = IBaseEvent | IMainEvent | IStatsEvent | IServerEvent | IClientsEvent;
+export type IEventTypes = Partial<IBaseEvent> | Partial<IMainEvent> | Partial<IStatsEvent> | Partial<IServerEvent> | Partial<IClientsEvent>;
 
 export class BaseEvent implements IBaseEvent {
   subType: string = SubEventTypes.BASIC.DEFAULT;
   message: string = "";
   data?: any;
   success: boolean = false;
-  errorEvent?: { errCode: number, error?: Error, message?: string, data?: any };
+  errorEvent?: CustomErrorEvent;
   debugEvent?: IDebugEvent;
 
   constructor(data?: Partial<IBaseEvent>) {
@@ -192,7 +225,7 @@ export class ServerEvent extends BaseEvent implements IServerEvent {
 }
 
 export class ClientsEvent extends BaseEvent implements IClientsEvent {
-  clientsEvent: { id: string, ip?: string, clientType?: ClientType, message?: string, client?: MyWebSocket } = { id: "" };
+  clientsEvent: { id: string, ip: string, clientType: ClientType, message?: string, client: MyWebSocket } = { id: "NaN", ip: "NaN", clientType: ClientType.Unknown, client: {} as MyWebSocket };
 
   constructor(data?: Partial<IClientsEvent>) {
     super(data);
@@ -200,7 +233,17 @@ export class ClientsEvent extends BaseEvent implements IClientsEvent {
   }
 }
 
+export class ErrorEvent extends BaseEvent implements IErrorEvent {
+  errorEvent: CustomErrorEvent = new CustomErrorEvent("NaN", MainEventTypes.ERROR, {errCode: 0});
+
+  constructor(data?: Partial<IErrorEvent>) {
+    super(data);
+    Object.assign(this.errorEvent, data?.errorEvent);
+  }
+}
+
 export interface IEventStats {
   eventCounter: number;
   activeEvents: number;
+  errorCounter: number;
 }

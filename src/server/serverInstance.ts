@@ -24,7 +24,7 @@ export interface IServerWrapper {
   settings: IHandleSettings;
 }
 
-export default class serverWrapper implements IServerWrapper{
+export class serverWrapper implements IServerWrapper {
   handle: IHandle = {
     web: new WebSocketServer({ noServer: true }),
     file: new WebSocketServer({ noServer: true }),

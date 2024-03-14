@@ -1,39 +1,43 @@
 "use strict";
 
 import { RconConnection } from "../rcon/lib/server/connection";
+import * as fs from 'fs';
+
+export interface IRconStats {
+  info: { name: string, ver: string };
+  players: { name: string, playeruid: string, steamid: string }[];
+ }
 
 export interface IGlobalStats {
-  latencyGoogle: number | null,
-  si: { proc: string, pid: number, cpu: number, mem: number },
-  pu: { cpu: number, memory: number, pid: number, ctime: number, elapsed: number, timestamp: number },
-  rcon: { info: string, players: any }
+  latencyGoogle: number | "NaN",
+  si: { proc: string, pid: number | "NaN", cpu: number | "NaN", mem: number | "NaN" },
+  pu: { cpu: number | "NaN", memory: number | "NaN", pid: number | "NaN", ctime: number | "NaN", elapsed: number | "NaN", timestamp: number | "NaN" },
+  rcon: IRconStats,
   lastUpdates: Record<string, number>,
 }
 
 export interface IHandle {
-  rcon: RconConnection | undefined | null;
+  rcon: RconConnection | undefined;
+  pidWatcher: fs.FSWatcher | undefined;
 }
+
 export interface IRconSettings {
   host: string;
   port: number;
   pw: string;
   isConnected: boolean;
-  // timeout: number;
-  // keepAlive: boolean;
-  // keepAliveInterval: number;
-  // keepAliveTimeout: number;
-  // encoding: string;
-  // debug: boolean;
-  // maxRetries: number;
-  // retryInterval: number;
-  // useTLS: boolean;
-  // tls: {
-  //   certPath: string;
-  //   keyPath: string;
-  //   caPath: string;
-  //   rejectUnauthorized: boolean;
-  // }
 }
+
+export const packetHandlers = {
+  serverMessage: "serverMessage",
+  pidInfo: "pidInfo",
+  chatMessage: "chatMessage",
+  extras: "extras",
+  latencyGoogle: "latencyGoogle",
+  latencyUser: "latencyUser",
+  rconInfo: "rconInfo",
+  rconPlayers: "rconPlayers",
+};
 
 export interface IPidSettings {
   file: string;
@@ -42,13 +46,12 @@ export interface IPidSettings {
   fileReadable: boolean;
 }
 
-
 export class globalStats implements IGlobalStats {
-  public latencyGoogle = null;
-  public si = { proc: "", pid: 0, cpu: 0, mem: 0 };
-  public pu = { cpu: 0, memory: 0, pid: 0, ctime: 0, elapsed: 0, timestamp: 0 };
-  public rcon = { info: "", players: {} };
-  public lastUpdates = { "init": Date.now() };
+  public latencyGoogle: number | "NaN" = "NaN";
+  public si: { proc: string, pid: number | "NaN", cpu: number | "NaN", mem: number | "NaN" } = { proc: "NaN", pid: "NaN", cpu: "NaN", mem: "NaN" };
+  public pu: { cpu: number | "NaN", memory: number | "NaN", pid: number | "NaN", ctime: number | "NaN", elapsed: number | "NaN", timestamp: number | "NaN" } = { cpu: "NaN", memory: "NaN", pid: "NaN", ctime: "NaN", elapsed: "NaN", timestamp: "NaN" };
+  public rcon: IRconStats = { info: { name: "NaN", ver: "NaN" }, players: [{ name: "NaN", playeruid: "NaN", steamid: "NaN" }] }; // { name: "name", playeruid: "playeruid", steamid: "steamid" }, 
+  public lastUpdates: Record<string, number> = { "init": Date.now() };
   constructor() { }
 }
 
@@ -74,9 +77,10 @@ export class statsSettings {
 }
 
 export class Handle implements IHandle {
-  public rcon: RconConnection | undefined | null;
-  public intval: any;
+  public rcon: RconConnection | undefined;
+  public pidWatcher: any;
   constructor() {
     this.rcon = undefined;
+    this.pidWatcher = undefined;
   }
 }
