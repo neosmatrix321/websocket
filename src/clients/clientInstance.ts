@@ -20,7 +20,6 @@ export interface MyWebSocket extends WebSocket {
 export interface IClientInfo {
   id: string;
   ip: string;
-  type: ClientType; // 'basic' | 'advanced' | ...
 }
 export interface IClientStats {
   eventCount: number;
@@ -30,7 +29,8 @@ export interface IClientStats {
   latency: number | undefined;
 }
 export interface IClientSettings {
-  pw_hash: string | null;
+  pw_hash?: string;
+  type?: ClientType;
 }
 export interface IClientSuper {
   customIntervallTime: number | false;
@@ -54,9 +54,9 @@ export class clientWrapper implements IClientWrapper {
    ws: MyWebSocket;
 
    constructor(id: string, ip: string, type: ClientType, ws: MyWebSocket) {
-       this.info = { id: id, ip: ip, type: type };
+       this.info = { id: id, ip: ip };
        this.stats = { eventCount: 0, lastUpdates: { 'create': Date.now() }, messagesReceived: [], messagesToSend: [], latency: undefined };
-       this.settings = { pw_hash: null };
+       this.settings = { pw_hash: "NaN", type: type };
        this.super = { customIntervallTime: false };
        this.ws = ws;
    }

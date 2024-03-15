@@ -5,11 +5,12 @@ import { EventEmitterMixin } from "./global/EventEmitterMixin";
 // import Stats from "./stats/stats";
 // import Server from "./server/server";
 // import Clients from "./clients/clients";
-import { ClientType } from "./clients/clientInstance";
 import { SubEventTypes, MainEventTypes, IEventTypes, IMainEvent, BaseEvent, IBaseEvent, debugDataCallback, DebugEventGenerator, CustomErrorEvent, IErrorEvent } from './global/eventInterface';
 import { Stats } from './stats/stats';
 import { Server } from "./server/server";
 import { Clients } from "./clients/clients";
+import { Handle } from './stats/statsInstance';
+
 export const STATS_WRAPPER_TOKEN = Symbol('Stats');
 export const CLIENTS_WRAPPER_TOKEN = Symbol('Clients');
 export const SERVER_WRAPPER_TOKEN = Symbol('Server');
@@ -20,7 +21,6 @@ const FirstEvent = new BaseEvent({
   success: true,
   debugEvent: debugDataCallback,
 });
-
 
 
 /*
@@ -58,8 +58,7 @@ export class Main {
     // console.log("Main constructor: ", this.eV, this.stats, this.server, this.clients);
     this.setupEventHandlers();
     this.eV.emit(MainEventTypes.BASIC, FirstEvent);
-    this.eV.handleError(SubEventTypes.ERROR.INFO, "Main Constructor", new CustomErrorEvent("No extra", MainEventTypes.BASIC, { errCode: 0 }));
-    // this.initialize();
+     // this.initialize();
     // this.eV.on('createTimer', () => {
     //   this.startTimer();
     // });  
@@ -145,6 +144,22 @@ export class Main {
         };
         this.eV.emit(MainEventTypes.STATS, listenEvent);
         break;
+      case SubEventTypes.MAIN.PID_AVAILABLE:
+        const pidAvEvent: IBaseEvent = {
+          subType: SubEventTypes.STATS.PREPARE,
+          message: `Prepare to gather`,
+          success: true,
+        };
+        this.eV.emit(MainEventTypes.STATS, pidAvEvent).then(() => {;
+          const statsUpdateEvent: IBaseEvent = {
+            subType: SubEventTypes.STATS.FORCE_UPDATE_ALL,
+            message: `updateStats`,
+          };
+          this.eV.emit(MainEventTypes.STATS, statsUpdateEvent);
+        }).catch((error) => { 
+          this.eV.handleError(SubEventTypes.ERROR.WARNING, `handleMainEvent`, new CustomErrorEvent(`from ${event.subType}`, MainEventTypes.STATS, error));
+        });
+        break;
       case SubEventTypes.MAIN.PID_UNAVAILABLE:
         // TODO: let interval run and send dummy data
         const pidUnEvent: IBaseEvent = {
@@ -153,19 +168,6 @@ export class Main {
           success: true,
         };
         this.eV.emit(MainEventTypes.STATS, pidUnEvent);
-        break;
-      case SubEventTypes.MAIN.PID_AVAILABLE:
-        const pidAvEvent: IBaseEvent = {
-          subType: SubEventTypes.STATS.RCON_CONNECT,
-          message: `connect to rcon`,
-          success: true,
-        };
-        this.eV.emit(MainEventTypes.STATS, pidAvEvent);
-        const statsUpdateEvent: IBaseEvent = {
-          subType: SubEventTypes.STATS.FORCE_UPDATE_ALL,
-          message: `updateStats`,
-        };
-        this.eV.emit(MainEventTypes.STATS, statsUpdateEvent);
         break;
       case SubEventTypes.MAIN.START_INTERVAL:
         this.intervalStart();
@@ -206,6 +208,9 @@ export class Main {
   private intervalStart() {
     if (!this.sendInfoInterval) {
       this.intvalStats.idleEnd = Date.now();
+      this.eV.emit(MainEventTypes.CLIENTS, {
+        subType: SubEventTypes.CLIENTS.UPDATE_ALL_STATS
+      });
       console.log(`intervalStart: Interval started, idle time: ${this.intvalStats.idleEnd - this.intvalStats.idleStart}ms.`);
       this.sendInfoInterval = setInterval(() => {
         this.eV.emit(MainEventTypes.STATS, {

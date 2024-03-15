@@ -37,15 +37,12 @@ export class Stats {
         this.getPid();
         break;
       case SubEventTypes.STATS.UPDATE_ALL:
-        this.updateAndGetPidIfNecessary();
         this.updateAllStats();
         break;
       case SubEventTypes.STATS.FORCE_UPDATE_ALL:
-        this.updateAndGetPidIfNecessary();
         this.forceUpdateAllStats();
         break;
       case SubEventTypes.STATS.FORCE_UPDATE_ALL_FOR_ME:
-        this.updateAndGetPidIfNecessary();
         this.forceUpdateAllStats(event.message);
         break;
       case SubEventTypes.STATS.PRINT_DEBUG:
@@ -53,6 +50,9 @@ export class Stats {
         console.dir(this.stats, { depth: null, colors: true });
         console.dir(this.settings, { depth: null, colors: true });
         console.dir(this.handle, { depth: 2, colors: true });
+        break;
+      case SubEventTypes.STATS.PREPARE:
+        this.updateAndGetPidIfNecessary();
         break;
       case SubEventTypes.STATS.RCON_CONNECT:
         try {
@@ -76,8 +76,11 @@ export class Stats {
   }
   private async updateAllStats(): Promise<void> {
     this.stats.lastUpdates = { ...this.stats.lastUpdates, "updateAllStats": Date.now() };
-    this.getPU();
-    this.rconGetStats();
+    if (this.settings.pid.serverFound) {
+      this.getSI();
+      this.getPU();
+      this.rconGetStats();
+    }
 
     const time_diff = Date.now() - this.stats.lastUpdates.getLatencyGoogle;
     if (!this.stats.lastUpdates.getLatencyGoogle || time_diff > 5000) {
@@ -88,15 +91,15 @@ export class Stats {
 
   private async forceUpdateAllStats(id: string = "ALL"): Promise<void> {
     this.stats.lastUpdates = { ...this.stats.lastUpdates, "forceUpdateAllStats": Date.now() };
+    if (!this.settings.pid.serverFound) return this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.STATS, message: `forceUpdateAllStats | pid: ${this.settings.pid.pid}, SI pid: ${this.stats.si.pid}, serverFound: ${this.settings.pid.serverFound}`, success: false });
     await Promise.all([this.getPU(), this.rconGetStats(true), this.getLatencyGoogle(true)]);
     this.eV.emit(MainEventTypes.STATS, {
       subType: SubEventTypes.CLIENTS.MESSAGE_PAKET_READY,
       message: `allStatsUpdated`,
       data: [ { "pidInfo": { ...this.stats.pu } }, { "latencyGoogle": this.stats.latencyGoogle }, { "rconInfo": { ...this.stats.rcon.info } }, { "rconPlayers": { ...this.stats.rcon.players } } ],
-      clientsEvent: { id: id }
+      clientsEvent: { id: id, ip: "ALL", clientType: ClientType.Basic, client: { } as MyWebSocket},
     });
   }
-
 
   async rconConnect(): Promise<void> {
     this.stats.lastUpdates = { ...this.stats.lastUpdates, "rconConnect": Date.now() };
@@ -146,7 +149,7 @@ export class Stats {
   }
 
   async rconGetStats(force: boolean = false): Promise<void> {
-    if (!this.settings.rcon.isConnected) return this.eV.emit(MainEventTypes.BASIC, SubEventTypes.BASIC.STATS, `RCON not connected` );
+    if (!this.settings.rcon.isConnected) return this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.STATS, message: `RCON not connected`, success: false });
     if (force || !this.stats.lastUpdates.rconGetStatsInfo || (Date.now() - this.stats.lastUpdates.rconGetStatsInfo) > 60000) {
       try {
         const info = await this.sendRconCommand('Info');
@@ -246,6 +249,7 @@ export class Stats {
       this.eV.emit(MainEventTypes.BASIC, newEvent);
       this.settings.pid.fileReadable = false;
       this.settings.pid.pid = undefined;
+      this.settings.pid.serverFound = false;
       this.eV.handleError(SubEventTypes.ERROR.INFO, "updatePid", new CustomErrorEvent(`pidFileExists: ${this.settings.pid.fileExists}, pid file readable: ${this.settings.pid.fileReadable}, pid: ${this.settings.pid.pid}, SI pid: ${this.stats.si.pid}`, MainEventTypes.STATS, error));
     }
   }
@@ -285,8 +289,10 @@ export class Stats {
   }
   public async updateAndGetPidIfNecessary(): Promise<void> {
     this.stats.lastUpdates = { ...this.stats.lastUpdates, "updateAndGetPidIfNecessary": Date.now() };
-    this.getSI().then(() => {
+    try {
+      const SI = await this.getSI();
       if (this.comparePids()) {
+        this.settings.pid.serverFound = true;
         const newEvent: IBaseEvent = {
           subType: SubEventTypes.BASIC.STATS,
           message: `updateAndGetPidIfNecessary | pid: ${this.settings.pid.pid}, SI pid: ${this.stats.si.pid}`,
@@ -294,6 +300,7 @@ export class Stats {
         };
         this.eV.emit(MainEventTypes.BASIC, newEvent);
       } else {
+        this.settings.pid.serverFound = false;
         const newEvent: IBaseEvent = {
           subType: SubEventTypes.BASIC.STATS,
           message: `updateAndGetPidIfNecessary | pid: ${this.settings.pid.pid}, SI pid: ${this.stats.si.pid}`,
@@ -301,9 +308,10 @@ export class Stats {
         };
         this.eV.emit(MainEventTypes.BASIC, newEvent);
       }
-    }).catch((error) => {
+    } catch (error) {
+      this.settings.pid.serverFound = false;
       this.eV.handleError(SubEventTypes.ERROR.WARNING, "updateAndGetPidIfNecessary", new CustomErrorEvent(`pidFileExists: ${this.settings.pid.fileExists}, pid file readable: ${this.settings.pid.fileReadable}, pid: ${this.settings.pid.pid}, SI pid: ${this.stats.si.pid}`, MainEventTypes.STATS, error));
-    });
+    }
   }
 
   comparePids(): boolean {

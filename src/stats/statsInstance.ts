@@ -44,6 +44,7 @@ export interface IPidSettings {
   pid: number | undefined;
   fileExists: boolean;
   fileReadable: boolean;
+  serverFound: boolean;
 }
 
 export class globalStats implements IGlobalStats {
@@ -72,6 +73,7 @@ export class statsSettings {
     pid: undefined,
     fileExists: false,
     fileReadable: false,
+    serverFound: false,
   }
   constructor() { }
 }

@@ -9,15 +9,25 @@ interface IHandle {
   web: WebSocketServer;
   file: WebSocketServer;
 }
+
 interface IHandleStats {
-  dummy: number;
+  webHandle: {
+    isAlive: boolean;
+    hasConnection: boolean;
+  };
+  fileHandle: {
+    isAlive: boolean;
+    hasConnection: boolean;
+  };
 }
+
 interface IHandleSettings {
   certPath: string;
   keyPath: string;
   ip: string;
   streamServerPort: number;
 }
+
 export interface IServerWrapper {
   handle: IHandle;
   stats: IHandleStats;
@@ -29,14 +39,23 @@ export class serverWrapper implements IServerWrapper {
     web: new WebSocketServer({ noServer: true }),
     file: new WebSocketServer({ noServer: true }),
   };
-  stats: IHandleStats = { dummy: 0 };
+  stats: IHandleStats = {
+    webHandle: {
+      isAlive: false,
+      hasConnection: false,
+    },
+    fileHandle: {
+      isAlive: false,
+      hasConnection: false,
+    },
+  };
   settings: IHandleSettings = {
     certPath: '/etc/letsencrypt/live/neo.dnsfor.me/cert.pem',
     keyPath: '/etc/letsencrypt/live/neo.dnsfor.me/privkey.pem',
     ip: "0.0.0.0",
     streamServerPort: 8080,
   };
-  
+
   // public killAll() {
   //   console.log('no please!');
   // }

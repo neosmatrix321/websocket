@@ -37,6 +37,7 @@ export const SubEventTypes = {
     UPDATE_PU: 'UPDATE_PU',
     UPDATE_OTHER: 'UPDATE_OTHER',
     GET_PID: 'GET_PID',
+    PREPARE: 'PREPARE',
     RCON_CONNECT: 'RCON_CONNECT',
     RCON_DISCONNECT: 'RCON_DISCONNECT',
     RCON_MESSAGE: 'RCON_MESSAGE',
@@ -246,4 +247,34 @@ export interface IEventStats {
   eventCounter: number;
   activeEvents: number;
   errorCounter: number;
+}
+
+export class activeClients {
+  private value: number;
+  callback: any;
+  constructor(initialValue = 0) {
+    this.value = initialValue;
+  }
+
+  plus(): void {
+    this.value++;
+    this.check();
+  }
+
+  minus(): void {
+    if (this.value > 0) {
+      this.value--;
+      this.check();
+    }
+  }
+
+  check(): void{
+    if (this.callback) {
+      this.callback(this.value > 0); 
+    }
+  }
+
+  set(callback: (value: boolean) => void): void {
+    this.callback = callback;
+  }
 }
