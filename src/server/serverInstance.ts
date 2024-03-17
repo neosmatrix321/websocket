@@ -4,60 +4,36 @@ import "reflect-metadata";
 // Interfaces (potentially in a separate file, interfaces.ts)
 import { WebSocketServer, WebSocket } from 'ws'
 import { RconConnection } from "../rcon/lib/server/connection";
+import * as fs from 'fs';
+import { stats } from '../global/containerWrapper';
 
 interface IHandle {
   web: WebSocketServer;
   file: WebSocketServer;
-}
-
-interface IHandleStats {
-  webHandle: {
-    isAlive: boolean;
-    hasConnection: boolean;
-  };
-  fileHandle: {
-    isAlive: boolean;
-    hasConnection: boolean;
-  };
-}
-
-interface IHandleSettings {
-  certPath: string;
-  keyPath: string;
-  ip: string;
-  streamServerPort: number;
+  rcon: RconConnection;
+  pidWatcher: fs.FSWatcher;
+  statsIntval: NodeJS.Timeout;
 }
 
 export interface IServerWrapper {
   handle: IHandle;
-  stats: IHandleStats;
-  settings: IHandleSettings;
 }
 
-export class serverWrapper implements IServerWrapper {
-  handle: IHandle = {
-    web: new WebSocketServer({ noServer: true }),
-    file: new WebSocketServer({ noServer: true }),
-  };
-  stats: IHandleStats = {
-    webHandle: {
-      isAlive: false,
-      hasConnection: false,
-    },
-    fileHandle: {
-      isAlive: false,
-      hasConnection: false,
-    },
-  };
-  settings: IHandleSettings = {
-    certPath: '/etc/letsencrypt/live/neo.dnsfor.me/cert.pem',
-    keyPath: '/etc/letsencrypt/live/neo.dnsfor.me/privkey.pem',
-    ip: "0.0.0.0",
-    streamServerPort: 8080,
-  };
+export class serverWrapper {
+  rcon = new RconConnection();
+  pidWatcher = fs.watch;
+  web = new WebSocketServer({ noServer: true });
+  file = new WebSocketServer({ noServer: true });
+  statsIntval = setInterval(() => { }, 10000);
+  constructor() {
+    clearInterval(this.statsIntval);
+  }
+}
+
+
 
   // public killAll() {
-  //   console.log('no please!');
+  //   // console.log('no please!');
   // }
   // getHandleProperty(property: string): any {
   //    return this.server.getHandleProperty(property);
@@ -66,4 +42,3 @@ export class serverWrapper implements IServerWrapper {
   // setHandleProperty(property: string, value: any): void {
   //   this.server.setHandleProperty(property, value);
   // }
-}

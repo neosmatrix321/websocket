@@ -1,18 +1,24 @@
 "use strict";
 import { inject, injectable, postConstruct } from "inversify";
+import 'reflect-metadata';
+
 import { clientsWrapper, MyWebSocket, ClientType, IClientInfo, IClientSettings, clientWrapper } from "./clientInstance";
 import si from 'systeminformation';
 import { BaseEvent, CustomErrorEvent, IBaseEvent, IClientsEvent, IEventTypes, MainEventTypes, SubEventTypes } from "../global/eventInterface";
 import { WebSocket } from 'ws';
 import { EventEmitterMixin } from "../global/EventEmitterMixin";
+import { StatsWrapperSymbol, statsWrapper } from "../stats/statsInstance";
+import { CLIENTS_WRAPPER_TOKEN } from "../main";
+import { statsContainer } from "../global/containerWrapper";
 
 
 
 @injectable()
 export class Clients {
   private eV: EventEmitterMixin = EventEmitterMixin.getInstance();
-  protected clients: clientsWrapper;
-  constructor() {
+  @inject(() => CLIENTS_WRAPPER_TOKEN) protected clients!: clientsWrapper;
+  protected stats: statsWrapper = statsContainer;
+    constructor() {
     this.clients = new clientsWrapper();
     this.eV.on(MainEventTypes.CLIENTS, this.handleClientsEvent.bind(this));
   }
@@ -26,8 +32,8 @@ export class Clients {
     if (event) {
       switch (event.subType) {
         case SubEventTypes.CLIENTS.PRINT_DEBUG:
-          console.log("Clients:");
-          console.dir(this.clients, { depth: 3, colors: true });
+          // console.log("Clients:");
+          // console.dir(this.clients, { depth: 3, colors: true });
           break;
         case SubEventTypes.CLIENTS.SUBSCRIBE:
           this.handleClientSubscribe(event);
@@ -83,14 +89,14 @@ export class Clients {
               subType: SubEventTypes.CLIENTS.MESSAGE_READY,
               message: `chatMessage`,
               success: true,
-              data: `Welcome ${event.clientsEvent.id} from ${newIP} | activeClients: ${this.clients.stats.activeClients} | clientsCounter: ${this.clients.stats.clientsCounter}`,
+              data: `Welcome ${event.clientsEvent.id} from ${newIP} | activeClients: ${this.stats.client.activeClients} | clientsCounter: ${this.stats.client.clientsCounter}`,
               clientsEvent: { id: event.clientsEvent.id, ip: event.clientsEvent.ip, clientType: event.clientsEvent.clientType, client: event.clientsEvent.client }
             };
             this.eV.emit(MainEventTypes.CLIENTS, helloEvent);
           }
           break;
         case SubEventTypes.CLIENTS.OTHER:
-          console.log("other Clients Event ?", event);
+          // console.log("other Clients Event ?", event);
           // console.dir(event);
           break;
         default:
@@ -123,7 +129,7 @@ export class Clients {
   //         break;
   //       // Add other cases for message types 
   //       default:
-  //         console.log("handleClientMessage: Unknown message type", messageObject);
+  //         // console.log("handleClientMessage: Unknown message type", messageObject);
   //     }
   //   }
   // }
@@ -135,9 +141,10 @@ export class Clients {
       if (id == "ALL" || (client.ws && ((client.ws.type === ClientType.Admin) || (client.ws.type === ClientType.Server && id != client.ws.id)))) this.clientMessageReady(client.info.id, type, data, isBinary);
     });
   }
-  public clientMessageReady(id: string, type: string, data: string, isBinary: boolean): void {
+  public clientMessageReady(id: string, type: string, data: string, isBinary: boolean): any {
+    if (!this.stats.server.webHandle.hasConnection || !!this.stats.server.webHandle.isAlive) return this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.CLIENTS.MESSAGE_READY, message: 'No Client Connected', success: true });
     const client = this.clients.client[id];
-    if (id == "ALL" && id != client.info.id || client && client.ws && client.ws.readyState === WebSocket.OPEN) {
+    if (id == "ALL" && id != client.ws.id ||client.ws && client.ws.readyState === WebSocket.OPEN) {
       switch (type) {
         case "serverMessage":
         case "pidInfo":
@@ -156,16 +163,16 @@ export class Clients {
           client.ws.send(JSON.stringify({ "ip": client.info.ip, "type": type, "obj": { [type]: data } }), { binary: isBinary });
           break;
         default:
-          console.warn("clientMessageReady: unknown type", type);
+          // console.warn("clientMessageReady: unknown type", type);
           break;
       }
     } else { this.handleClientUnsubscribe(id); }
   }
 
-  // this.sendMessagePacket(id, "pidInfo", this.stats.pu);
-  // this.sendMessagePacket(id, "latencyGoogle", this.stats.latencyGoogle);
-  // this.sendMessagePacket(id, "rconInfo", this.stats.rcon.info);
-  // this.sendMessagePacket(id, "rconPlayers", this.stats.rcon.players);
+  // this.sendMessagePacket(id, "pidInfo", this.stats.client.pu);
+  // this.sendMessagePacket(id, "latencyGoogle", this.stats.client.latencyGoogle);
+  // this.sendMessagePacket(id, "rconInfo", this.stats.client.rcon.info);
+  // this.sendMessagePacket(id, "rconPlayers", this.stats.client.rcon.players);
 
 
   public handleClientSubscribe(client: IClientsEvent) { // Adjust 'any' type later
@@ -174,14 +181,14 @@ export class Clients {
       const id = client.clientsEvent.id;
       const ip = client.clientsEvent.ip;
       const type = client.clientsEvent.clientType;
-      this.clients.stats.clientsCounter++;
+      this.stats.client.clientsCounter++;
 
       this.clients.createClient(id, ip, type, client.clientsEvent.client);
       if (type != ClientType.Server) {
         this.handleClientUpdateStats(id);
-        if (++this.clients.stats.activeClients == 1) {
-
-          this.eV.emit(MainEventTypes.MAIN, { subType: SubEventTypes.MAIN.START_INTERVAL, message: 'Start interval', success: true });
+        if (++this.stats.client.activeClients == 1) {
+          this.stats.server.webHandle.hasConnection = true;
+          this.eV.emit(MainEventTypes.MAIN, { subType: SubEventTypes.SERVER.START_INTERVAL, message: 'Start interval', success: true });
         }
         this.eV.emit(MainEventTypes.STATS, {
           subType: SubEventTypes.STATS.FORCE_UPDATE_ALL_FOR_ME,
@@ -246,7 +253,7 @@ export class Clients {
   }
 
   public async handleClientsUpdateStats(): Promise<void> {
-    this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.CLIENTS, message: `Update all clients stats, clientsCount: ${this.clients.stats.clientsCounter} | activeClients: ${this.clients.stats.activeClients}`, success: true });
+    this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.CLIENTS, message: `Update all clients stats, clientsCount: ${this.stats.client.clientsCounter} | activeClients: ${this.stats.client.activeClients}`, success: true });
     Object.values(this.clients.client).forEach((client) => {
       this.handleClientUpdateStats(client.info.id);
     });
@@ -259,16 +266,16 @@ export class Clients {
       this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.CLIENTS, message: `Unsubscribed client ${id}, ip: ${this.clients.client[id].info.ip}, type: ${Type}`, success: true });
       if (id) {
         if (Type !== ClientType.Server) {
-          console.dir(this.clients.client[id].info, { depth: null, colors: true });
-          console.dir(this.clients.client[id].stats, { depth: null, colors: true });
-          this.clients.stats.activeClients--;
-          if (this.clients.stats.activeClients == 0) {
-            this.eV.emit(MainEventTypes.MAIN, { subType: SubEventTypes.MAIN.STOP_INTERVAL, message: 'Stop interval' });
+          // console.dir(this.clients.client[id].info, { depth: null, colors: true });
+          // console.dir(this.clients.client[id].stats, { depth: null, colors: true });
+          if (!(--this.stats.client.activeClients > 0)) {
+            this.stats.server.webHandle.hasConnection = false;
+            this.eV.emit(MainEventTypes.MAIN, { subType: SubEventTypes.SERVER.STOP_INTERVAL, message: 'Stop interval' });
           }
         }
         this.clients.removeClient(id);
       } else {
-        console.log("handleClientsEvent: no id found", id);
+        // console.log("handleClientsEvent: no id found", id);
       }
     }
   }

@@ -9,6 +9,7 @@ export const MainEventTypes = {
   STATS: 'STATS',
   SERVER: 'SERVER',
   CLIENTS: 'CLIENTS',
+  GUI: 'GUI',
   ERROR: 'ERROR',
   DEBUG: 'DEBUG',
   EVENT: 'EVENT',
@@ -25,18 +26,20 @@ export const SubEventTypes = {
     EVENT: 'EVENT',
   },
   MAIN: {
-    START_INTERVAL: 'START_INTERVAL',
-    STOP_INTERVAL: 'STOP_INTERVAL',
     PID_AVAILABLE: 'PID_AVAILABLE',
     PID_UNAVAILABLE: 'PID_UNAVAILABLE',
     PRINT_DEBUG: 'PRINT_DEBUG',
+    START: 'START',
+  },
+  GUI: {
+    PRINT_DEBUG: 'PRINT_DEBUG',
+    FILL_ERROR_ARRAY: 'FILL_ERROR_ARRAY',
   },
   STATS: {
     UPDATE_ALL: 'UPDATE_ALL',
     UPDATE_PI: 'UPDATE_PI',
     UPDATE_PU: 'UPDATE_PU',
     UPDATE_OTHER: 'UPDATE_OTHER',
-    GET_PID: 'GET_PID',
     PREPARE: 'PREPARE',
     RCON_CONNECT: 'RCON_CONNECT',
     RCON_DISCONNECT: 'RCON_DISCONNECT',
@@ -48,10 +51,14 @@ export const SubEventTypes = {
   },
   SERVER: {
     LISTEN: 'LISTEN',
+    KILLED: 'KILLED',
+    START: 'START',
     CONNECT: 'CONNECT',
     DISCONNECT: 'DISCONNECT',
     MESSAGE: 'MESSAGE',
     PRINT_DEBUG: 'PRINT_DEBUG',
+    START_INTERVAL: 'START_INTERVAL',
+    STOP_INTERVAL: 'STOP_INTERVAL',
   },
   CLIENTS: {
     SUBSCRIBE: 'SUBSCRIBE',
@@ -72,6 +79,7 @@ export const SubEventTypes = {
     INFO: 'INFO',
     WARNING: 'WARNING',
     FATAL: 'FATAL',
+    DEBUG: 'DEBUG',
   },
 };
 
@@ -87,8 +95,8 @@ export const DEFAULT_VALUE_CALLBACKS = {
     return `${currentDate.getHours()}:${currentDate.getMinutes()}:${currentDate.getSeconds()}`;
   },
   // clientName: (clientId: string) => `Client-${clientId}`,
-  activeEvents: (() => EventEmitterMixin.stats.activeEvents),
-  eventCounter: (() => EventEmitterMixin.stats.eventCounter++)
+  activeEvents: (() => EventEmitterMixin.eventStats.activeEvents),
+  eventCounter: (() => EventEmitterMixin.eventStats.eventCounter++)
 };
 
 export class DebugEventGenerator {
@@ -151,7 +159,7 @@ export interface IBaseEvent {
 }
 
 export interface IMainEvent extends IBaseEvent {
-  mainEvent: { pid: number | undefined };
+  mainEvent: { pid: number | "NaN" };
 }
 
 export interface IStatsEvent extends IBaseEvent {
@@ -199,7 +207,7 @@ export class BaseEvent implements IBaseEvent {
 }
 
 export class MainEvent extends BaseEvent implements IMainEvent {
-  mainEvent: { pid: number | undefined } = { pid: undefined }; // Default to the current process ID
+  mainEvent: { pid: number | "NaN" } = { pid: "NaN" }; // Default to the current process ID
 
   constructor(data?: Partial<IMainEvent>) {
     super(data);

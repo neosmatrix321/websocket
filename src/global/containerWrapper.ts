@@ -1,18 +1,18 @@
-import 'reflect-metadata';
-import { Container } from 'inversify';
-import { Main } from '../main';
-import { Stats } from '../stats/stats';
-import { Server } from '../server/server';
-import { Clients } from '../clients/clients';
-const TYPES = {
-    Stats: Symbol('Stats'),
-    Server: Symbol('Server'),
-    Clients: Symbol('Clients'),
-    Main: Symbol('Main')
-};
-const container = new Container();
-container.bind<Stats>(TYPES.Stats).toSelf();
-container.bind<Server>(TYPES.Server).toSelf();
-container.bind<Clients>(TYPES.Clients).toSelf();
+"use strict";
+import { Container, inject } from 'inversify';
+import "reflect-metadata";
+import { SettingsWrapperSymbol, settingsWrapper } from '../settings/settingsInstance';
+import { StatsWrapperSymbol, statsWrapper } from "../stats/statsInstance";
 
-export { container, TYPES };
+// export const MAIN_WRAPPER_TOKEN = Symbol('Main');
+
+
+export const settings = new Container();
+settings.bind<settingsWrapper>(SettingsWrapperSymbol).to(settingsWrapper).inSingletonScope();
+export const settingsContainer = settings.get<settingsWrapper>(SettingsWrapperSymbol);
+
+export const stats = new Container();
+stats.bind<statsWrapper>(StatsWrapperSymbol).to(statsWrapper).inSingletonScope();
+export const statsContainer = stats.get<statsWrapper>(StatsWrapperSymbol);
+
+

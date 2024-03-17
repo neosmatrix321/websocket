@@ -5,7 +5,7 @@ import { MainEventTypes, IEventTypes, SubEventTypes, IEventStats, BaseEvent, deb
 
 export class EventEmitterMixin {
   private static _instance: EventEmitterMixin;
-  public static stats: IEventStats = { eventCounter: 0, activeEvents: 0, errorCounter: 0 };
+  public static eventStats: IEventStats = { eventCounter: 0, activeEvents: 0, errorCounter: 0 };
   private _emitter: EventEmitter;
   private _events: Map<string, any> = new Map(); // Store default events
   // private _listeners: Map<string, ((...args: any[]) => void)[]> = new Map();
@@ -25,10 +25,9 @@ export class EventEmitterMixin {
         Key = customKey;
         Data = customData;
       }
-      // if (EventEmitterMixin.stats.activeEvents > 10) {
+      // if (EventEmitterMixin.eventStats.activeEvents > 10) {
       //   process.exit(1);
       // }
-      EventEmitterMixin.stats.activeEvents++;
       this._events.set(Key, Data);
     }
   }
@@ -42,7 +41,7 @@ export class EventEmitterMixin {
   }
   private isValidEvent(event: string, eventData?: any): boolean {
     if (Object.keys(MainEventTypes).includes(event)) {
-      console.log('EventEmitterMixin.isValidEvent:', event);
+      // console.log('EventEmitterMixin.isValidEvent:', event);
       return true;
     } else {
       this.handleError(SubEventTypes.ERROR.WARNING, "EventEmitterMixin.isValidEvent", new CustomErrorEvent(`from ${event}`, MainEventTypes.EVENT, { ...eventData }));
@@ -55,7 +54,6 @@ export class EventEmitterMixin {
       errorEvent: { ...errorBlob }, // A sample error
       debugEvent: debugDataCallback,
     };
-    EventEmitterMixin.stats.activeEvents--;
     // console.log(`Error from eventManager: ${type}`, newEvent);
     this._emitter.emit(MainEventTypes.ERROR, newEvent);
   }
@@ -64,27 +62,27 @@ export class EventEmitterMixin {
   public handleError(subType: string, message: string, errorBlob: any): void {
     // console.error(`handleError type: ${type}, message: ${message}`);
     // console.dir(errorBlob, { depth: null, colors: true });
-    EventEmitterMixin.stats.errorCounter++;
-    this.emitError(subType, message, errorBlob, EventEmitterMixin.stats.errorCounter); // Emit the error for wider handling
+    EventEmitterMixin.eventStats.errorCounter++;
+    this.emitError(subType, message, errorBlob, EventEmitterMixin.eventStats.errorCounter); // Emit the error for wider handling
   }
 
   public async on(event: string, listener: (...args: any[]) => void) {
-    // EventEmitterMixin.stats.activeEvents++;
-    EventEmitterMixin.stats.eventCounter++;
-    console.log(`EventEmitterMixin.on: ${event} - ${EventEmitterMixin.stats.eventCounter}`);
+    // EventEmitterMixin.eventStats.activeEvents++;
+    // console.log(`EventEmitterMixin.on: ${event} - ${EventEmitterMixin.eventStats.eventCounter}`);
     if (!this._events.has(event)) {
       this.storeEvent(event, listener); // Ensure the event is registered
     }
+    this.off(event, listener);
     // console.warn('EventEmitterMixin.on:', createCustomDebugEvent(event, listener));  
     this._emitter.on(event, listener);
   }
   public async prepend(event: string, listener: (...args: any[]) => void) {
-    EventEmitterMixin.stats.eventCounter++;
     // this.storeEvent(event, listener);
     // console.warn('EventEmitterMixin.prepend:', createCustomDebugEvent(event, listener));  
     if (!this._events.has(event)) {
       this.storeEvent(event, listener); // Ensure the event is registered
     }
+    this.off(event, listener);
     this._emitter.prependListener(event, listener); // Use prependListener
   }
 
@@ -92,7 +90,7 @@ export class EventEmitterMixin {
     // console.warn('EventEmitterMixin.off:', createCustomDebugEvent(event, listener));  
     this._emitter.off(event, listener);
     if (this._events.has(event)) {
-      EventEmitterMixin.stats.activeEvents--;
+      EventEmitterMixin.eventStats.activeEvents--;
       this._events.delete(event); // Remove the event from the stored events
     }
   }
@@ -102,13 +100,15 @@ export class EventEmitterMixin {
     // if (!eventData) {
     //   return; // Handle event creation failure
     // }
-    // console.log(`--> EventEmitterMixin.emit: ${event} - ${EventEmitterMixin.stats.activeEvents}`);
+    // console.log(`--> EventEmitterMixin.emit: ${event} - ${EventEmitterMixin.eventStats.activeEvents}`);
     // console.dir(args[0], { depth: 1, colors: true })
     // this._events.push(eventData); // ??
     // this.emit(MainEventTypes.ERROR, createCustomDebugEvent(event, ...args));  
-
+    EventEmitterMixin.eventStats.eventCounter++;
+    EventEmitterMixin.eventStats.activeEvents++;
     this._emitter.emit(event, ...args);
   }
+  
   public static getInstance(): EventEmitterMixin {
     if (!this._instance) {
       this._instance = new EventEmitterMixin();

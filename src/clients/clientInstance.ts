@@ -11,6 +11,17 @@ export enum ClientType {
   // ...
 }
 
+export const packetHandlers = {
+  serverMessage: "serverMessage",
+  pidInfo: "pidInfo",
+  chatMessage: "chatMessage",
+  extras: "extras",
+  latencyGoogle: "latencyGoogle",
+  latencyUser: "latencyUser",
+  rconInfo: "rconInfo",
+  rconPlayers: "rconPlayers",
+};
+
 export interface MyWebSocket extends WebSocket {
   id: string;
   ip: string;
@@ -62,38 +73,16 @@ export class clientWrapper implements IClientWrapper {
    }
 }
 
-interface IwebHandleStats {
-  connectedClients: number
-}
-
-interface IfileHandleStats {
-  connectedClients: number
-}
-
-interface IClientsStats {
-  webHandle: IwebHandleStats,
-  fileHandle: IfileHandleStats,
-  clientsCounter: number,
-  activeClients: number,
-}
-
 export interface IClientIndex {
   [id: string]: IClientWrapper;
 }
 
 export interface IClientsWrapper {
   client: Record<string, IClientWrapper>;
-  stats: IClientsStats;
 }
 
 export class clientsWrapper {
   client: Record<string, IClientWrapper> = {};
-  stats: IClientsStats = {
-    webHandle: { connectedClients: 0 },
-    fileHandle: { connectedClients: 0 },
-    clientsCounter: 0,
-    activeClients: 0,
-  }
   constructor() { }
   public createClient(id: string, ip: string, type: ClientType, ws: MyWebSocket): void {
     this.client[id] = new clientWrapper(id, ip, type, ws);
