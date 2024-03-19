@@ -3,7 +3,7 @@ import { Container, inject, injectable } from 'inversify';
 import 'reflect-metadata';
 
 import { readFile } from 'node:fs/promises';
-import pidusage from 'pidusage';
+import pidusage, { Status } from 'pidusage';
 import si from 'systeminformation';
 import * as fs from 'fs';
 import { BaseEvent, IBaseEvent, IClientsEvent, IEventTypes, IMainEvent, IServerEvent, IStatsEvent, MainEventTypes, SubEventTypes } from "../global/eventInterface";
@@ -24,36 +24,39 @@ export class Stats {
     this.eV = EventMixin;
     this.stats.global.lastUpdates = { ...this.stats.global.lastUpdates, "createStats": Date.now() };
     // this.updateAllStats();
-    this.eV.on(MainEventTypes.STATS, this.handleStatsEvent.bind(this));
+    this.setupEventHandlers();
   }
 
-  private handleStatsEvent(event: IEventTypes) {
-    const type = event.subType;
-    if (!type) throw new Error('No event type provided');
-    switch (type) {
-      case SubEventTypes.STATS.UPDATE_ALL:
-        this.updateAllStats();
-        break;
-      case SubEventTypes.STATS.FORCE_UPDATE_ALL:
-        this.forceUpdateAllStats();
-        break;
-      case SubEventTypes.STATS.FORCE_UPDATE_ALL_FOR_ME:
-        this.forceUpdateAllStats(event.message);
-        break;
-      case SubEventTypes.STATS.PRINT_DEBUG:
-        // console.log("Stats:");
-        // console.dir(this.stats.global, { depth: null, colors: true });
-        // console.dir(this.settings, { depth: null, colors: true });
-        // console.dir(this.handle, { depth: 2, colors: true });
-        break;
-      case SubEventTypes.STATS.PREPARE:
-        this.updateAndGetPidIfNecessary();
-        break;
-      default:
-        this.eV.handleError(MainEventTypes.ERROR, `Unknown stats event subtype: ${event.subType}`, MainEventTypes.STATS, new Error(`Unknown stats event subtype: ${event.subType}`), event);
-      // console.warn('Unknown stats event subtype:', event.subType);
-    }
+  private setupEventHandlers() {
+    this.eV.on(MainEventTypes.STATS, (event: IStatsEvent) => {
+      const type = event.subType;
+      if (!type) throw new Error('No event type provided');
+      switch (type) {
+        case SubEventTypes.STATS.UPDATE_ALL:
+          this.updateAllStats();
+          break;
+        case SubEventTypes.STATS.FORCE_UPDATE_ALL:
+          this.forceUpdateAllStats();
+          break;
+        case SubEventTypes.STATS.FORCE_UPDATE_ALL_FOR_ME:
+          this.forceUpdateAllStats(event.message);
+          break;
+        case SubEventTypes.STATS.PRINT_DEBUG:
+          // console.log("Stats:");
+          // console.dir(this.stats.global, { depth: null, colors: true });
+          // console.dir(this.settings, { depth: null, colors: true });
+          // console.dir(this.handle, { depth: 2, colors: true });
+          break;
+        case SubEventTypes.STATS.PREPARE:
+          this.comparePids();
+          break;
+        default:
+          this.eV.handleError(SubEventTypes.ERROR.WARNING, `Unknown stats event subtype: ${event.subType}`, MainEventTypes.STATS, new Error(`Unknown stats event subtype: ${event.subType}`), event);
+        // console.warn('Unknown stats event subtype:', event.subType);
+      }
+    });
   }
+
   private async updateAllStats(): Promise<void> {
     this.stats.global.lastUpdates = { ...this.stats.global.lastUpdates, "updateAllStats": Date.now() };
     if (this.settings.pid.processFound) {
@@ -99,87 +102,71 @@ export class Stats {
     }
   }
 
-  // this.settings.pid.fileReadable = true;
-  // const pidEvent: IBaseEvent = {
-  //   subType: SubEventTypes.MAIN.PID_AVAILABLE, // Define an appropriate subType
-  //   message: 'pidAvailable',
-  // };
-  // this.eV.emit(MainEventTypes.MAIN, pidEvent);
-  public async updateAndGetPidIfNecessary(): Promise<void> {
-    this.stats.global.lastUpdates = { ...this.stats.global.lastUpdates, "updateAndGetPidIfNecessary": Date.now() };
-    this.getSI().then(() => {
-      if (!this.comparePids()) throw new Error(`updateAndGetPidIfNecessary | Pid mismatch`);
-      this.settings.pid.processFound = true;
-      const newEvent: IBaseEvent = {
-        subType: SubEventTypes.BASIC.STATS,
-        message: `updateAndGetPid | pid: ${this.settings.pid.pid}, SI pid: ${this.stats.global.si.pid}`,
-        success: true,
-      };
-      this.eV.emit(MainEventTypes.BASIC, newEvent);
-    }).catch((error) => {
-      this.settings.pid.processFound = false;
-      const newEvent: IBaseEvent = {
-        subType: SubEventTypes.BASIC.STATS,
-        message: `updateAndGetPid | pid: ${this.settings.pid.pid}, SI pid: ${this.stats.global.si.pid}`,
-        success: false,
-      };
-      this.eV.emit(MainEventTypes.BASIC, newEvent);
-      this.eV.handleError(SubEventTypes.ERROR.WARNING, "updateAndGetPidIfNecessary", MainEventTypes.STATS, new Error(`pidFileExists: ${this.settings.pid.fileExists}, pid file readable: ${this.settings.pid.fileReadable}, pid: ${this.settings.pid.pid}, SI pid: ${this.stats.global.si.pid}`), error);
-    });
-  }
-
   comparePids(): boolean {
     this.stats.global.lastUpdates = { ...this.stats.global.lastUpdates, "comparePids": Date.now() };
-    if (this.settings.pid.fileReadable && (this.settings.pid.pid !== "NaN" && this.stats.global.si.pid !== "NaN" && ((this.stats.global.si.pid == this.settings.pid.pid)))) {
+    let success = false;
+    this.getSI().then(() => {
+      if (this.settings.pid.fileReadable && (this.settings.pid.pid !== "NaN" && this.stats.global.si.pid !== "NaN" && ((this.stats.global.si.pid == this.settings.pid.pid)))) {
+        success = true;
+        const processFoundEvent: IBaseEvent = {
+          subType: SubEventTypes.MAIN.PROCESS_FOUND,
+          message: `processFound`,
+          success: success,
+        };
+        this.eV.emit(MainEventTypes.MAIN, processFoundEvent);
+      }
+    }).catch((error) => {
+      success = false;
+      this.eV.handleError(SubEventTypes.ERROR.WARNING, "comparePids", MainEventTypes.STATS, new Error(`pidFileExists: ${this.settings.pid.fileExists}, pid file readable: ${this.settings.pid.fileReadable}, pid: ${this.settings.pid.pid}, SI pid: ${this.stats.global.si.pid}`), error);
+    }).finally(() => {
+      this.settings.pid.processFound = success;
       const newEvent: IBaseEvent = {
         subType: SubEventTypes.BASIC.STATS,
-        success: true,
+        success: success,
         message: `comparePids`,
       };
       this.eV.emit(MainEventTypes.BASIC, newEvent);
-      return true;
-    }
-    const newEvent: IBaseEvent = {
-      subType: SubEventTypes.BASIC.STATS,
-      success: false,
-      message: `comparePids`,
-    };
-    this.eV.emit(MainEventTypes.BASIC, newEvent);
-    return false;
+    });
+    return success;
   }
 
   async getSI(): Promise<void> {
     this.stats.global.lastUpdates = { ...this.stats.global.lastUpdates, "getSI": Date.now() };
-    si.processLoad("PalServer-Linux").then((targetProcesses) => {
+    let success = false;
+    await si.processLoad("PalServer-Linux", (targetProcesses) => {
       if (!targetProcesses || !(targetProcesses.length > 0)) throw new Error(`No targetProcesses found`);
       const processInfo = targetProcesses.find((p) => p.pid === this.settings.pid.pid);
       if (processInfo) {
         this.stats.global.si = { ...processInfo };
-        const newEvent: IBaseEvent = {
-          subType: SubEventTypes.BASIC.STATS,
-          message: `getSI`,
-          success: true,
-        };
-        this.eV.emit(MainEventTypes.BASIC, newEvent);
+        success = true;
         // console.dir(this.stats.global.si, { depth: null, colors: true });
+      } else {
+        success = false;
+        throw new Error(`No processInfo found for pid: ${this.settings.pid.pid} in targetProcesses: ${targetProcesses}`);
       }
+
     }).catch((error) => {
-      const newEvent: IBaseEvent = {
-        subType: SubEventTypes.BASIC.STATS,
-        message: `getSI`,
-        success: false,
-      };
-      this.eV.emit(MainEventTypes.BASIC, newEvent);
+      success = false;
       this.eV.handleError(SubEventTypes.ERROR.WARNING, `getSI`, MainEventTypes.STATS, new Error(`pidFileExists: ${this.settings.pid.fileExists}, pid file readable: ${this.settings.pid.fileReadable}, pid: ${this.settings.pid.pid}, SI pid: ${this.stats.global.si.pid}`), error);
     });
+    // .finally(() => {
+    //   const newEvent: IBaseEvent = {
+    //     subType: SubEventTypes.BASIC.STATS,
+    //     message: `getSI`,
+    //     success: success,
+    //   };
+    //   this.eV.emit(MainEventTypes.BASIC, newEvent);
+    // });
   }
 
   async getPU(): Promise<void> {
     this.stats.global.lastUpdates = { ...this.stats.global.lastUpdates, "getPU": Date.now() };
     if (this.settings.pid.pid !== undefined) {
       try {
-        const pidInfo = await pidusage(this.settings.pid.pid);
+        const pidInfo: Status = await pidusage(this.settings.pid.pid);
         if (!pidInfo) throw new Error(`No pidInfo for pid: ${this.settings.pid.pid}`);
+        const cpu: number = ((pidInfo.cpu / 8).toFixed(2)) as unknown as number;
+        pidInfo.cpu = cpu;
         this.stats.global.pu = { ...pidInfo }; // Map relevant properties
         const puEvent: IClientsEvent = {
           subType: SubEventTypes.CLIENTS.MESSAGE_READY,
@@ -190,12 +177,12 @@ export class Stats {
           client: {} as MyWebSocket,
         };
         this.eV.emit(MainEventTypes.CLIENTS, puEvent);
-        const newEvent: IBaseEvent = {
-          subType: SubEventTypes.BASIC.STATS,
-          message: `getPU`,
-          success: true,
-        };
-        this.eV.emit(MainEventTypes.BASIC, newEvent);
+        // const newEvent: IBaseEvent = {
+        //   subType: SubEventTypes.BASIC.STATS,
+        //   message: `getPU`,
+        //   success: true,
+        // };
+        // this.eV.emit(MainEventTypes.BASIC, newEvent);
         // console.dir(this.stats.global.pu, { depth: null, colors: true });
       } catch (error) {
         this.eV.handleError(SubEventTypes.ERROR.WARNING, `getPU`, MainEventTypes.STATS, new Error(`pidFileExists: ${this.settings.pid.fileExists}, pid file readable: ${this.settings.pid.fileReadable}, pid: ${this.settings.pid.pid}, SI pid: ${this.stats.global.si.pid}`), error);

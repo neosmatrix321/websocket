@@ -13,6 +13,7 @@ import { settingsContainer, statsContainer } from '../global/containerWrapper';
 import { RGB } from 'console-gui-tools/dist/types/components/Utils';
 import { ErrorTable } from './errorGen';
 import { bufferCount } from 'rxjs';
+import { clear } from 'pidusage';
 
 export interface ColorRow {
   text: string;
@@ -125,18 +126,27 @@ export class consoleGui {
         fitHeight: true, // Fit height of the console
       },
     });
-    this.errorLog = new ErrorTable(this.gui.Screen.width, this.gui.Screen.height); // Use the width of your 'ErrorLog' Box
     this.guiIntVat = setInterval(async () => {
-      this.drawGUI();
-    }, this.settings.gui.period);
-    this.setupEventListeners();
+    }, 1000);
+    clearInterval(this.guiIntVat);
+
+    this.errorLog = new ErrorTable(this.gui.Screen.width, this.gui.Screen.height); // Use the width of your 'ErrorLog' Box
   }
   public startIfTTY() {
     console.info(`Console is TTY: ${process.stdout.isTTY} and ${this.gui.Screen.Terminal.isTTY}`)
     if (process.stdout.isTTY && this.gui.Screen.Terminal.isTTY) {
       this.drawGUI();
-      // this.gui.showLogPopup();
+      this.guiIntVat = setInterval(async () => {
+        this.intervalRunner();
+      }, this.settings.gui.period);
+      this.settings.gui.isPainting = true;
+      this.setupEventListeners();
+        // this.gui.showLogPopup();
     }
+  }
+  intervalRunner() {
+    this.settings.gui.refreshCounter += 1;
+    this.drawGUI();
   }
   private setupEventListeners() {
     this.eV.on(MainEventTypes.GUI, (event: IErrorEvent) => {
@@ -184,12 +194,11 @@ export class consoleGui {
         case "space": {
           if (this.settings.gui.isPainting) {
             this.settings.gui.isPainting = false;
-            this.drawGUI();
             clearInterval(this.guiIntVat);
           } else {
+            this.settings.gui.isPainting = true;
             this.guiIntVat = setInterval(async () => {
-              this.settings.gui.isPainting = true;
-              this.drawGUI();
+              this.intervalRunner();
             }, this.settings.gui.period);
           }
           this.drawGUI();
@@ -358,6 +367,7 @@ export class consoleGui {
 
     // Global Stats
     p1.addRow(this.sOBJ(11), { text: `alive:`, color: 'white' }, this.sOBJ(1), this.Alive());
+    p1.addRow(this.sOBJ(1), { text: `refresh counter:`, color: 'white' }, this.sOBJ(1), { text: `${this.settings.gui.refreshCounter}`, color: 'white' });
     p1.addRow(this.sOBJ(2), { text: `client counter:`, color: 'white' }, this.sOBJ(1), { text: `${this.stats.client.clientsCounter}`, color: 'white' });
     p1.addRow(this.sOBJ(2), { text: `clients active:`, color: 'white' }, this.sOBJ(1), { text: `${this.stats.client.activeClients}`, color: 'white' });
     p1.addRow(this.sOBJ(3), { text: `active events:`, color: 'white' }, this.sOBJ(1), { text: `${EventEmitterMixin.eventStats.activeEvents}`, color: 'white' });
@@ -383,7 +393,7 @@ export class consoleGui {
     p2.addRow(this.sOBJ(1), columnWrapper(createRow(
       `exists:${this.settings.pid.fileExists}`,
       `upTime:${elapsedDur}`,
-      `web alive:${this.stats.server.webHandle.hasConnection}`
+      `web alive:${this.stats.server.webHandle.isAlive}`
     )));
     p2.addRow(this.sOBJ(1), columnWrapper(createRow(
       `readable:${this.settings.pid.fileReadable}`,

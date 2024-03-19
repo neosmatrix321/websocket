@@ -28,6 +28,7 @@ interface IServerSettings {
 interface IGuiSettings {
   enabled: boolean;
   period: number;
+  refreshCounter: number;
   isPainting: boolean;
   mode: string;
   min: number;
@@ -61,8 +62,9 @@ export class settingsWrapper {
   };
   gui: IGuiSettings = {
     enabled: true,
-    period: 5000,
-    isPainting: true,
+    period: 500,
+    refreshCounter: 0,
+    isPainting: false,
     mode: 'default',
     min: 0,
     max: 100,

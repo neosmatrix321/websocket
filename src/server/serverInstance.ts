@@ -6,10 +6,11 @@ import { WebSocketServer, WebSocket } from 'ws'
 import { RconConnection } from "../rcon/lib/server/connection";
 import * as fs from 'fs';
 import { stats } from '../global/containerWrapper';
+import Logger from "../global/fileLogger";
 
 interface IHandle {
   web: WebSocketServer;
-  file: WebSocketServer;
+  file: Logger;
   rcon: RconConnection;
   pidWatcher: fs.FSWatcher;
   statsIntval: NodeJS.Timeout;
@@ -21,9 +22,9 @@ export interface IServerWrapper {
 
 export class serverWrapper {
   rcon = new RconConnection();
+  file: Logger = new Logger(new Date().toISOString().replace(/[:.]/g, '-'));
   pidWatcher = fs.watch;
   web = new WebSocketServer({ noServer: true });
-  file = new WebSocketServer({ noServer: true });
   statsIntval = setInterval(() => { }, 10000);
   constructor() {
     clearInterval(this.statsIntval);

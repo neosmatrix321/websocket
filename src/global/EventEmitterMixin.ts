@@ -71,23 +71,26 @@ export class EventEmitterMixin {
   public handleError(subType: string, message: string, mainSource: string, errorEvent: Error, json?: any): void {
     // console.error(`handleError type: ${type}, message: ${message}`);
     // console.dir(errorBlob, { depth: null, colors: true });
-    EventEmitterMixin.eventStats.errorCounter++;
-    this.emitError(subType, message, EventEmitterMixin.eventStats.errorCounter, mainSource, errorEvent, json); // Emit the error for wider handling
+    this.emitError(subType, message, EventEmitterMixin.eventStats.errorCounter++, mainSource, errorEvent, json); // Emit the error for wider handling
   }
 
   public async on(event: string, listener: (...args: any[]) => void) {
-    // EventEmitterMixin.eventStats.activeEvents++;
-    // console.log(`EventEmitterMixin.on: ${event} - ${EventEmitterMixin.eventStats.eventCounter}`);
     if (!this._events.has(event)) {
       this.storeEvent(event, listener); // Ensure the event is registered
     }
     this.off(event, listener);
-    // console.warn('EventEmitterMixin.on:', createCustomDebugEvent(event, listener));  
     this._emitter.on(event, listener);
   }
+
+  public async once(event: string, listener: (...args: any[]) => void) {
+    if (!this._events.has(event)) {
+      this.storeEvent(event, listener); // Ensure the event is registered
+    }
+    this.off(event, listener);
+    this._emitter.once(event, listener);
+  }
+
   public async prepend(event: string, listener: (...args: any[]) => void) {
-    // this.storeEvent(event, listener);
-    // console.warn('EventEmitterMixin.prepend:', createCustomDebugEvent(event, listener));  
     if (!this._events.has(event)) {
       this.storeEvent(event, listener); // Ensure the event is registered
     }
@@ -96,7 +99,6 @@ export class EventEmitterMixin {
   }
 
   public async off(event: string, listener: (...args: any[]) => void) {
-    // console.warn('EventEmitterMixin.off:', createCustomDebugEvent(event, listener));  
     this._emitter.off(event, listener);
     if (this._events.has(event)) {
       EventEmitterMixin.eventStats.activeEvents--;
@@ -105,14 +107,6 @@ export class EventEmitterMixin {
   }
 
   public async emit(event: string, ...args: any[]) {
-    // const eventData = this.createEvent(event, ...args);
-    // if (!eventData) {
-    //   return; // Handle event creation failure
-    // }
-    // console.log(`--> EventEmitterMixin.emit: ${event} - ${EventEmitterMixin.eventStats.activeEvents}`);
-    // console.dir(args[0], { depth: 1, colors: true })
-    // this._events.push(eventData); // ??
-    // this.emit(MainEventTypes.ERROR, createCustomDebugEvent(event, ...args));  
     EventEmitterMixin.eventStats.eventCounter++;
     EventEmitterMixin.eventStats.activeEvents++;
     this._emitter.emit(event, ...args);

@@ -1,4 +1,6 @@
+/.not_used/
 /dist/
 /node_modules/
 /cert/
+/logs/
 *.js
