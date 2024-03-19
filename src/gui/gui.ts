@@ -4,13 +4,15 @@ import { Container, inject, injectable } from 'inversify';
 import "reflect-metadata";
 
 import { EventEmitterMixin } from '../global/EventEmitterMixin';
-import { CustomErrorEvent, IEventTypes, MainEventTypes, SubEventTypes } from '../global/eventInterface';
+import { IErrorEvent, IEventTypes, INewErr, MainEventTypes, SubEventTypes } from '../global/eventInterface';
 import { SettingsWrapperSymbol, settingsWrapper } from '../settings/settingsInstance';
 import { StatsWrapperSymbol, statsWrapper } from "../stats/statsInstance";
 // Import module with ES6 syntax
-import { ConsoleManager, OptionPopup, InputPopup, PageBuilder, ButtonPopup, ConfirmPopup, FileSelectorPopup, CustomPopup, InPageWidgetBuilder, SimplifiedStyledElement, Box } from 'console-gui-tools'
+import { ConsoleManager, OptionPopup, InputPopup, PageBuilder, ButtonPopup, ConfirmPopup, FileSelectorPopup, CustomPopup, InPageWidgetBuilder, SimplifiedStyledElement, Box, KeyListenerArgs } from 'console-gui-tools'
 import { settingsContainer, statsContainer } from '../global/containerWrapper';
 import { RGB } from 'console-gui-tools/dist/types/components/Utils';
+import { ErrorTable } from './errorGen';
+import { bufferCount } from 'rxjs';
 
 export interface ColorRow {
   text: string;
@@ -18,11 +20,11 @@ export interface ColorRow {
   bold?: boolean;
 }
 
-function columnWrapper(text: string, color: RGB = getRGBString('default')): SimplifiedStyledElement {
+export function columnWrapper(text: string, color: RGB = getRGBString('default')): SimplifiedStyledElement {
   return { text: text, color: color, bold: true };
 }
 
-function getRGBString(colorName: string): RGB {
+export function getRGBString(colorName: string): RGB {
   const color = COLORS[colorName] || COLORS.default; // Falls 'colorName' nicht existiert, verwende den Default.
   return `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
 }
@@ -102,26 +104,28 @@ export class consoleGui {
   protected stats: statsWrapper = statsContainer;
   protected gui: ConsoleManager;
   protected widget: any = { stdLog: undefined };
+  protected errorLog: ErrorTable;
   private guiIntVat: NodeJS.Timeout;
   constructor() {
     this.gui = new ConsoleManager({
       title: 'Websocket Server', // Title of the console
       logPageSize: 20, // Number of lines to show in logs page
-      logLocation: "popup", // Location of the logs page (top or bottom)
+      logLocation: 'popup', // Location of the logs page (top or bottom)
       enableMouse: true, // Enable mouse support
-      showLogKey: 'crtl+0', // Show logs with ctrl+l
+      showLogKey: 'ctrl+0', // Show logs with ctrl+l
       overrideConsole: true, // Override console.log, console.error, console.warn
       layoutOptions: {
         pageRatio: [[0.25, 0.75], [0.7, 0.3]], // Set the ratio of the top and bottom pages
         changeFocusKey: 'tab', // Change focus with tab
         boxed: true, // Set to true to enable boxed layout mode
-        // boxColor: 'black', // The color of the box
+        boxColor: 'blackBright', // The color of the box
         boxStyle: undefined, // The style of the box (bold)
         type: 'quad', // Layout type
         // direction: 'horizontal', // Layout direction
         fitHeight: true, // Fit height of the console
-      }
+      },
     });
+    this.errorLog = new ErrorTable(this.gui.Screen.width, this.gui.Screen.height); // Use the width of your 'ErrorLog' Box
     this.guiIntVat = setInterval(async () => {
       this.drawGUI();
     }, this.settings.gui.period);
@@ -135,30 +139,46 @@ export class consoleGui {
     }
   }
   private setupEventListeners() {
-    this.eV.on(MainEventTypes.GUI, (event: IEventTypes) => {
+    this.eV.on(MainEventTypes.GUI, (event: IErrorEvent) => {
+      EventEmitterMixin.eventStats.guiActiveEvents += 1;
+      EventEmitterMixin.eventStats.activeEvents += 1;
       if (event.subType === SubEventTypes.GUI.FILL_ERROR_ARRAY) {
-        const jsonOBJ = JSON.parse(event.message as string);
-        this.settings.gui.lastErrors.push(jsonOBJ);
+        const error: INewErr = event.message as unknown as INewErr;
+        this.errorLog.lastErrors.push(error);
+        console.error(`Error No. ${error.counter} added to errorLog: ${error.subType}`);
       }
     });
-
     this.gui.on("exit", () => {
       this.closeApp();
     });
+    this.gui.on("resize", () => {
+      this.errorLog.box.hide();
+      this.drawGUI();
+    });
     // this.gui.Screen.update();
     // And manage the keypress event from the library
-    this.gui.on("keypressed", (key) => {
+    this.gui.on("keypressed", (key: KeyListenerArgs) => {
+      // console.info(`GUI keypress: ${key.name}`);
+      EventEmitterMixin.eventStats.guiEventCounter += 1;
       switch (key.name) {
         case "o": {
+          if (!this.gui.popupCollection["logPopup"]) {
+            this.gui.showLogPopup();
+            // this.gui.registerPopup("logPopup");
+            // this.gui.popupCollection.pop("logPopup");
+          }
+          //  else {
+          //   console.info(`unregisterPopup`);
+          //   this.gui.unregisterPopup("logPopup");
+          // }
+          // this.eV.handleError(SubEventTypes.ERROR.WARNING, "showLogPopup", MainEventTypes.GUI, new Error(`from ErrorLog`), this.gui.popupCollection["logPopup"]);
           // if (!this.gui.popupCollection.includes("showLogPopup")) {
           //   const key = this.gui.popupCollection.unregisterPopup();
           //   console.log(`Unregistered popup: ${key}`);
           // } else {
-          const key = this.gui.showLogPopup();
-          console.log(`Unregistered popup:`, key);
-          this.eV.handleError(SubEventTypes.ERROR.WARNING, "showLogPopup", new CustomErrorEvent(`from ${key}`, MainEventTypes.ERROR, key));
-          // this.gui.popupCollection.push(key);
-          // }
+          // console.log(`Unregistered popup:`, key.name);
+          // this.eV.handleError(SubEventTypes.ERROR.WARNING, "showLogPopup", MainEventTypes.GUI, new Error(`from ErrorLog`), index);
+          // this.gui.popupCollection.push("logPopup");
           break;
         }
         case "space": {
@@ -276,18 +296,6 @@ export class consoleGui {
           p.addRow({ text: `              Quit `, color: 'white', bold: true }, minus, { text: ` 'q'     `, color: 'white' });
           p.addSpacer();
           p.addRow({ text: `   Values: `, color: 'cyan' }, { text: ` ${this.settings.gui.values.map(v => v.toFixed(4)).join(' - ')}`, color: 'blueBright', bold: true });
-          new Box({
-            id: "box1",
-            x: 22,
-            y: 3,
-            width: 28,
-            height: 3,
-            draggable: true,
-            style: {
-              boxed: true,
-            }
-          }).setContent(new InPageWidgetBuilder().addRow({ text: "This is a draggable Box!", color: "rgb(255,0,0)", bg: "rgb(0,0,255)" }
-          ));
           new CustomPopup({
             id: "popupHelp",
             title: "HELP",
@@ -297,127 +305,16 @@ export class consoleGui {
           break;
         }
         case "p": {
-          const p = new InPageWidgetBuilder(20);
-          if (this.settings.gui.lastErrors.length > 0) {
-            for (const error of this.settings.gui.lastErrors) {
-              if (error && typeof error === 'object') {
-                const prettyError = JSON.stringify(error, null, '');
-                const errorObj = JSON.parse(prettyError);
-
-                if (errorObj['ERROR No.']) {
-                  p.addRow(this.sOBJ(), {
-                    text: `ERROR No.: ${errorObj['ERROR No.']}`,
-                    color: 'red',
-                  });
-                  delete errorObj['ERROR No.'];
-                }
-
-                for (const key in errorObj) {
-                  if (errorObj.hasOwnProperty(key)) {
-                    const value = errorObj[key];
-
-                    if (value && typeof value === 'object') {
-                      // const prettyValue = JSON.stringify(value, null, '');
-                      // const valueObj = JSON.parse(prettyValue);
-                      for (const key in value) {
-                        if (value.hasOwnProperty(key)) {
-                          const subValue = value[key];
-
-                          if (subValue && typeof subValue === 'object') {
-                            // Wenn der Wert ein Objekt ist, wandeln Sie es in JSON um
-                            // const prettySubValue = JSON.stringify(subValue, null, '');
-                            for (const subkey in subValue) {
-                              if (subValue.hasOwnProperty(subkey)) {
-                                const subsubvalue = subValue[subkey];
-                                const subnewRow = createRow(`${subkey}:${subsubvalue}`);
-                                p.addRow(this.sOBJ(), columnWrapper(subnewRow, getRGBString(value[key])));
-                              } else {
-                                p.addRow(this.sOBJ(), {
-                                  text: `${key}: ${subValue}`,
-                                  color: getRGBString(value[key]) as RGB,
-                                });
-                              }
-                            }
-                            // p.addRow(this.sOBJ(), {
-                            //   text: `${key}: ${prettySubValue}`,
-                            //   color: getRGBString(valueObj[key]) as RGB,
-                            // });
-                          } else {
-                            // Wenn der Wert kein Objekt ist, geben Sie ihn direkt aus
-                            p.addRow(this.sOBJ(), {
-                              text: `${key}: ${subValue}`,
-                              color: getRGBString(value[key]) as RGB,
-                            });
-                          }
-                        } else {
-                          p.addRow(this.sOBJ(), {
-                            text: `${key}: ${value}`,
-                            color: getRGBString('red'),
-                          });
-                        }
-                      }
-                    } else {
-                      p.addRow(this.sOBJ(), {
-                        text: `${key}: ${value}`,
-                        color: getRGBString('red'),
-                      });
-                    }
-                  }
-                }
-
-                p.addSpacer();
-              } else {
-                // Handle the case where `error` is not an object or doesn't have a `message` property
-              }
-            }
-          }
-          new CustomPopup({
-            id: 'popupErrorLog',
-            title: 'Error Log',
-            content: p,
-            width: 80,
-          }).show();
+          this.errorLog.displayErrorLog();
           break;
         }
       }
     });
+    
   }
-  // Funktion zur Verarbeitung von Fehlerobjekten
-  processErrorProperty(prefix: string, value: any, p: InPageWidgetBuilder) {
-    for (const subKey in value) {
-      if (value.hasOwnProperty(subKey) && subKey !== 'ERROR No.') {
-        const newPrefix = prefix ? `${prefix}.${subKey}` : subKey;
 
-        if (typeof value[subKey] === 'object') {
-          this.processErrorProperty(newPrefix, value[subKey], p);
-        } else {
-          const color: string = (subKey === 'logLevel')
-            ? this.getLogLevelColor(value.logLevel)
-            : `cyan`;
 
-          p.addRow(this.sOBJ(), {
-            text: `${newPrefix}: ${value[subKey]}`,
-            color: `#${color}`,
-          });
-        }
-      }
-    }
-  }
   // Funktion zur Ermittlung der Farbe für Log-Level
-  getLogLevelColor(logLevel: string): string {
-    switch (logLevel) {
-      case 'DEBUG':
-        return `cyan`;
-      case 'ERROR':
-        return `red`;
-      case 'WARNING':
-        return 'yellow';
-      case 'INFO':
-        return "brightwhite";
-      default:
-        return `white`;
-    }
-  }
   private M(color: string, bg: string, bold: boolean = true, italic: boolean = false): any {
     return { text: `-`, color: color, bg: bg, bold: bold, italic: italic };
   }
@@ -465,8 +362,12 @@ export class consoleGui {
     p1.addRow(this.sOBJ(2), { text: `clients active:`, color: 'white' }, this.sOBJ(1), { text: `${this.stats.client.activeClients}`, color: 'white' });
     p1.addRow(this.sOBJ(3), { text: `active events:`, color: 'white' }, this.sOBJ(1), { text: `${EventEmitterMixin.eventStats.activeEvents}`, color: 'white' });
     p1.addRow(this.sOBJ(3), { text: `event counter:`, color: 'white' }, this.sOBJ(1), { text: `${EventEmitterMixin.eventStats.eventCounter}`, color: 'white' });
-    p1.addRow(this.sOBJ(3), { text: `messages sent:`, color: 'whiteBright', bg: 'bgBlackBright', bold: true }, this.sOBJ(1), { text: `${EventEmitterMixin.eventStats.errorCounter}`, color: 'white' });
+    p1.addRow(this.sOBJ(3), { text: `active GUI E:`, color: 'white' }, this.sOBJ(1), { text: `${EventEmitterMixin.eventStats.guiActiveEvents}`, color: 'white' });
+    p1.addRow(this.sOBJ(3), { text: `event GUI C:`, color: 'white' }, this.sOBJ(1), { text: `${EventEmitterMixin.eventStats.guiEventCounter}`, color: 'white' });
+    p1.addRow(this.sOBJ(3), { text: `messages sent:`, color: 'whiteBright', bg: 'bgBlackBright', bold: true }, this.sOBJ(1), { text: `dummy`, color: 'white' });
     p1.addRow(this.sOBJ(3), { text: `error counter:`, color: 'whiteBright', bg: 'bgRed', bold: true }, this.sOBJ(1), { text: `${EventEmitterMixin.eventStats.errorCounter}`, color: 'white' });
+    p1.addRow(this.sOBJ(3), { text: `captured error:`, color: 'whiteBright', bg: 'bgRed', bold: true }, this.sOBJ(1), { text: `${this.errorLog.lastErrors.length}`, color: 'white' });
+
     p1.addSpacer();
 
     // for (const [key, value] of Object.entries(this.stats.global.lastUpdates)) { // TODO: popup with all last updates
@@ -593,6 +494,7 @@ export class consoleGui {
   }
   public async drawGUI(): Promise<void> {
     this.updateConsole();
+    this.gui.refresh();
     // ... rest of your drawGUI logic
   }
 }

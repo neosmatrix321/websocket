@@ -11,7 +11,7 @@ import { WebSocket, WebSocketServer, createWebSocketStream } from 'ws';
 
 import { EventEmitterMixin } from "../global/EventEmitterMixin";
 import { serverWrapper, IServerWrapper } from "../server/serverInstance";
-import { MainEventTypes, IEventTypes, SubEventTypes, IBaseEvent, BaseEvent, IClientsEvent, debugDataCallback, IServerEvent, IStatsEvent, CustomErrorEvent, IMainEvent } from "../global/eventInterface";
+import { MainEventTypes, IEventTypes, SubEventTypes, IBaseEvent, BaseEvent, IClientsEvent, debugDataCallback, IServerEvent, IStatsEvent, IMainEvent } from "../global/eventInterface";
 import { ClientType, MyWebSocket } from '../clients/clientInstance';
 import { RconConnection } from '../rcon/lib/server/connection'; // Adjust the path
 import { parsePlayers, splitInfo } from '../rcon/lib/player';
@@ -62,7 +62,7 @@ export class Server {
         break;
       case SubEventTypes.SERVER.KILLED:
         this.stats.server.webHandle.isAlive = false;
-        this.eV.handleError(SubEventTypes.ERROR.FATAL, "Server killed", new CustomErrorEvent("Server killed", MainEventTypes.SERVER, new Error("Server killed")));
+        this.eV.handleError(SubEventTypes.ERROR.FATAL, "Server killed", MainEventTypes.SERVER, new Error("Server killed"));
       case SubEventTypes.SERVER.START:
         console.log("Server start event");
         this.createServer();
@@ -84,7 +84,7 @@ export class Server {
               });
             });
           } catch (error) {
-            this.eV.handleError(SubEventTypes.ERROR.WARNING, "Rcon connect error", new CustomErrorEvent("weird", MainEventTypes.STATS, error));
+            this.eV.handleError(SubEventTypes.ERROR.WARNING, "Rcon connect error", MainEventTypes.STATS, new Error("weird"), error);
           }
           // this.serverActive(event);
           break;
@@ -155,7 +155,7 @@ export class Server {
         this.eV.emit(MainEventTypes.BASIC, rconInfoEvent);
       } catch (error) {
         this.stats.global.rcon.info = { name: "NaN", ver: "NaN" };
-        this.eV.handleError(SubEventTypes.ERROR.INFO, `RCON Info`, new CustomErrorEvent(`rconGetStatsInfo failed`, MainEventTypes.STATS, error));
+        this.eV.handleError(SubEventTypes.ERROR.INFO, `RCON Info`, MainEventTypes.STATS, new Error(`rconGetStatsInfo failed`), error);
       };
     }
     if (!this.stats.global.lastUpdates.rconGetStatsShowPlayers || (Date.now() - this.stats.global.lastUpdates.rconGetStatsShowPlayers) > 5000) {
@@ -172,7 +172,7 @@ export class Server {
         this.eV.emit(MainEventTypes.STATS, rconPlayersEvent);
       } catch (error) {
         this.stats.global.rcon.players = [{ name: "NaN", playeruid: "NaN", steamid: "NaN" }];
-        this.eV.handleError(SubEventTypes.ERROR.INFO, `RCON ShowPlayers`, new CustomErrorEvent("rconGetStatsShowPlayers failed", MainEventTypes.STATS, error));
+        this.eV.handleError(SubEventTypes.ERROR.INFO, `RCON ShowPlayers`, MainEventTypes.STATS, new Error("rconGetStatsShowPlayers failed"), error);
       }
     }
   }
@@ -183,11 +183,11 @@ export class Server {
         const response = await this.server.rcon.exec(command);
         return response.body; // Or format the response if needed
       } catch (error) {
-        this.eV.handleError(SubEventTypes.ERROR.INFO, `RCON Command`, new CustomErrorEvent("sedRconCommand failed", MainEventTypes.STATS, error));
+        this.eV.handleError(SubEventTypes.ERROR.INFO, `RCON Command`, MainEventTypes.STATS, new Error("sedRconCommand failed"), error);
         // Return an error message
       }
     } else {
-      this.eV.handleError(SubEventTypes.ERROR.INFO, `RCON`, new CustomErrorEvent("RCON not connected", MainEventTypes.STATS, new Error("RCON not connected")));
+      this.eV.handleError(SubEventTypes.ERROR.INFO, `RCON`, MainEventTypes.STATS, new Error("RCON not connected"), { isConnected: this.settings.rcon.isConnected });
     }
   }
 
@@ -208,7 +208,7 @@ export class Server {
       newType = this.getClientType(newIP, { admin: 1 });
     }
 
-    if (!newID || !newIP) this.eV.handleError(SubEventTypes.ERROR.FATAL, `wsToMyWs`, new CustomErrorEvent(`invalid id ( ${newID} ) || ip ( ${newIP} )`, MainEventTypes.SERVER, ws));
+    if (!newID || !newIP) this.eV.handleError(SubEventTypes.ERROR.FATAL, `wsToMyWs`, MainEventTypes.SERVER, new Error(`invalid id ( ${newID} ) || ip ( ${newIP} )`), ws);
     const newClient = ws as MyWebSocket;
     newClient.id = newID || `${Date.now()}`;
     newClient.ip = newIP || 'NaN';
@@ -237,7 +237,7 @@ export class Server {
 
           const finalClient: MyWebSocket = this.wsToMyWs(client, request);
 
-          if (typeof finalClient.id !== "string" || !finalClient.type) return this.eV.handleError(SubEventTypes.ERROR.FATAL, `Server OM upgrade`, new CustomErrorEvent(`Server secure upgrade failed?`, MainEventTypes.SERVER, finalClient));
+          if (typeof finalClient.id !== "string" || !finalClient.type) return this.eV.handleError(SubEventTypes.ERROR.FATAL, `Server OM upgrade`, MainEventTypes.SERVER, new Error(`Server secure upgrade failed?`), finalClient);
 
           webSocketStream.on('end', () => {
             // console.log('WebSocket connection ended');
@@ -246,8 +246,9 @@ export class Server {
               message: `Client disconnected id: ${request.headers['sec-websocket-key']}`,
               success: true,
               data: request,
-              clientsEvent: { id: finalClient.id, ip: finalClient.ip, clientType: finalClient.type, client: finalClient }
-            };
+              id: finalClient.id,
+              client: finalClient
+             };
             this.eV.emit(MainEventTypes.CLIENTS, disconnectEvent);
           });
 
@@ -257,10 +258,11 @@ export class Server {
               message: `Client error id: ${request.headers['sec-websocket-key']}`,
               success: true,
               data: request,
-              clientsEvent: { id: finalClient.id, ip: finalClient.ip, clientType: finalClient.type, client: finalClient }
-            };
+              id: finalClient.id,
+              client: finalClient
+             };
             this.eV.emit(MainEventTypes.CLIENTS, connectEvent);
-            this.eV.handleError(SubEventTypes.ERROR.INFO, `Websocket Server`, new CustomErrorEvent(`Client error`, MainEventTypes.SERVER, error));
+            this.eV.handleError(SubEventTypes.ERROR.INFO, `Websocket Server`, MainEventTypes.SERVER, new Error(`Client error`), error);
           });
           webSocketStream.on('data', (data: Buffer) => { // Buffer type for data
             try {
@@ -271,7 +273,8 @@ export class Server {
                     subType: SubEventTypes.CLIENTS.GREETING,
                     message: message.greeting,
                     success: true,
-                    clientsEvent: { id: finalClient.id, ip: finalClient.ip, clientType: finalClient.type, client: finalClient },
+                    id: finalClient.id,
+                    client: finalClient,
                     data: message
                   };
                   this.eV.emit(MainEventTypes.CLIENTS, greetingEvent);
@@ -281,7 +284,8 @@ export class Server {
                     subType: SubEventTypes.CLIENTS.MESSAGE_READY,
                     message: `serverMessage`,
                     success: true,
-                    clientsEvent: { id: finalClient.id, ip: finalClient.ip, clientType: finalClient.type, client: finalClient },
+                    id: finalClient.id,
+                    client: finalClient,
                     data: message.serverMessage
                   };
                   this.eV.emit(MainEventTypes.CLIENTS, serverEvent);
@@ -291,7 +295,7 @@ export class Server {
                     subType: SubEventTypes.STATS.UPDATE_ALL,
                     message: 'updateStats',
                     success: true,
-                    statsEvent: { newValue: message.updateStats, updatedFields: Object.keys(message.updateStats) }
+                    newValue: message.updateStats, updatedFields: Object.keys(message.updateStats)
                   };
                   this.eV.emit(MainEventTypes.STATS, statsEvent);
                   break;
@@ -308,13 +312,14 @@ export class Server {
                     subType: SubEventTypes.CLIENTS.OTHER,
                     message: message,
                     success: true,
-                    clientsEvent: { id: finalClient.id, ip: finalClient.ip, clientType: finalClient.type, client: finalClient },
+                    id: finalClient.id,
+                    client: finalClient,
                     data: request
                   };
                   this.eV.emit(MainEventTypes.CLIENTS, otherEvent);
               }
             } catch (error) {
-              this.eV.handleError(SubEventTypes.ERROR.WARNING, `Server ON data`, new CustomErrorEvent(`Error parsing data`, MainEventTypes.SERVER, error));
+              this.eV.handleError(SubEventTypes.ERROR.WARNING, `Server ON data`, MainEventTypes.SERVER, new Error(`Error parsing data`), error);
             }
           });
         });
@@ -349,7 +354,7 @@ export class Server {
       // this.setupWebSocketListeners();
       this.eV.emit(MainEventTypes.SERVER, serverEvent);
       this.stats.server.webHandle.isAlive = false;
-      this.eV.handleError(SubEventTypes.ERROR.FATAL, `listen | ERROR`, new CustomErrorEvent("Error creating server", MainEventTypes.SERVER, error));
+      this.eV.handleError(SubEventTypes.ERROR.FATAL, `listen | ERROR`, MainEventTypes.SERVER, new Error("Error creating server"), error);
     }
   }
   private async updatePid() {
@@ -390,7 +395,7 @@ export class Server {
       this.settings.pid.fileReadable = false;
       this.settings.pid.pid = "NaN";
       this.settings.pid.processFound = false;
-      this.eV.handleError(SubEventTypes.ERROR.INFO, "updatePid | ERROR", new CustomErrorEvent(`pidFileExists: ${this.settings.pid.fileExists}, pid file readable: ${this.settings.pid.fileReadable}, pid: ${this.settings.pid.pid}, SI pid: ${this.stats.global.si.pid}`, MainEventTypes.STATS, error));
+      this.eV.handleError(SubEventTypes.ERROR.INFO, "updatePid | ERROR", MainEventTypes.STATS, new Error(`pidFileExists: ${this.settings.pid.fileExists}, pid file readable: ${this.settings.pid.fileReadable}, pid: ${this.settings.pid.pid}, SI pid: ${this.stats.global.si.pid}`), error);
     }
   }
 
@@ -415,7 +420,7 @@ export class Server {
       };
       this.eV.emit(MainEventTypes.MAIN, resultData);
     }).catch((error) => {
-      this.eV.handleError(SubEventTypes.ERROR.FATAL, "getPid", new CustomErrorEvent(`getPid | pidFileExists: ${this.settings.pid.fileExists}, pid file readable: ${this.settings.pid.fileReadable}, pid: ${this.settings.pid.pid}, SI pid: ${this.stats.global.si.pid}`, MainEventTypes.STATS, error));
+      this.eV.handleError(SubEventTypes.ERROR.FATAL, "getPid", MainEventTypes.STATS, new Error(`getPid | pidFileExists: ${this.settings.pid.fileExists}, pid file readable: ${this.settings.pid.fileReadable}, pid: ${this.settings.pid.pid}, SI pid: ${this.stats.global.si.pid}`), error);
       this.settings.pid.fileReadable = false;
       this.settings.pid.fileExists = false;
       this.settings.pid.pid = "NaN";

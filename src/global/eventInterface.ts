@@ -1,7 +1,9 @@
 "use strict";
 
+import { timer } from "rxjs";
 import { ClientType, MyWebSocket } from "../clients/clientInstance";
 import { EventEmitterMixin } from "./EventEmitterMixin";
+import { stats } from './containerWrapper';
 
 export const MainEventTypes = {
   BASIC: 'BASIC',
@@ -83,6 +85,13 @@ export const SubEventTypes = {
   },
 };
 
+
+// interface JSONObject {
+//   [key: string]: string;
+// }
+
+// export interface JSONArray extends Array<string> {}
+
 export interface DebugDataCallback {
   (): Partial<IDebugEvent>;
   updateDuration(): void;
@@ -107,8 +116,7 @@ export class DebugEventGenerator {
   }
 
   generateDebugData(): IDebugEvent {
-    return  {
-      debugEvent: {
+    return {
         timestamp: DEFAULT_VALUE_CALLBACKS.time(),
         eventName: "Debug Event",
         startTime: this.startTime,
@@ -116,7 +124,6 @@ export class DebugEventGenerator {
         duration: 0,
         activeEvents: -1,
         eventCounter: -1
-      }
     };
   }
   updateDuration(): void {
@@ -124,62 +131,54 @@ export class DebugEventGenerator {
     const duration = endTime - this.startTime;
 
     // Assuming your IDebugEvent has a nested structure like debugEvent.debugEvent  
-    this.generateDebugData().debugEvent.endTime = endTime;
-    this.generateDebugData().debugEvent.duration = duration;
-    this.generateDebugData().debugEvent.activeEvents = DEFAULT_VALUE_CALLBACKS.activeEvents();
-    this.generateDebugData().debugEvent.eventCounter = DEFAULT_VALUE_CALLBACKS.eventCounter();
+    this.generateDebugData().endTime = endTime;
+    this.generateDebugData().duration = duration;
+    this.generateDebugData().activeEvents = DEFAULT_VALUE_CALLBACKS.activeEvents();
+    this.generateDebugData().eventCounter = DEFAULT_VALUE_CALLBACKS.eventCounter();
   }
 }
 
 export const debugDataCallback: IDebugEvent = new DebugEventGenerator().generateDebugData();
 
-export class CustomErrorEvent extends Error {
-  message: string;
-  mainSource: string;
-  data?: any;
-
-  constructor(
-    message: string,
-    mainSource: string,
-    data?: any
-  ) {
-    super();
-    this.message = message;
-    this.mainSource = mainSource;
-    this.data = { ...data };
-  }
-}
 export interface IBaseEvent {
   subType: string;
   message: string;
-  counter?: number;
-  data?: any;
   success?: boolean;
-  debugEvent?: Partial<IDebugEvent>;
+  debugEvent?: IDebugEvent;
+  json?: any;
 }
 
 export interface IMainEvent extends IBaseEvent {
-  mainEvent: { pid: number | "NaN" };
+  pid: number | "NaN";
 }
 
 export interface IStatsEvent extends IBaseEvent {
-  statsEvent: { statsId?: number, newValue?: any, oldValue?: any, updatedFields?: any };
+  statsId?: number;
+  newValue?: any;
+  oldValue?: any;
+  updatedFields?: any;
 }
 
 export interface IServerEvent extends IBaseEvent {
-  serverEvent: { timerId?: number, startTime?: number, endTime?: number, duration?: number };
+  timerId?: number;
+  startTime?: number;
+  endTime?: number;
+  duration?: number;
 }
 
 export interface IClientsEvent extends IBaseEvent {
-  clientsEvent: { id: string, ip: string, clientType: ClientType, message?: string, client: MyWebSocket };
+  id?: string;
+  client: MyWebSocket;
+  data?: any;
 }
 
 export interface IErrorEvent extends IBaseEvent {
-  errorEvent: CustomErrorEvent;
+  counter: number;
+  mainSource: string;
+  errorEvent: Error;
 }
 
 export interface IDebugEvent {
-  debugEvent: {
     timestamp: string;
     eventName: string;
     startTime: number;
@@ -187,74 +186,112 @@ export interface IDebugEvent {
     duration: number;
     activeEvents: number;
     eventCounter: number;
-  };
   updateDuration?(): void;
 }
 
 export type IEventTypes = Partial<IBaseEvent> | Partial<IMainEvent> | Partial<IStatsEvent> | Partial<IServerEvent> | Partial<IClientsEvent>;
 
-export class BaseEvent implements IBaseEvent {
-  subType: string = SubEventTypes.BASIC.DEFAULT;
-  message: string = "";
-  data?: any;
-  success: boolean = false;
-  errorEvent?: CustomErrorEvent;
-  debugEvent?: IDebugEvent;
 
-  constructor(data?: Partial<IBaseEvent>) {
-    Object.assign(this, data);
+export class BaseEvent implements IBaseEvent {
+
+  subType: string = SubEventTypes.BASIC.DEFAULT;
+  message: string = "NaN";
+  success?: boolean = false;
+  debugEvent?: IDebugEvent;
+  json?: any;
+
+  constructor(subType: string, message: string, success?: boolean, debugEvent?: IDebugEvent, json?: any) {
+    this.subType = subType;
+    this.message = message;
+    this.success! = success || false;
+    this.debugEvent = debugEvent;
+    this.json = json;
   }
 }
 
 export class MainEvent extends BaseEvent implements IMainEvent {
-  mainEvent: { pid: number | "NaN" } = { pid: "NaN" }; // Default to the current process ID
+  pid: number | "NaN" = "NaN"; // Default to the current process ID
 
-  constructor(data?: Partial<IMainEvent>) {
-    super(data);
-    Object.assign(this.mainEvent, data?.mainEvent);
+  constructor(subType: string, message: string, success: boolean, debugEvent?: IDebugEvent, json?: any) {
+    super(subType, message, success, debugEvent, json);
+    this.pid = process.pid;
   }
 }
 
 export class StatsEvent extends BaseEvent implements IStatsEvent {
-  statsEvent: { statsId?: number, newValue?: any, oldValue?: any, updatedFields?: any } = {};
+  statsId: number;
+  newValue: any;
+  oldValue: any;
+  updatedFields: any;
 
-  constructor(data?: Partial<IStatsEvent>) {
-    super(data);
-    Object.assign(this.statsEvent, data?.statsEvent);
+  constructor(statsId: number, newValue: any, oldValue: any, updatedFields: any, subType: string, message: string, success: boolean, debugEvent?: IDebugEvent, json?: any) {
+    super(subType, message, success, debugEvent, json);
+    this.statsId = statsId;
+    this.newValue = newValue;
+    this.oldValue = oldValue;
+    this.updatedFields = updatedFields;
   }
 }
 
 export class ServerEvent extends BaseEvent implements IServerEvent {
-  serverEvent: { timerId?: number, startTime?: number, endTime?: number, duration?: number } = {};
+  timerId: number;
+  startTime: number;
+  endTime: number;
+  duration: number;
 
-  constructor(data?: Partial<IServerEvent>) {
-    super(data);
-    Object.assign(this.serverEvent, data?.serverEvent);
+  constructor(timerId: number, startTime: number, endTime: number, duration: number, subType: string, message: string, success: boolean, debugEvent?: IDebugEvent, json?: any) {
+    super(subType, message, success, debugEvent, json);
+    this.timerId = timerId;
+    this.startTime = startTime;
+    this.endTime = endTime;
+    this.duration = duration;
   }
 }
 
 export class ClientsEvent extends BaseEvent implements IClientsEvent {
-  clientsEvent: { id: string, ip: string, clientType: ClientType, message?: string, client: MyWebSocket } = { id: "NaN", ip: "NaN", clientType: ClientType.Unknown, client: {} as MyWebSocket };
+  id?: string;
+  client: MyWebSocket;
+  data?: any;
 
-  constructor(data?: Partial<IClientsEvent>) {
-    super(data);
-    Object.assign(this.clientsEvent, data?.clientsEvent);
+  constructor(client: MyWebSocket, subType: string, message: string, success: boolean, debugEvent?: IDebugEvent, id?: string, data?: any, json?: any) {
+    super(subType, message, success, debugEvent, json);
+    this.id = id;
+    this.client = client;
+    this.data = data;
   }
 }
 
-export class ErrorEvent extends BaseEvent implements IErrorEvent {
-  errorEvent: CustomErrorEvent = new CustomErrorEvent("NaN", MainEventTypes.ERROR, {errCode: 0});
+export class ErrorEvent extends BaseEvent implements IErrorEvent{
+  counter: number;
+  mainSource: string;
+  errorEvent: Error = new Error("NaN");
 
-  constructor(data?: Partial<IErrorEvent>) {
-    super(data);
-    Object.assign(this.errorEvent, data?.errorEvent);
+  constructor(subType: string, message: string, success: boolean, counter: number, mainSource: string, errorEvent: Error, debugEvent?: IDebugEvent, json?: any) {
+    super(subType, message, success, debugEvent, json);
+    this.counter = counter;
+    this.mainSource = mainSource;
+    this.errorEvent = errorEvent;
   }
 }
+
+export interface INewErr {
+  counter: number;
+  mainSource: string;
+  errorEvent: Error;
+  subType: string;
+  message: string;
+  success: boolean;
+  debugEvent: IDebugEvent;
+  json: string;
+}
+
 
 export interface IEventStats {
   eventCounter: number;
   activeEvents: number;
   errorCounter: number;
+  guiEventCounter: number;
+  guiActiveEvents: number;
 }
 
 export class activeClients {
@@ -276,9 +313,9 @@ export class activeClients {
     }
   }
 
-  check(): void{
+  check(): void {
     if (this.callback) {
-      this.callback(this.value > 0); 
+      this.callback(this.value > 0);
     }
   }
 

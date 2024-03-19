@@ -33,7 +33,6 @@ interface IGuiSettings {
   min: number;
   max: number;
   values: any[];
-  lastErrors: string[];
   modeList: string[];
   periodList: number[];
   EOL: string;
@@ -68,7 +67,6 @@ export class settingsWrapper {
     min: 0,
     max: 100,
     values: [],
-    lastErrors: [],
     modeList: ['mode1', 'mode2', 'mode3'],
     periodList: [100, 250, 500, 1000, 2000, 5000, 10000],
     EOL: '\n',

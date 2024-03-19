@@ -4,7 +4,7 @@ import 'reflect-metadata';
 
 import { clientsWrapper, MyWebSocket, ClientType, IClientInfo, IClientSettings, clientWrapper } from "./clientInstance";
 import si from 'systeminformation';
-import { BaseEvent, CustomErrorEvent, IBaseEvent, IClientsEvent, IEventTypes, MainEventTypes, SubEventTypes } from "../global/eventInterface";
+import { BaseEvent, IBaseEvent, IClientsEvent, IEventTypes, MainEventTypes, SubEventTypes } from "../global/eventInterface";
 import { WebSocket } from 'ws';
 import { EventEmitterMixin } from "../global/EventEmitterMixin";
 import { StatsWrapperSymbol, statsWrapper } from "../stats/statsInstance";
@@ -39,13 +39,13 @@ export class Clients {
           this.handleClientSubscribe(event);
           break;
         case SubEventTypes.CLIENTS.UNSUBSCRIBE:
-          this.handleClientUnsubscribe(event.clientsEvent.id);
+          this.handleClientUnsubscribe(event.client.id);
           break;
         case SubEventTypes.CLIENTS.UPDATE_SETTINGS:
-          this.handleClientModifySettings(event.clientsEvent.id, event.data);
+          this.handleClientModifySettings(event.client.id, event.data);
           break;
         case SubEventTypes.CLIENTS.UPDATE_STATS:
-          this.handleClientUpdateStats(event.clientsEvent.id);
+          this.handleClientUpdateStats(event.client.id);
           break;
         case SubEventTypes.CLIENTS.UPDATE_ALL_STATS:
           this.handleClientsUpdateStats();
@@ -63,34 +63,35 @@ export class Clients {
               message: key,
               success: true,
               data: value,
-              clientsEvent: { id: event.clientsEvent.id, ip: event.clientsEvent.ip, clientType: event.clientsEvent.clientType, client: event.clientsEvent.client },
+              id: event.client.id,
+              client: event.client,
             };
             this.eV.emit(MainEventTypes.CLIENTS, newEvent);
           });
 
         case SubEventTypes.CLIENTS.MESSAGE_READY:
-          const wsClient = event.clientsEvent.client;
+          const wsClient = event.client;
           if (wsClient.id == "ALL" || (wsClient && ((wsClient.type == ClientType.Admin) || (wsClient.type == ClientType.Server))))
-            this.clientsMessageReady(event.clientsEvent.id, event.message, event.data, event.data.isBinary)
+            this.clientsMessageReady(event.client.id, event.message, event.data, event.data.isBinary)
           else
-            this.clientMessageReady(event.clientsEvent.id, event.message, event.data, event.data.isBinary);
+            this.clientMessageReady(event.client.id, event.message, event.data, event.data.isBinary);
           break;
         case SubEventTypes.CLIENTS.GREETING:
-          const client = this.clients.client[event.clientsEvent.id];
+          const client = this.clients.client[event.client.id];
           // console.dir(event.data, { depth: null, colors: true });
           if (client) {
             const newIP = client.ws.ip;
 
-            // console.log("Client Greeting Received:", event.message, "From:", event.clientsEvent.id);
-            // console.dir(this.clients.client[event.clientsEvent.id].info, { depth: null, colors: true });
+            // console.log("Client Greeting Received:", event.message, "From:", event.client.id);
+            // console.dir(this.clients.client[event.client.id].info, { depth: null, colors: true });
             // console.dir(this.clients.client[newID].stats);
 
             const helloEvent: IClientsEvent = {
               subType: SubEventTypes.CLIENTS.MESSAGE_READY,
               message: `chatMessage`,
               success: true,
-              data: `Welcome ${event.clientsEvent.id} from ${newIP} | activeClients: ${this.stats.client.activeClients} | clientsCounter: ${this.stats.client.clientsCounter}`,
-              clientsEvent: { id: event.clientsEvent.id, ip: event.clientsEvent.ip, clientType: event.clientsEvent.clientType, client: event.clientsEvent.client }
+              data: `Welcome ${event.client.id} from ${newIP} | activeClients: ${this.stats.client.activeClients} | clientsCounter: ${this.stats.client.clientsCounter}`,
+              id: event.client.id, client: event.client
             };
             this.eV.emit(MainEventTypes.CLIENTS, helloEvent);
           }
@@ -103,7 +104,7 @@ export class Clients {
           this.eV.emit(MainEventTypes.ERROR, `no ${event.subType} found in ${MainEventTypes.CLIENTS}`);
       }
     } else {
-      this.eV.handleError(SubEventTypes.ERROR.INFO, `createServer`, new CustomErrorEvent(`no ${event} found in ${MainEventTypes.CLIENTS}`, MainEventTypes.CLIENTS, event));
+      this.eV.handleError(SubEventTypes.ERROR.INFO, `createServer`, MainEventTypes.CLIENTS, new Error(`no ${event} found in ${MainEventTypes.CLIENTS}`), event);
     }
   }
 
@@ -113,7 +114,8 @@ export class Clients {
       message: type,
       success: true,
       data: data,
-      clientsEvent: { id: event.id, ip: event.ip, clientType: event.type, client: event },
+      id: event.id,
+      client: event,
     };
     this.eV.emit(MainEventTypes.CLIENTS, newEvent);
   }
@@ -142,7 +144,7 @@ export class Clients {
     });
   }
   public clientMessageReady(id: string, type: string, data: string, isBinary: boolean): any {
-    if (!this.stats.server.webHandle.hasConnection || !!this.stats.server.webHandle.isAlive) return this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.CLIENTS.MESSAGE_READY, message: 'No Client Connected', success: true });
+    if (!this.stats.server.webHandle.hasConnection || !!this.stats.server.webHandle.isAlive) return this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.CLIENTS, message: 'No Client, message not sent', success: true });
     const client = this.clients.client[id];
     if (id == "ALL" && id != client.ws.id ||client.ws && client.ws.readyState === WebSocket.OPEN) {
       switch (type) {
@@ -178,12 +180,12 @@ export class Clients {
   public handleClientSubscribe(client: IClientsEvent) { // Adjust 'any' type later
     //public create(newID: string, newIP: string, type: ClientType): void {
     try {
-      const id = client.clientsEvent.id;
-      const ip = client.clientsEvent.ip;
-      const type = client.clientsEvent.clientType;
+      const id = client.client.id;
+      const ip = client.client.ip;
+      const type = client.client.type;
       this.stats.client.clientsCounter++;
 
-      this.clients.createClient(id, ip, type, client.clientsEvent.client);
+      this.clients.createClient(id, ip, type, client.client);
       if (type != ClientType.Server) {
         this.handleClientUpdateStats(id);
         if (++this.stats.client.activeClients == 1) {
@@ -202,7 +204,7 @@ export class Clients {
       };
       this.eV.emit(MainEventTypes.BASIC, newEvent);
     } catch (error) {
-      this.eV.handleError(SubEventTypes.ERROR.WARNING, "handleClientSubscribe", new CustomErrorEvent(`create client failed`, MainEventTypes.CLIENTS, error));
+      this.eV.handleError(SubEventTypes.ERROR.WARNING, "handleClientSubscribe", MainEventTypes.CLIENTS, new Error(`create client failed`), error);
     }
   }
 
@@ -222,7 +224,8 @@ export class Clients {
           message: `latencyUser`,
           success: true,
           data: clientData.stats.latency,
-          clientsEvent: { id: clientData.info.id, ip: clientData.info.ip, clientType: clientData.ws.type, client: clientData.ws}
+          id: clientData.info.id,
+          client: clientData.ws
         };
         this.eV.emit(MainEventTypes.CLIENTS, latencyUserEvent);
         //   this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.DEFAULT, message: `client ${clientData.info.id} not updated, time_diff: ${time_diff}` });

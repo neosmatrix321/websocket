@@ -6,7 +6,7 @@ import { readFile } from 'node:fs/promises';
 import pidusage from 'pidusage';
 import si from 'systeminformation';
 import * as fs from 'fs';
-import { BaseEvent, CustomErrorEvent, IBaseEvent, IClientsEvent, IEventTypes, IMainEvent, IServerEvent, IStatsEvent, MainEventTypes, SubEventTypes } from "../global/eventInterface";
+import { BaseEvent, IBaseEvent, IClientsEvent, IEventTypes, IMainEvent, IServerEvent, IStatsEvent, MainEventTypes, SubEventTypes } from "../global/eventInterface";
 import { EventEmitterMixin } from "../global/EventEmitterMixin";
 import { ClientType, MyWebSocket } from '../clients/clientInstance';
 import { SettingsWrapperSymbol, settingsWrapper } from '../settings/settingsInstance';
@@ -50,7 +50,7 @@ export class Stats {
         this.updateAndGetPidIfNecessary();
         break;
       default:
-        this.eV.handleError(MainEventTypes.ERROR, `Unknown stats event subtype: ${event.subType}`, new CustomErrorEvent(`Unknown stats event subtype: ${event.subType}`, MainEventTypes.STATS, event));
+        this.eV.handleError(MainEventTypes.ERROR, `Unknown stats event subtype: ${event.subType}`, MainEventTypes.STATS, new Error(`Unknown stats event subtype: ${event.subType}`), event);
       // console.warn('Unknown stats event subtype:', event.subType);
     }
   }
@@ -94,7 +94,7 @@ export class Stats {
       };
       this.eV.emit(MainEventTypes.BASIC, latencyGoogleEvent);
     } catch (error) {
-      this.eV.handleError(SubEventTypes.ERROR.INFO, `getLatencyGoogle`, new CustomErrorEvent(`Error`, MainEventTypes.STATS, error));
+      this.eV.handleError(SubEventTypes.ERROR.INFO, `getLatencyGoogle`, MainEventTypes.STATS, new Error(`Error`), error);
       this.stats.global.latencyGoogle = "NaN";
     }
   }
@@ -112,7 +112,7 @@ export class Stats {
       this.settings.pid.processFound = true;
       const newEvent: IBaseEvent = {
         subType: SubEventTypes.BASIC.STATS,
-        message: `updateAndGetPidIfNecessary | pid: ${this.settings.pid.pid}, SI pid: ${this.stats.global.si.pid}`,
+        message: `updateAndGetPid | pid: ${this.settings.pid.pid}, SI pid: ${this.stats.global.si.pid}`,
         success: true,
       };
       this.eV.emit(MainEventTypes.BASIC, newEvent);
@@ -120,11 +120,11 @@ export class Stats {
       this.settings.pid.processFound = false;
       const newEvent: IBaseEvent = {
         subType: SubEventTypes.BASIC.STATS,
-        message: `updateAndGetPidIfNecessary | pid: ${this.settings.pid.pid}, SI pid: ${this.stats.global.si.pid}`,
+        message: `updateAndGetPid | pid: ${this.settings.pid.pid}, SI pid: ${this.stats.global.si.pid}`,
         success: false,
       };
       this.eV.emit(MainEventTypes.BASIC, newEvent);
-      this.eV.handleError(SubEventTypes.ERROR.WARNING, "updateAndGetPidIfNecessary", new CustomErrorEvent(`pidFileExists: ${this.settings.pid.fileExists}, pid file readable: ${this.settings.pid.fileReadable}, pid: ${this.settings.pid.pid}, SI pid: ${this.stats.global.si.pid}`, MainEventTypes.STATS, error));
+      this.eV.handleError(SubEventTypes.ERROR.WARNING, "updateAndGetPidIfNecessary", MainEventTypes.STATS, new Error(`pidFileExists: ${this.settings.pid.fileExists}, pid file readable: ${this.settings.pid.fileReadable}, pid: ${this.settings.pid.pid}, SI pid: ${this.stats.global.si.pid}`), error);
     });
   }
 
@@ -170,7 +170,7 @@ export class Stats {
         success: false,
       };
       this.eV.emit(MainEventTypes.BASIC, newEvent);
-      this.eV.handleError(SubEventTypes.ERROR.WARNING, `getSI`, new CustomErrorEvent(`pidFileExists: ${this.settings.pid.fileExists}, pid file readable: ${this.settings.pid.fileReadable}, pid: ${this.settings.pid.pid}, SI pid: ${this.stats.global.si.pid}`, MainEventTypes.STATS, error));
+      this.eV.handleError(SubEventTypes.ERROR.WARNING, `getSI`, MainEventTypes.STATS, new Error(`pidFileExists: ${this.settings.pid.fileExists}, pid file readable: ${this.settings.pid.fileReadable}, pid: ${this.settings.pid.pid}, SI pid: ${this.stats.global.si.pid}`), error);
     });
   }
 
@@ -186,7 +186,8 @@ export class Stats {
           message: `pidInfo`,
           success: true,
           data: this.stats.global.pu,
-          clientsEvent: { id: "ALL", ip: "ALL", clientType: ClientType.Basic, client: {} as MyWebSocket },
+          id: "ALL",
+          client: {} as MyWebSocket,
         };
         this.eV.emit(MainEventTypes.CLIENTS, puEvent);
         const newEvent: IBaseEvent = {
@@ -197,7 +198,7 @@ export class Stats {
         this.eV.emit(MainEventTypes.BASIC, newEvent);
         // console.dir(this.stats.global.pu, { depth: null, colors: true });
       } catch (error) {
-        this.eV.handleError(SubEventTypes.ERROR.WARNING, `getPU`, new CustomErrorEvent(`pidFileExists: ${this.settings.pid.fileExists}, pid file readable: ${this.settings.pid.fileReadable}, pid: ${this.settings.pid.pid}, SI pid: ${this.stats.global.si.pid}`, MainEventTypes.STATS, error));
+        this.eV.handleError(SubEventTypes.ERROR.WARNING, `getPU`, MainEventTypes.STATS, new Error(`pidFileExists: ${this.settings.pid.fileExists}, pid file readable: ${this.settings.pid.fileReadable}, pid: ${this.settings.pid.pid}, SI pid: ${this.stats.global.si.pid}`), error);
       }
     }
   }

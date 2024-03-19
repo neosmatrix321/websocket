@@ -5,7 +5,7 @@ import { EventEmitterMixin } from "./global/EventEmitterMixin";
 // import Stats from "./stats/stats";
 // import Server from "./server/server";
 // import Clients from "./clients/clients";
-import { SubEventTypes, MainEventTypes, IEventTypes, IMainEvent, BaseEvent, IBaseEvent, debugDataCallback, CustomErrorEvent, IErrorEvent, IClientsEvent, IServerEvent } from './global/eventInterface';
+import { SubEventTypes, MainEventTypes, IEventTypes, IMainEvent, BaseEvent, IBaseEvent, debugDataCallback, IErrorEvent, IClientsEvent, IServerEvent, INewErr } from './global/eventInterface';
 import { Server } from "./server/server";
 import { Clients } from "./clients/clients";
 import { Stats } from "./stats/stats";
@@ -17,16 +17,8 @@ export const CLIENTS_WRAPPER_TOKEN = Symbol('clientsWrapper');
 export const MAIN_WRAPPER_TOKEN = Symbol('Main');
 export const SERVER_WRAPPER_TOKEN = Symbol('serverWrapper');
 
-const FirstEvent = new BaseEvent({
-  subType: SubEventTypes.BASIC.FIRST,
-  message: "First event",
-  success: true,
-  debugEvent: debugDataCallback,
-});
-
 export const MyGUI = new consoleGui();
 // export const MAIN_WRAPPER_TOKEN = Symbol('Main');
-
 
 @injectable()
 export class Main {
@@ -45,13 +37,21 @@ export class Main {
       MyGUI.startIfTTY();
       console.log("Main Initialization ...");
       this.setupEventHandlers();
+      const FirstEvent: BaseEvent = {
+        subType: SubEventTypes.BASIC.FIRST,
+        message: "First event",
+        success: true,
+        debugEvent: debugDataCallback,
+        json: JSON.stringify({ data: "NaN" }),
+      };
       this.eV.emit(MainEventTypes.BASIC, FirstEvent);
       const firstErrorEvent: IErrorEvent = {
         subType: SubEventTypes.ERROR.INFO,
-        message: "First Error",
-        success: false,
-        errorEvent: new CustomErrorEvent("from Main", MainEventTypes.DEBUG, { errCode: 0 }),
-        data: { errCode: 0, errMessage: "First Error", errData: "NaN" },
+        message: "first Error",
+        counter: -1,
+        mainSource: MainEventTypes.DEBUG,
+        errorEvent: new Error("guess it works"),
+        json: JSON.stringify({ errCode: 0, errMessage: "First Error", errData: "NaN" }),
       };
       this.eV.emit(MainEventTypes.ERROR, firstErrorEvent);
       this.eV.emit(MainEventTypes.SERVER, { subType: SubEventTypes.SERVER.START, message: 'Start Server', success: true });
@@ -64,11 +64,11 @@ export class Main {
       // console.log("createServer Initialization ...");
 
     } catch (error) {
-      this.eV.handleError(SubEventTypes.ERROR.FATAL, "Main Initialization", new CustomErrorEvent("from Main", MainEventTypes.ERROR, error));
-      console.error("Main Initialization Error: ", error?.toString());
+      this.eV.handleError(SubEventTypes.ERROR.FATAL, "Main Initialization", MainEventTypes.MAIN, new Error(`start Routine`), error);
+      console.error("Main Initialization Error: ", error);
     }
   }
-  public safeStringify(obj: any) {
+  public static safeStringify(obj: any) {
     const cache = new Set();
     return JSON.stringify(obj, (key, value) => {
       if (typeof value === 'object' && value !== null) {
@@ -97,35 +97,18 @@ export class Main {
           console.log(`${event.subType} event | result: ${event.success} | message: ${event.message}`);
           break;
         default:
-          this.eV.handleError(SubEventTypes.ERROR.WARNING, "BASIC event", new CustomErrorEvent(`from ${event.subType}`, MainEventTypes.ERROR, event));
-          console.error('Unknown BASIC event subtype:', event.subType);
+          this.eV.handleError(SubEventTypes.ERROR.WARNING, "BASIC event", MainEventTypes.ERROR, new Error(`Unknown BASIC event subtype ${event.subType}`), event);
       }
       // console.log(createCustomDebugEvent(event, ...data));
       if (event.debugEvent !== undefined) {
         event.debugEvent.updateDuration;
         console.info(event.debugEvent);
-        this.eV.handleError(SubEventTypes.ERROR.DEBUG, "BASIC event", new CustomErrorEvent(`from ${event.subType}`, MainEventTypes.ERROR, event));
+        this.eV.handleError(SubEventTypes.ERROR.DEBUG, '', MainEventTypes.MAIN, new Error(`from ${event.subType}`));
       }
     });
     this.eV.on(MainEventTypes.MAIN, this.handleMainEvent.bind(this));
     this.eV.on(MainEventTypes.ERROR, (errorEvent: IErrorEvent) => {
-      // console.log(errorEvent);
-      const jsonOBJ = this.safeStringify({
-        [`ERROR No.: ${errorEvent.counter}`]: {
-          "from": `${errorEvent.errorEvent.mainSource}, ${errorEvent.message}`,
-          "error": `${errorEvent.errorEvent.message}`,
-          "logLevel": `${errorEvent.subType}`,
-          [errorEvent.data]: errorEvent.errorEvent.data,
-        }
-      });
-      this.eV.emit(MainEventTypes.GUI, { subType: SubEventTypes.GUI.FILL_ERROR_ARRAY, message: jsonOBJ, success: false });
-      // const jsonData = JSON.stringify(errorEvent.errorEvent.data, null, 2);
-      // console.warn(`Global ERROR ${errorEvent.counter}: ${errorEvent.message}`);
-      // console.warn(`logLevel: ${errorEvent.subType}`);
-      // console.warn(`from: ${errorEvent.errorEvent.mainSource}`);
-      // console.warn(`message: ${errorEvent.errorEvent.message}`);
-      // console.warn(`data: ${jsonData}`);
-      // console.info(JSON.stringify(errorEvent.errorEvent.data, null, 2));
+      this.eV.emit(MainEventTypes.GUI, { subType: SubEventTypes.GUI.FILL_ERROR_ARRAY, message: errorEvent});
     });
     this.eV.on(MainEventTypes.DEBUG, (errorEvent: IEventTypes) => {
       // console.log(errorEvent);
@@ -133,7 +116,26 @@ export class Main {
       console.dir(errorEvent, { depth: null, colors: true });
     });
 
+/*
 
+this.eV.on(MainEventTypes.ERROR, (errorEvent: IErrorEvent) => {
+  const { counter, errorEvent: { mainSource, message: errorMessage }, message, subType, data } = errorEvent;
+
+  const jsonOBJ: ErrorEventJson = {
+    counter: `${counter}`,
+    info: `${mainSource}`,
+    message: `${message}`,
+    error: `${errorMessage}`,
+    logLevel: `${subType}`,
+    ...data
+  };
+
+  const json = this.safeStringify(jsonOBJ);
+  this.eV.emit(MainEventTypes.GUI, { subType: SubEventTypes.GUI.FILL_ERROR_ARRAY, message: json, success: false });
+});
+
+
+*/
     // TODO: alternate Debug event handler ?
     // this.eV.on('DEBUG',  (event: IEventTypes) => {
     //   if (event.subType === 'START') {
@@ -196,7 +198,7 @@ export class Main {
         this.eV.emit(MainEventTypes.CLIENTS, debugClientsEvent);
         break;
       default:
-        this.eV.handleError(SubEventTypes.ERROR.WARNING, "handleMainEvent", new CustomErrorEvent(`from ${event.subType}`, MainEventTypes.MAIN, event));
+        this.eV.handleError(SubEventTypes.ERROR.WARNING, "handleMainEvent", MainEventTypes.MAIN, new Error(`from ${event.subType}`), event);
         // console.error('Unknown MAIN event subtype:', event.subType);
     }
   }

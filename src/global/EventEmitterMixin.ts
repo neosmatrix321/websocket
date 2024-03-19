@@ -1,11 +1,12 @@
 import { EventEmitter } from "events";
 import "reflect-metadata";
-import { MainEventTypes, IEventTypes, SubEventTypes, IEventStats, BaseEvent, debugDataCallback, CustomErrorEvent } from './eventInterface';
+import { MainEventTypes, IEventTypes, SubEventTypes, IEventStats, BaseEvent, debugDataCallback, ErrorEvent, IErrorEvent } from './eventInterface';
+import { Main } from "../main";
 
 
 export class EventEmitterMixin {
   private static _instance: EventEmitterMixin;
-  public static eventStats: IEventStats = { eventCounter: 0, activeEvents: 0, errorCounter: 0 };
+  public static eventStats: IEventStats = { eventCounter: 0, activeEvents: 0, errorCounter: 0, guiEventCounter: 0, guiActiveEvents: 0};
   private _emitter: EventEmitter;
   private _events: Map<string, any> = new Map(); // Store default events
   // private _listeners: Map<string, ((...args: any[]) => void)[]> = new Map();
@@ -35,7 +36,7 @@ export class EventEmitterMixin {
   private createEvent(event: string, ...args: any[]): { customKey: string, customData: IEventTypes } {
     let originalEvent = this._events.get(event);
     if (!originalEvent) {
-      this.handleError(SubEventTypes.ERROR.WARNING, `EventEmitterMixin.createEvent`, new CustomErrorEvent(`from ${event}`, MainEventTypes.EVENT, { ...args[0] } ));
+      this.handleError(SubEventTypes.ERROR.WARNING, `EventEmitterMixin.createEvent`, MainEventTypes.EVENT, new Error(`from ${event}`), JSON.stringify(args[0]) );
     }
     return { customKey: event, customData: { ...args[0] } };
   }
@@ -44,26 +45,34 @@ export class EventEmitterMixin {
       // console.log('EventEmitterMixin.isValidEvent:', event);
       return true;
     } else {
-      this.handleError(SubEventTypes.ERROR.WARNING, "EventEmitterMixin.isValidEvent", new CustomErrorEvent(`from ${event}`, MainEventTypes.EVENT, { ...eventData }));
+      this.handleError(SubEventTypes.ERROR.WARNING, `EventEmitterMixin.isValidEvent`, MainEventTypes.EVENT, new Error(`Invalid event: ${event}`), eventData);
       return false;
     }
   }
-  private emitError(subType: string, message: string, errorBlob: CustomErrorEvent, errorCounter: number): void {
-    const newEvent: BaseEvent = {
-      ...(new BaseEvent({ subType: subType, message: message, counter: errorCounter }) as BaseEvent),
-      errorEvent: { ...errorBlob }, // A sample error
-      debugEvent: debugDataCallback,
+  private emitError(subType: string, message: string, counter: number, mainSource: string, errorEvent: Error, json?: string): void {
+    const newEvent: IErrorEvent = {
+      ...(new ErrorEvent(
+        subType,
+        message,
+        false,
+        counter,
+        mainSource,
+        { ...errorEvent },
+        undefined,
+        Main.safeStringify(json)
+    )),
+    debugEvent: debugDataCallback,
     };
     // console.log(`Error from eventManager: ${type}`, newEvent);
     this._emitter.emit(MainEventTypes.ERROR, newEvent);
   }
 
   // ... other EventEmitter methods
-  public handleError(subType: string, message: string, errorBlob: any): void {
+  public handleError(subType: string, message: string, mainSource: string, errorEvent: Error, json?: any): void {
     // console.error(`handleError type: ${type}, message: ${message}`);
     // console.dir(errorBlob, { depth: null, colors: true });
     EventEmitterMixin.eventStats.errorCounter++;
-    this.emitError(subType, message, errorBlob, EventEmitterMixin.eventStats.errorCounter); // Emit the error for wider handling
+    this.emitError(subType, message, EventEmitterMixin.eventStats.errorCounter, mainSource, errorEvent, json); // Emit the error for wider handling
   }
 
   public async on(event: string, listener: (...args: any[]) => void) {
