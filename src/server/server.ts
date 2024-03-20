@@ -62,6 +62,9 @@ export class Server {
           const error: INewErr = event.message as unknown as INewErr;
           this.server.file.logError(error);
           break;
+        case SubEventTypes.SERVER.DEBUG_LOG_TO_FILE:
+          this.server.file.logDebugError(event);
+          break;
         // case SubEventTypes.SERVER.LISTEN:
         //   console.log('Server listen event');
         //   this.getPid();
@@ -80,10 +83,11 @@ export class Server {
           this.intervalStop();
           break;
         case SubEventTypes.SERVER.PRINT_DEBUG:
+          this.eV.emit(MainEventTypes.SERVER, { subType: SubEventTypes.SERVER.DEBUG_LOG_TO_FILE, data: this, message: "SERVER" });
           // console.log("Server:");
           // console.dir(this.server, { depth: 2, colors: true });
           break;
-        case SubEventTypes.STATS.RCON_CONNECT:
+        case SubEventTypes.SERVER.RCON_CONNECT:
           try {
             this.rconConnect().then(() => {
               this.sendRconCommand('info').then((response) => {
@@ -94,7 +98,7 @@ export class Server {
           }
           // this.serverActive(event);
           break;
-        case SubEventTypes.STATS.RCON_DISCONNECT:
+        case SubEventTypes.SERVER.RCON_DISCONNECT:
           this.rconDisconnect();
           // this.serverActive(event);
           break;
@@ -198,42 +202,59 @@ export class Server {
     }
   }
 
-  private wsToMyWs(client: WebSocket, request: IncomingMessage): MyWebSocket {
-    let ws: MyWebSocket = client as MyWebSocket;
-    let success = false;
-    if (
-      typeof ws.id !== 'string' ||
-      typeof ws.ip !== 'string' ||
-      typeof ws.type !== typeof ClientType
-    ) {
-      try {
-        ws = client as unknown as MyWebSocket;
-        const newID = request.headers['sec-websocket-key'] as string;
-        let newIP;
-        let newType;
-        if (newID && '_socket' in ws) {
-          newIP = (ws as any)._socket.remoteAddress;
-          newType = this.getClientType(newIP, { admin: 1 });
-        }
-
-        // if (!newID || !newIP) throw new Error(`invalid id ( ${newID} ) || ip ( ${newIP} )`);
-        ws.id = `${newID}` || `${Date.now()}`;
-        ws.ip = `${newIP}` || 'NaN';
-        ws.type = newType || ClientType.Basic;
-        success = true;
-        if (typeof ws.id !== 'string' || typeof ws.ip !== 'string' || typeof ws.type !== typeof ClientType) throw new Error(`invalid id ( ${ws.id} ) || ip ( ${ws.ip} )`);
-      } catch (error) {
-        success = false;
-        this.eV.handleError(SubEventTypes.ERROR.FATAL, `wsToMyWs`, MainEventTypes.SERVER, new Error(`Error converting ws to MyWs`), error);
+private wsToMyWs(client: WebSocket, request: IncomingMessage): MyWebSocket {
+  let ws: MyWebSocket = client as unknown as MyWebSocket;
+  let success = false;
+  if (
+    typeof ws.id !== 'string' ||
+    typeof ws.ip !== 'string' ||
+    !ws.type
+  ) {
+    try {
+      const newID = request.headers['sec-websocket-key'];
+      let newIP;
+      let newType;
+      if (newID && '_socket' in ws) {
+        newIP = (ws as any)._socket.remoteAddress;
+        newType = this.getClientType(newIP, {});
       }
+
+      ws.id = `${newID}` || `${Date.now()}`;
+      ws.ip = `${newIP}` || 'NaN';
+      ws.type = newType || ClientType.Basic;
+      if (typeof ws.id !== 'string') throw new Error(`invalid id ( ${ws.id} )`);
+      if (typeof ws.ip !== 'string') throw new Error(`invalid ip ( ${ws.ip} )`);
+      if (typeof ws.type !== 'number') throw new Error(`invalid type ( ${ws.type} )`);
+      success = true;
+      return ws as MyWebSocket;
+    } catch (error) {
+      success = false;
+      // Erstellen Sie ein neues Error-Objekt, um den Stacktrace zu erfassen
+      const errorWithStack = error instanceof Error ? new Error(`Error in wsToMyWs: ${error.message}`) : new Error(`Unexpected error: ${error}`);
+      errorWithStack.stack = error instanceof Error ? error.stack : ''; // Übernehmen Sie den Stacktrace des ursprünglichen Fehlers
+      if (error instanceof Error && error.stack) {
+        this.eV.handleError(SubEventTypes.ERROR.FATAL, 'wsToMyWs', MainEventTypes.SERVER, errorWithStack, error);
+      } else {
+        this.eV.handleError(SubEventTypes.ERROR.FATAL, 'wsToMyWs', MainEventTypes.SERVER, errorWithStack, new Error(`Unexpected error: ${error}`));
+      }
+
+      // Handle the error without crashing (e.g., return a default WebSocket)
     }
-    return ws as MyWebSocket;
+  }
+  return ws as MyWebSocket || this.createDefaultWebSocket(); // Placeholder; implement appropriate handling
+}
+  private createDefaultWebSocket(): MyWebSocket {
+    return {
+      id: 'default-id',
+      ip: '0.0.0.0',
+      type: ClientType.Basic,
+      // ... add other default properties
+    } as MyWebSocket;
   }
 
-  private async callAsyncAndWaitForResult(client: WebSocket, request: IncomingMessage): Promise<void> {
+  private async callAsyncAndWaitForResult(client: MyWebSocket, request: IncomingMessage): Promise<void> {
     let success = false;
     try {
-      const myWebSocket: MyWebSocket = this.wsToMyWs(client, request);
       const resultPromise = new Promise<boolean>((resolve) => {
         this.eV.once('clientSubscribeResult', (subscribeResult: boolean) => {
           resolve(subscribeResult);
@@ -243,8 +264,8 @@ export class Server {
         subType: SubEventTypes.CLIENTS.SUBSCRIBE,
         message: `clientSubscribed`,
         data: request,
-        id: myWebSocket.id,
-        client: myWebSocket
+        id: client.id,
+        client: client
       };
       this.eV.emit(MainEventTypes.CLIENTS, connectEvent);
       const subscribeResult = await resultPromise;
@@ -264,9 +285,9 @@ export class Server {
       //  ... adjust upgrade handling as needed ...
       this.server.web.handleUpgrade(request, socket, head, (client: WebSocket, request: IncomingMessage) => {
         const myWebSocket: MyWebSocket = this.wsToMyWs(client, request);
-        
+
         this.callAsyncAndWaitForResult(myWebSocket, request).then(() => {
-          const webSocketStream = createWebSocketStream(myWebSocket as MyWebSocket | WebSocket);
+          const webSocketStream = createWebSocketStream(myWebSocket as MyWebSocket);
           // TODO: Login
 
           webSocketStream.on('end', () => {

@@ -35,16 +35,15 @@ export class Stats {
         case SubEventTypes.STATS.UPDATE_ALL:
           this.updateAllStats();
           break;
-        case SubEventTypes.STATS.FORCE_UPDATE_ALL:
-          this.forceUpdateAllStats();
-          break;
-        case SubEventTypes.STATS.FORCE_UPDATE_ALL_FOR_ME:
-          this.forceUpdateAllStats(event.message);
-          break;
+        // case SubEventTypes.STATS.FORCE_UPDATE_ALL:
+        //   this.forceUpdateAllStats();
+        //   break;
+        // case SubEventTypes.STATS.FORCE_UPDATE_ALL_FOR_ME:
+        //   this.forceUpdateAllStats(event.message);
+        //   break;
         case SubEventTypes.STATS.PRINT_DEBUG:
           // console.log("Stats:");
-          // console.dir(this.stats.global, { depth: null, colors: true });
-          // console.dir(this.settings, { depth: null, colors: true });
+          this.eV.emit(MainEventTypes.SERVER, { subType: SubEventTypes.SERVER.DEBUG_LOG_TO_FILE, data: this, message: `STATS` });
           // console.dir(this.handle, { depth: 2, colors: true });
           break;
         case SubEventTypes.STATS.PREPARE:
@@ -72,20 +71,20 @@ export class Stats {
     // console.dir(this.settings);
   }
 
-  private async forceUpdateAllStats(id: string = "ALL"): Promise<void> {
-    this.stats.global.lastUpdates = { ...this.stats.global.lastUpdates, "forceUpdateAllStats": Date.now() };
-    if (!this.settings.pid.processFound) return this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.STATS, message: `forceUpdateAllStats | pid: ${this.settings.pid.pid}, SI pid: ${this.stats.global.si.pid}, processFound: ${this.settings.pid.processFound}`, success: false });
-    await Promise.all([this.getPU(), this.getLatencyGoogle(true)]); // TODO: fix this , this.rconGetStats(true)
-    this.eV.emit(MainEventTypes.STATS, {
-      subType: SubEventTypes.CLIENTS.MESSAGE_PAKET_READY,
-      message: `allStatsUpdated`,
-      data: [{ "pidInfo": { ...this.stats.global.pu } }, { "latencyGoogle": this.stats.global.latencyGoogle }, { "rconInfo": { ...this.stats.global.rcon.info } }, { "rconPlayers": { ...this.stats.global.rcon.players } }],
-      clientsEvent: { id: id, ip: "ALL", clientType: ClientType.Basic, client: {} as MyWebSocket },
-    });
-  }
+  // private async forceUpdateAllStats(id: string = "ALL"): Promise<void> {
+  //   this.stats.global.lastUpdates = { ...this.stats.global.lastUpdates, "forceUpdateAllStats": Date.now() };
+  //   if (!this.settings.pid.processFound) return this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.STATS, message: `forceUpdateAllStats | pid: ${this.settings.pid.pid}, SI pid: ${this.stats.global.si.pid}, processFound: ${this.settings.pid.processFound}`, success: false });
+  //   await Promise.all([this.getPU(), this.getLatencyGoogle()]); // TODO: fix this , this.rconGetStats(true)
+  //   this.eV.emit(MainEventTypes.STATS, {
+  //     subType: SubEventTypes.CLIENTS.MESSAGE_PAKET_READY,
+  //     message: `allStatsUpdated`,
+  //     data: [{ "pidInfo": { ...this.stats.global.pu } }, { "latencyGoogle": this.stats.global.latencyGoogle }, { "rconInfo": { ...this.stats.global.rcon.info } }, { "rconPlayers": { ...this.stats.global.rcon.players } }],
+  //     clientsEvent: { id: id, ip: "ALL", clientType: ClientType.Basic, client: {} as MyWebSocket },
+  //   });
+  // }
 
 
-  async getLatencyGoogle(force: boolean = false): Promise<void> {
+  async getLatencyGoogle(): Promise<void> {
     this.stats.global.lastUpdates = { ...this.stats.global.lastUpdates, "getLatencyGoogle": Date.now() };
     try {
       const latency = await si.inetLatency();

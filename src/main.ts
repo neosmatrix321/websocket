@@ -6,7 +6,7 @@ import { EventEmitterMixin } from "./global/EventEmitterMixin";
 // import Server from "./server/server";
 // import Clients from "./clients/clients";
 import { SubEventTypes, MainEventTypes, IEventTypes, IMainEvent, BaseEvent, IBaseEvent, debugDataCallback, IErrorEvent, IClientsEvent, IServerEvent, INewErr } from './global/eventInterface';
-import { Server } from "./server/server";
+import { Server } from './server/server';
 import { Clients } from "./clients/clients";
 import { Stats } from "./stats/stats";
 import { consoleGui } from "./gui/gui";
@@ -16,8 +16,6 @@ export const STATS_WRAPPER_TOKEN = Symbol('statsWrapper');
 export const CLIENTS_WRAPPER_TOKEN = Symbol('clientsWrapper');
 export const MAIN_WRAPPER_TOKEN = Symbol('Main');
 export const SERVER_WRAPPER_TOKEN = Symbol('serverWrapper');
-
-export const MyGUI = new consoleGui();
 // export const MAIN_WRAPPER_TOKEN = Symbol('Main');
 
 @injectable()
@@ -34,54 +32,44 @@ export class Main {
 
   public async start() {
     try {
-      MyGUI.startIfTTY();
-      console.log("Main Initialization ...");
-      this.setupEventHandlers();
-      // const FirstEvent: BaseEvent = {
-      //   subType: SubEventTypes.BASIC.FIRST,
-      //   message: "First event",
-      //   success: true,
-      //   debugEvent: debugDataCallback,
-      //   json: JSON.stringify({ data: "NaN" }),
-      // };
-      // this.eV.emit(MainEventTypes.BASIC, FirstEvent);
-      // const firstErrorEvent: IErrorEvent = {
-      //   subType: SubEventTypes.ERROR.INFO,
-      //   message: "first Error",
-      //   counter: -1,
-      //   mainSource: MainEventTypes.DEBUG,
-      //   errorEvent: new Error("guess it works"),
-      //   json: JSON.stringify({ errCode: 0, errMessage: "First Error", errData: "NaN" }),
-      // };
-      // this.eV.emit(MainEventTypes.ERROR, firstErrorEvent);
-      this.server.createServer();
-      // const debugEvent: IBaseEvent = {
-      //   subType: SubEventTypes.MAIN.PRINT_DEBUG, // Define an appropriate subType
-      //   message: 'printDebug',
-      //   success: true,
-      // };
-      // this.eV.emit(MainEventTypes.MAIN, debugEvent);
-      // console.log("createServer Initialization ...");
+      console.info(`Console is TTY: ${process.stdout.isTTY}`)
+      // if (process.stdout.isTTY) {
+        const MyGUI = new consoleGui();
 
+        MyGUI.startIfTTY();
+        console.log("Main Initialization ...");
+        this.setupEventHandlers();
+        this.server.createServer();
+      // }
     } catch (error) {
       this.eV.handleError(SubEventTypes.ERROR.FATAL, "Main Initialization", MainEventTypes.MAIN, new Error(`start Routine`), error);
       console.error("Main Initialization Error: ", error);
     }
   }
-  public static safeStringify(obj: any) {
-    const cache = new Set();
+
+  public static safeStringify(obj: any, maxDepth = 4, space: string | number = ''): string {
+    const cache = new WeakSet(); // Use a WeakSet to handle circular references
+    let depth = 0;
+
     return JSON.stringify(obj, (key, value) => {
       if (typeof value === 'object' && value !== null) {
-        if (cache.has(value)) {
-          // Duplicate reference found, discard key
-          return;
-        }
-        // Store value in our set
+        if (cache.has(value)) return;
         cache.add(value);
+
+        if (depth > maxDepth) {
+          return `[DEPTH LIMIT REACHED]: ${maxDepth}`; // Indicate depth limit
+        }
+        depth++;
+
+        // Optionally try to get a custom string representation
+        if (typeof value !== 'object' && typeof value.toString === 'function' && value.toString !== Object.prototype.toString) {
+          return value.toString();
+        }
       }
-      return value;
-    });
+      return typeof value === 'function' ? value.toString() : value;
+    }, space);
   }
+
   protected setupEventHandlers() {
     // ... (your other event handlers)
     // Main event handler
@@ -108,8 +96,8 @@ export class Main {
     });
     this.eV.on(MainEventTypes.MAIN, this.handleMainEvent.bind(this));
     this.eV.on(MainEventTypes.ERROR, (errorEvent: IErrorEvent) => {  // FIXME:
-      this.eV.emit(MainEventTypes.GUI, { subType: SubEventTypes.GUI.FILL_ERROR_ARRAY, message: errorEvent});
-      this.eV.emit(MainEventTypes.SERVER, { subType: SubEventTypes.SERVER.LOG_TO_FILE, message: errorEvent});
+      this.eV.emit(MainEventTypes.GUI, { subType: SubEventTypes.GUI.FILL_ERROR_ARRAY, message: errorEvent });
+      this.eV.emit(MainEventTypes.SERVER, { subType: SubEventTypes.SERVER.LOG_TO_FILE, message: errorEvent });
     });
     this.eV.on(MainEventTypes.DEBUG, (errorEvent: IEventTypes) => {
       // console.log(errorEvent);
@@ -117,26 +105,6 @@ export class Main {
       // console.dir(errorEvent, { depth: null, colors: true });
     });
 
-/*
-
-this.eV.on(MainEventTypes.ERROR, (errorEvent: IErrorEvent) => {
-  const { counter, errorEvent: { mainSource, message: errorMessage }, message, subType, data } = errorEvent;
-
-  const jsonOBJ: ErrorEventJson = {
-    counter: `${counter}`,
-    info: `${mainSource}`,
-    message: `${message}`,
-    error: `${errorMessage}`,
-    logLevel: `${subType}`,
-    ...data
-  };
-
-  const json = this.safeStringify(jsonOBJ);
-  this.eV.emit(MainEventTypes.GUI, { subType: SubEventTypes.GUI.FILL_ERROR_ARRAY, message: json, success: false });
-});
-
-
-*/
     // TODO: alternate Debug event handler ?
     // this.eV.on('DEBUG',  (event: IEventTypes) => {
     //   if (event.subType === 'START') {
@@ -174,43 +142,25 @@ this.eV.on(MainEventTypes.ERROR, (errorEvent: IErrorEvent) => {
       case SubEventTypes.MAIN.PID_UNAVAILABLE:
         // TODO: let interval run and send dummy data
         const pidUnEvent: IBaseEvent = {
-          subType: SubEventTypes.STATS.RCON_DISCONNECT,
+          subType: SubEventTypes.SERVER.RCON_DISCONNECT,
           message: `disconnect to rcon`,
           success: true,
         };
         this.eV.emit(MainEventTypes.STATS, pidUnEvent);
         break;
       case SubEventTypes.MAIN.PROCESS_FOUND:
-        this.eV.emit(MainEventTypes.STATS, { subType: SubEventTypes.STATS.RCON_CONNECT, message: `connect to rcon`, success: true });
+        this.eV.emit(MainEventTypes.SERVER, { subType: SubEventTypes.SERVER.RCON_CONNECT, message: `connect to rcon`, success: true });
         this.eV.emit(MainEventTypes.SERVER, { subType: SubEventTypes.SERVER.START_INTERVAL, message: 'Start interval', success: true });
         break;
       case SubEventTypes.MAIN.PRINT_DEBUG:
-        console.log("Main:");
-        console.dir(this.eV, { depth: 2, colors: true });
-        // console.dir(this.sendInfoInterval, { depth: 2, colors: true });
-        // console.dir(this.intvalStats, { depth: 2, colors: true });
-        const debugStatsEvent: IBaseEvent = {
-          subType: SubEventTypes.STATS.PRINT_DEBUG, // Define an appropriate subType
-          message: 'printDebug',
-          success: true,
-        };
-        this.eV.emit(MainEventTypes.STATS, debugStatsEvent);
-        const debugServerEvent: IBaseEvent = {
-          subType: SubEventTypes.SERVER.PRINT_DEBUG, // Define an appropriate subType
-          message: 'printDebug',
-          success: true,
-        };
-        this.eV.emit(MainEventTypes.SERVER, debugServerEvent);
-        const debugClientsEvent: IBaseEvent = {
-          subType: SubEventTypes.CLIENTS.PRINT_DEBUG, // Define an appropriate subType
-          message: 'printDebug',
-          success: true,
-        };
-        this.eV.emit(MainEventTypes.CLIENTS, debugClientsEvent);
+        this.eV.emit(MainEventTypes.SERVER, { subType: SubEventTypes.SERVER.DEBUG_LOG_TO_FILE, data: this, message: `MAIN` });
+
+        // console.log("Clients:");
+        // console.dir(this.clients, { depth: 3, colors: true });
         break;
       default:
         this.eV.handleError(SubEventTypes.ERROR.WARNING, "handleMainEvent", MainEventTypes.MAIN, new Error(`from ${event.subType}`), event);
-        // console.error('Unknown MAIN event subtype:', event.subType);
+      // console.error('Unknown MAIN event subtype:', event.subType);
     }
   }
 

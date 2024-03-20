@@ -133,16 +133,14 @@ export class consoleGui {
     this.errorLog = new ErrorTable(this.gui.Screen.width, this.gui.Screen.height); // Use the width of your 'ErrorLog' Box
   }
   public startIfTTY() {
-    console.info(`Console is TTY: ${process.stdout.isTTY} and ${this.gui.Screen.Terminal.isTTY}`)
-    if (process.stdout.isTTY && this.gui.Screen.Terminal.isTTY) {
-      this.drawGUI();
-      this.guiIntVat = setInterval(async () => {
-        this.intervalRunner();
-      }, this.settings.gui.period);
-      this.settings.gui.isPainting = true;
-      this.setupEventListeners();
+    if (!this.gui.Screen.Terminal.isTTY) return console.info('No TTY detected, skipping console-gui-tools');
+    this.drawGUI();
+    this.guiIntVat = setInterval(async () => {
+      this.intervalRunner();
+    }, this.settings.gui.period);
+    this.settings.gui.isPainting = true;
+    this.setupEventListeners();
         // this.gui.showLogPopup();
-    }
   }
   intervalRunner() {
     this.settings.gui.refreshCounter += 1;
@@ -152,10 +150,17 @@ export class consoleGui {
     this.eV.on(MainEventTypes.GUI, (event: IErrorEvent) => {
       EventEmitterMixin.eventStats.guiActiveEvents += 1;
       EventEmitterMixin.eventStats.activeEvents += 1;
-      if (event.subType === SubEventTypes.GUI.FILL_ERROR_ARRAY) {
-        const error: INewErr = event.message as unknown as INewErr;
-        this.errorLog.lastErrors.push(error);
-        console.error(`Error No. ${error.counter} added to errorLog: ${error.subType}`);
+      switch (event.subType) {
+        case SubEventTypes.GUI.PRINT_DEBUG:
+          this.eV.emit(MainEventTypes.SERVER, { subType: SubEventTypes.SERVER.DEBUG_LOG_TO_FILE, data: this, message: `GUI` });
+          // console.log("Clients:");
+          // console.dir(this.clients, { depth: 3, colors: true });
+          break;
+        case SubEventTypes.GUI.FILL_ERROR_ARRAY:
+          const error: INewErr = event.message as unknown as INewErr;
+          this.errorLog.lastErrors.push(error);
+          console.error(`Error No. ${error.counter} added to errorLog: ${error.subType}`);
+          break;
       }
     });
     this.gui.on("exit", () => {

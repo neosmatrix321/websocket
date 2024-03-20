@@ -1,5 +1,6 @@
 import fs from 'fs';
 import { INewErr } from './eventInterface';
+import { Main } from '../main';
 
 class Logger {
   private logFilePath: string;
@@ -12,6 +13,10 @@ class Logger {
     }
   }
 
+  logDebugError(error: any) {
+    const logFile = `${this.logFilePath}${error.message}.log`;
+    fs.appendFileSync(logFile, Main.safeStringify(error.data, 10));
+  }
   log(no: number, mainSource: string, subType: string, message: string) {
     const logFile = `${this.logFilePath}${no}-${mainSource}_${subType}.log`;
     fs.appendFileSync(logFile, `${message}`);

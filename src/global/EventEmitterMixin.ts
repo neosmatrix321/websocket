@@ -6,7 +6,7 @@ import { Main } from "../main";
 
 export class EventEmitterMixin {
   private static _instance: EventEmitterMixin;
-  public static eventStats: IEventStats = { eventCounter: 0, activeEvents: 0, errorCounter: 0, guiEventCounter: 0, guiActiveEvents: 0};
+  public static eventStats: IEventStats = { eventCounter: 0, activeEvents: 0, errorCounter: 0, guiEventCounter: 0, guiActiveEvents: 0 };
   private _emitter: EventEmitter;
   private _events: Map<string, any> = new Map(); // Store default events
   // private _listeners: Map<string, ((...args: any[]) => void)[]> = new Map();
@@ -36,7 +36,7 @@ export class EventEmitterMixin {
   private createEvent(event: string, ...args: any[]): { customKey: string, customData: IEventTypes } {
     let originalEvent = this._events.get(event);
     if (!originalEvent) {
-      this.handleError(SubEventTypes.ERROR.WARNING, `EventEmitterMixin.createEvent`, MainEventTypes.EVENT, new Error(`from ${event}`), JSON.stringify(args[0]) );
+      this.handleError(SubEventTypes.ERROR.WARNING, `EventEmitterMixin.createEvent`, MainEventTypes.EVENT, new Error(`from ${event}`), { ...args });
     }
     return { customKey: event, customData: { ...args[0] } };
   }
@@ -50,18 +50,16 @@ export class EventEmitterMixin {
     }
   }
   private emitError(subType: string, message: string, counter: number, mainSource: string, errorEvent: Error, json?: string): void {
+    const myJSON = json ? Main.safeStringify(json, 3) : {};
     const newEvent: IErrorEvent = {
-      ...(new ErrorEvent(
-        subType,
-        message,
-        false,
-        counter,
-        mainSource,
-        { ...errorEvent },
-        undefined,
-        Main.safeStringify(json)
-    )),
-    debugEvent: debugDataCallback,
+        subType: subType,
+        message: message,
+        success: false,
+        counter: counter,
+        mainSource: mainSource,
+        errorEvent: errorEvent,
+        debugEvent: debugDataCallback,
+        json: myJSON
     };
     // console.log(`Error from eventManager: ${type}`, newEvent);
     this._emitter.emit(MainEventTypes.ERROR, newEvent);
@@ -111,7 +109,7 @@ export class EventEmitterMixin {
     EventEmitterMixin.eventStats.activeEvents++;
     this._emitter.emit(event, ...args);
   }
-  
+
   public static getInstance(): EventEmitterMixin {
     if (!this._instance) {
       this._instance = new EventEmitterMixin();
