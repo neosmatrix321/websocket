@@ -7,21 +7,19 @@ import pidusage, { Status } from 'pidusage';
 import si from 'systeminformation';
 import * as fs from 'fs';
 import { BaseEvent, IBaseEvent, IClientsEvent, IEventTypes, IMainEvent, IServerEvent, IStatsEvent, MainEventTypes, SubEventTypes } from "../global/eventInterface";
-import { EventEmitterMixin } from "../global/EventEmitterMixin";
+import mixin, { EventEmitterMixin } from "../global/EventEmitterMixin";
 import { ClientType, MyWebSocket } from '../clients/clientInstance';
 import { SettingsWrapperSymbol, settingsWrapper } from '../settings/settingsInstance';
 import { StatsWrapperSymbol, statsWrapper } from "../stats/statsInstance";
 import { settingsContainer, statsContainer } from '../global/containerWrapper';
 
-const EventMixin = EventEmitterMixin.getInstance();
 
 @injectable()
 export class Stats {
-  private eV: EventEmitterMixin = EventMixin;
+  private eV: EventEmitterMixin = mixin;
   protected settings: settingsWrapper = settingsContainer;
   protected stats: statsWrapper = statsContainer;
   constructor() {
-    this.eV = EventMixin;
     this.stats.global.lastUpdates = { ...this.stats.global.lastUpdates, "createStats": Date.now() };
     // this.updateAllStats();
     this.setupEventHandlers();

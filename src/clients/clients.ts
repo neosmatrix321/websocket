@@ -6,7 +6,7 @@ import { clientsWrapper, MyWebSocket, ClientType, IClientInfo, IClientSettings, 
 import si from 'systeminformation';
 import { BaseEvent, IBaseEvent, IClientsEvent, IEventTypes, MainEventTypes, SubEventTypes } from "../global/eventInterface";
 import { WebSocket } from 'ws';
-import { EventEmitterMixin } from "../global/EventEmitterMixin";
+import mixin, { EventEmitterMixin } from "../global/EventEmitterMixin";
 import { StatsWrapperSymbol, statsWrapper } from "../stats/statsInstance";
 import { CLIENTS_WRAPPER_TOKEN } from "../main";
 import { statsContainer } from "../global/containerWrapper";
@@ -15,7 +15,7 @@ import { statsContainer } from "../global/containerWrapper";
 
 @injectable()
 export class Clients {
-  private eV: EventEmitterMixin = EventEmitterMixin.getInstance();
+  private eV: EventEmitterMixin = mixin;
   @inject(() => CLIENTS_WRAPPER_TOKEN) protected clients!: clientsWrapper;
   protected stats: statsWrapper = statsContainer;
   constructor() {
@@ -27,7 +27,7 @@ export class Clients {
     return 'id' in ws;
   }
 
-  private setupEventHandlers() {
+  private async setupEventHandlers() {
     this.eV.on(MainEventTypes.CLIENTS, (event: IClientsEvent) => {
       // console.log("Clients event received:", event);
       if (event) {
@@ -39,13 +39,13 @@ export class Clients {
             // console.dir(this.clients, { depth: 3, colors: true });
             break;
           case SubEventTypes.CLIENTS.SUBSCRIBE:
-            try {
-              this.handleClientSubscribe(event);
-              return true;
-            } catch (error) {
-              this.eV.handleError(SubEventTypes.ERROR.WARNING, `handleClientSubscribe`, MainEventTypes.CLIENTS, new Error(`create client failed`), error);
-              // return Promise.resolve('clientSubscribed');
-            }
+            
+              this.handleClientSubscribe(event).then(() => {
+                return Promise.resolve(`${MainEventTypes.EVENT}.handleClientSubscribe`);
+              }).catch((error) => {
+                this.eV.handleError(SubEventTypes.ERROR.WARNING, `${MainEventTypes.SERVER}.handleClientSubscribe`, MainEventTypes.CLIENTS, error, { ...event });
+              });
+              // 
             return false; 
           case SubEventTypes.CLIENTS.UNSUBSCRIBE:
             this.handleClientUnsubscribe(event.client.id);

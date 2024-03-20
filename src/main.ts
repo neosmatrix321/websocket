@@ -1,7 +1,7 @@
 "use strict";
 import { Container, inject, injectable, postConstruct } from "inversify";
 import "reflect-metadata";
-import { EventEmitterMixin } from "./global/EventEmitterMixin";
+import mixin, { EventEmitterMixin } from "./global/EventEmitterMixin";
 // import Stats from "./stats/stats";
 // import Server from "./server/server";
 // import Clients from "./clients/clients";
@@ -20,7 +20,7 @@ export const SERVER_WRAPPER_TOKEN = Symbol('serverWrapper');
 
 @injectable()
 export class Main {
-  protected eV: EventEmitterMixin = EventEmitterMixin.getInstance();
+  protected eV: EventEmitterMixin = mixin;
   protected stats!: Stats;
   protected server!: Server;
   protected clients!: Clients;
@@ -33,14 +33,14 @@ export class Main {
   public async start() {
     try {
       console.info(`Console is TTY: ${process.stdout.isTTY}`)
-      // if (process.stdout.isTTY) {
+      if (process.stdout.isTTY) {
         const MyGUI = new consoleGui();
-
         MyGUI.startIfTTY();
-        console.log("Main Initialization ...");
-        this.setupEventHandlers();
-        this.server.createServer();
-      // }
+        // this.server.createServer();
+      }
+      console.log("Main Initialization ...");
+      this.setupEventHandlers();
+      this.eV.emit(MainEventTypes.SERVER, { subType: SubEventTypes.SERVER.START, message: `starting server`, success: true, });
     } catch (error) {
       this.eV.handleError(SubEventTypes.ERROR.FATAL, "Main Initialization", MainEventTypes.MAIN, new Error(`start Routine`), error);
       console.error("Main Initialization Error: ", error);
@@ -116,7 +116,7 @@ export class Main {
     // });
 
     // Unknown event handler // TODO: catch rest of events
-    // this.onAny((mainType: string, event: IEventTypes) => {
+    // this.eV.onAny((mainType: string, event: IEventTypes) => {
     //   if (!event.subType) return; // Safety check
 
     //   // console.warn(`Unknown event: ${mainType}.${event.subType}`);

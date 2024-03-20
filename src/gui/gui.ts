@@ -3,7 +3,7 @@
 import { Container, inject, injectable } from 'inversify';
 import "reflect-metadata";
 
-import { EventEmitterMixin } from '../global/EventEmitterMixin';
+import mixin, { EventEmitterMixin } from "../global/EventEmitterMixin";
 import { IErrorEvent, IEventTypes, INewErr, MainEventTypes, SubEventTypes } from '../global/eventInterface';
 import { SettingsWrapperSymbol, settingsWrapper } from '../settings/settingsInstance';
 import { StatsWrapperSymbol, statsWrapper } from "../stats/statsInstance";
@@ -100,7 +100,7 @@ function printAvailableColors(p: InPageWidgetBuilder): void {
 
 @injectable()
 export class consoleGui {
-  protected eV: EventEmitterMixin = EventEmitterMixin.getInstance();
+  protected eV: EventEmitterMixin = mixin;
   protected settings: settingsWrapper = settingsContainer;
   protected stats: statsWrapper = statsContainer;
   protected gui: ConsoleManager;

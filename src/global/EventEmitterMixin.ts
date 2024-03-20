@@ -2,8 +2,9 @@ import { EventEmitter } from "events";
 import "reflect-metadata";
 import { MainEventTypes, IEventTypes, SubEventTypes, IEventStats, BaseEvent, debugDataCallback, ErrorEvent, IErrorEvent } from './eventInterface';
 import { Main } from "../main";
+import { inject, injectable } from "inversify";
 
-
+@injectable()
 export class EventEmitterMixin {
   private static _instance: EventEmitterMixin;
   public static eventStats: IEventStats = { eventCounter: 0, activeEvents: 0, errorCounter: 0, guiEventCounter: 0, guiActiveEvents: 0 };
@@ -15,58 +16,63 @@ export class EventEmitterMixin {
     this._emitter = new EventEmitter();
   }
 
-  private storeEvent(event: string, eventData: any) {  // Modified parameter
-    // console.log('EventEmitterMixin.storeEvent:', event);
-    // console.dir(eventData);
-    let Key = event;
-    let Data = eventData;
-    if (!this._events.has(Key)) {
-      if (!this.isValidEvent(Key, Data)) {
-        const { customKey, customData } = this.createEvent(Key, Data);
-        Key = customKey;
-        Data = customData;
+  private storeEvent(event: string, eventData: any) {
+    let key = event;
+    let data = eventData;
+
+    if (!this.isValidEvent(key, data)) {
+      // Attempt to extract a valid prefix based on MainEventTypes
+      for (const mainEventType of Object.values(MainEventTypes)) {
+        if (key.startsWith(mainEventType)) {
+          key = mainEventType;  // Update the key
+          break;
+        }
       }
-      // if (EventEmitterMixin.eventStats.activeEvents > 10) {
-      //   process.exit(1);
-      // }
-      this._events.set(Key, Data);
+
+      if (!this.isValidEvent(key, data)) {
+        // Still invalid, handle as an error
+        this.handleError(SubEventTypes.ERROR.WARNING, `EventEmitterMixin.createEvent`, MainEventTypes.EVENT, new Error(`from ${event}`), { ...data });
+        return; // Stop processing 
+      }
     }
+    EventEmitterMixin.eventStats.activeEvents++;
+    this._events.set(key, data);
+  }
+  // private createEvent(event: string, ...args: any[]): { customKey: string, customData: IEventTypes } {
+  //   let originalEvent = this._events.get(event);
+  //   if (!originalEvent) {
+  //     this.handleError(SubEventTypes.ERROR.WARNING, `EventEmitterMixin.createEvent`, MainEventTypes.EVENT, new Error(`from ${event}`), { ...args });
+  //   }
+  //   return { customKey: event, customData: { ...args[0] } };
+  // }
+  private isValidEvent(event: string, eventData?: any): boolean {
+    for (const mainEventType of Object.values(MainEventTypes)) {
+      if (event.startsWith(mainEventType)) {
+        return true;
+      }
+    }
+    this.handleError(SubEventTypes.ERROR.WARNING, `EventEmitterMixin.isValidEvent`, MainEventTypes.EVENT, new Error(`Invalid event: ${event}`), eventData);
+    return false;
   }
 
-  private createEvent(event: string, ...args: any[]): { customKey: string, customData: IEventTypes } {
-    let originalEvent = this._events.get(event);
-    if (!originalEvent) {
-      this.handleError(SubEventTypes.ERROR.WARNING, `EventEmitterMixin.createEvent`, MainEventTypes.EVENT, new Error(`from ${event}`), { ...args });
-    }
-    return { customKey: event, customData: { ...args[0] } };
-  }
-  private isValidEvent(event: string, eventData?: any): boolean {
-    if (Object.keys(MainEventTypes).includes(event)) {
-      // console.log('EventEmitterMixin.isValidEvent:', event);
-      return true;
-    } else {
-      this.handleError(SubEventTypes.ERROR.WARNING, `EventEmitterMixin.isValidEvent`, MainEventTypes.EVENT, new Error(`Invalid event: ${event}`), eventData);
-      return false;
-    }
-  }
-  private emitError(subType: string, message: string, counter: number, mainSource: string, errorEvent: Error, json?: string): void {
+  private async emitError(subType: string, message: string, counter: number, mainSource: string, errorEvent: Error, json?: string): Promise<void> {
     const myJSON = json ? Main.safeStringify(json, 3) : {};
     const newEvent: IErrorEvent = {
-        subType: subType,
-        message: message,
-        success: false,
-        counter: counter,
-        mainSource: mainSource,
-        errorEvent: errorEvent,
-        debugEvent: debugDataCallback,
-        json: myJSON
+      subType: subType,
+      message: message,
+      success: false,
+      counter: counter,
+      mainSource: mainSource,
+      errorEvent: errorEvent,
+      debugEvent: debugDataCallback,
+      json: myJSON
     };
     // console.log(`Error from eventManager: ${type}`, newEvent);
     this._emitter.emit(MainEventTypes.ERROR, newEvent);
   }
 
   // ... other EventEmitter methods
-  public handleError(subType: string, message: string, mainSource: string, errorEvent: Error, json?: any): void {
+  public async handleError(subType: string, message: string, mainSource: string, errorEvent: Error, json?: any): Promise<void> {
     // console.error(`handleError type: ${type}, message: ${message}`);
     // console.dir(errorBlob, { depth: null, colors: true });
     this.emitError(subType, message, EventEmitterMixin.eventStats.errorCounter++, mainSource, errorEvent, json); // Emit the error for wider handling
@@ -76,7 +82,7 @@ export class EventEmitterMixin {
     if (!this._events.has(event)) {
       this.storeEvent(event, listener); // Ensure the event is registered
     }
-    this.off(event, listener);
+    // this.off(event, listener);
     this._emitter.on(event, listener);
   }
 
@@ -84,7 +90,7 @@ export class EventEmitterMixin {
     if (!this._events.has(event)) {
       this.storeEvent(event, listener); // Ensure the event is registered
     }
-    this.off(event, listener);
+    // this.off(event, listener);
     this._emitter.once(event, listener);
   }
 
@@ -98,16 +104,25 @@ export class EventEmitterMixin {
 
   public async off(event: string, listener: (...args: any[]) => void) {
     this._emitter.off(event, listener);
-    if (this._events.has(event)) {
+    if (!this._emitter.listenerCount(event)) {
+      this._events.delete(event);
       EventEmitterMixin.eventStats.activeEvents--;
-      this._events.delete(event); // Remove the event from the stored events
     }
   }
-
   public async emit(event: string, ...args: any[]) {
     EventEmitterMixin.eventStats.eventCounter++;
-    EventEmitterMixin.eventStats.activeEvents++;
+    // EventEmitterMixin.eventStats.activeEvents++;
     this._emitter.emit(event, ...args);
+  }
+
+  public async emitOnce(event: string, ...args: any[]) {
+    if (!this._events.has(event)) {
+      this.storeEvent(event, args); // Ensure the event is registered
+    }
+    EventEmitterMixin.eventStats.eventCounter++;
+    this._emitter.once(event, () => {
+      this._emitter.emit(event, ...args);
+    });
   }
 
   public static getInstance(): EventEmitterMixin {
@@ -118,6 +133,8 @@ export class EventEmitterMixin {
   }
 }
 
+const mixin = EventEmitterMixin.getInstance();
+export default mixin;
 
 
 /*

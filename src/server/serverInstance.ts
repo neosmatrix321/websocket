@@ -8,22 +8,22 @@ import * as fs from 'fs';
 import { stats } from '../global/containerWrapper';
 import Logger from "../global/fileLogger";
 
-interface IHandle {
+export interface IHandle {
   web: WebSocketServer;
   file: Logger;
   rcon: RconConnection;
-  pidWatcher: fs.FSWatcher;
+  pidWatcher: fs.FSWatcher | undefined;
   statsIntval: NodeJS.Timeout;
 }
 
 export interface IServerWrapper {
-  handle: IHandle;
+  server: IHandle;
 }
 
-export class serverWrapper {
+export class serverWrapper implements IHandle {
   rcon = new RconConnection();
   file: Logger = new Logger(new Date().toISOString().replace(/[:.]/g, '-'));
-  pidWatcher = fs.watch;
+  pidWatcher: fs.FSWatcher | undefined = undefined;
   web = new WebSocketServer({ noServer: true });
   statsIntval = setInterval(() => { }, 10000);
   constructor() {

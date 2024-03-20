@@ -9,8 +9,8 @@ import { IncomingMessage } from 'http';
 import { Duplex } from 'stream';
 import { WebSocket, WebSocketServer, createWebSocketStream } from 'ws';
 
-import { EventEmitterMixin } from "../global/EventEmitterMixin";
-import { serverWrapper, IServerWrapper } from "../server/serverInstance";
+import mixin, { EventEmitterMixin } from "../global/EventEmitterMixin";
+import { serverWrapper, IServerWrapper, IHandle } from "../server/serverInstance";
 import { MainEventTypes, IEventTypes, SubEventTypes, IBaseEvent, BaseEvent, IClientsEvent, debugDataCallback, IServerEvent, IStatsEvent, IMainEvent, INewErr } from "../global/eventInterface";
 import { ClientType, MyWebSocket } from '../clients/clientInstance';
 import { RconConnection } from '../rcon/lib/server/connection'; // Adjust the path
@@ -27,7 +27,7 @@ import Logger from '../global/fileLogger';
 
 @injectable()
 export class Server {
-  private eV: EventEmitterMixin = EventEmitterMixin.getInstance();
+  private eV: EventEmitterMixin = mixin;
   @inject(() => SERVER_WRAPPER_TOKEN) protected server: serverWrapper = new serverWrapper();
   protected settings: settingsWrapper = settingsContainer;
   protected stats: statsWrapper = statsContainer;
@@ -35,8 +35,6 @@ export class Server {
   constructor() {
     // this.setupWebSocketListeners();
     this.setupEventHandlers();
-    this.server.statsIntval = setInterval(() => { }, 1000);
-    clearInterval(this.server.statsIntval);
     this.stats.global.intvalStats.idleStart = Date.now();
     //   // console.log('Connected to RCON');
     //   this.sendRconCommand('info').then((response) => {
@@ -55,6 +53,85 @@ export class Server {
         return ClientType.Basic;
     }
   }
+
+  public setupWebSocketListeners(webSocketStream: Duplex, myWebSocket: MyWebSocket) {
+    webSocketStream.on('end', () => {
+      // console.log('WebSocket connection ended');
+      const disconnectEvent: IClientsEvent = {
+        subType: SubEventTypes.CLIENTS.UNSUBSCRIBE,
+        message: `Client (${myWebSocket.id}) unsubscribed`,
+        success: true,
+        id: myWebSocket.id,
+        client: myWebSocket
+      };
+      this.eV.emit(MainEventTypes.CLIENTS, disconnectEvent);
+    });
+
+    webSocketStream.on('error', (error) => {
+      const connectEvent: IClientsEvent = {
+        subType: SubEventTypes.CLIENTS.UNSUBSCRIBE,
+        message: `Client error id: ${myWebSocket.id}`,
+        success: true,
+        id: myWebSocket.id,
+        client: myWebSocket
+      };
+      this.eV.emit(MainEventTypes.CLIENTS, connectEvent);
+      this.eV.handleError(SubEventTypes.ERROR.INFO, `Websocket Server`, MainEventTypes.SERVER, new Error(`Client error`), error);
+    });
+    webSocketStream.on('data', (data: Buffer) => { // Buffer type for data
+      const message = JSON.parse(data.toString());
+      switch (true) {
+        case (message.greeting !== undefined):
+          const greetingEvent: IClientsEvent = {
+            subType: SubEventTypes.CLIENTS.GREETING,
+            message: message.greeting,
+            success: true,
+            id: myWebSocket.id,
+            client: myWebSocket,
+            data: message
+          };
+          this.eV.emit(MainEventTypes.CLIENTS, greetingEvent);
+          break;
+        case (message.serverMessage !== undefined):
+          const serverEvent: IClientsEvent = {
+            subType: SubEventTypes.CLIENTS.MESSAGE_READY,
+            message: `serverMessage`,
+            success: true,
+            id: myWebSocket.id,
+            client: myWebSocket,
+            data: message.serverMessage
+          };
+          this.eV.emit(MainEventTypes.CLIENTS, serverEvent);
+          break;
+        case (message.updateStats !== undefined):
+          const statsEvent: IStatsEvent = {
+            subType: SubEventTypes.STATS.UPDATE_ALL,
+            message: 'updateStats',
+            success: true,
+            newValue: message.updateStats, updatedFields: Object.keys(message.updateStats)
+          };
+          this.eV.emit(MainEventTypes.STATS, statsEvent);
+          break;
+        case (message.printDebug !== undefined):
+          const debugEvent: IBaseEvent = {
+            subType: SubEventTypes.MAIN.PRINT_DEBUG,
+            message: 'printDebug',
+            success: true,
+          };
+          this.eV.emit(MainEventTypes.MAIN, debugEvent);
+          break;
+        default:
+          const otherEvent: IClientsEvent = {
+            subType: SubEventTypes.CLIENTS.OTHER,
+            message: message,
+            success: true,
+            id: myWebSocket.id,
+            client: myWebSocket,
+          };
+          this.eV.emit(MainEventTypes.CLIENTS, otherEvent);
+      }
+    });
+  }
   public setupEventHandlers() {
     this.eV.on(MainEventTypes.SERVER, (event: IServerEvent) => {
       switch (event.subType) {
@@ -65,6 +142,9 @@ export class Server {
         case SubEventTypes.SERVER.DEBUG_LOG_TO_FILE:
           this.server.file.logDebugError(event);
           break;
+        // case SubEventTypes.SERVER.START:
+        //   this.createServer();
+        //   break;
         // case SubEventTypes.SERVER.LISTEN:
         //   console.log('Server listen event');
         //   this.getPid();
@@ -109,6 +189,7 @@ export class Server {
   }
   async rconConnect(): Promise<void> {
     this.stats.global.lastUpdates = { ...this.stats.global.lastUpdates, "rconConnect": Date.now() };
+    this.server.rcon = new RconConnection();
     try {
       const RCON_HOSTNAME = this.settings.rcon.host;
       const RCON_PORT = this.settings.rcon.port;
@@ -256,25 +337,27 @@ private wsToMyWs(client: WebSocket, request: IncomingMessage): MyWebSocket {
     let success = false;
     try {
       const resultPromise = new Promise<boolean>((resolve) => {
-        this.eV.once('clientSubscribeResult', (subscribeResult: boolean) => {
+        this.eV.once(`${MainEventTypes.EVENT}.handleClientSubscribe`, (subscribeResult: boolean) => {
           resolve(subscribeResult);
         });
       });
+      const subscribeResult = await resultPromise;
       const connectEvent: IClientsEvent = {
         subType: SubEventTypes.CLIENTS.SUBSCRIBE,
         message: `clientSubscribed`,
         data: request,
         id: client.id,
+        success: success,
         client: client
       };
       this.eV.emit(MainEventTypes.CLIENTS, connectEvent);
-      const subscribeResult = await resultPromise;
       success = subscribeResult;
     } catch (error) {
-      this.eV.handleError(SubEventTypes.ERROR.FATAL, `callAsyncAndWaitForResult`, MainEventTypes.SERVER, new Error(`Error waiting for result`), error);
+      this.eV.handleError(SubEventTypes.ERROR.FATAL, `callAsyncAndWaitForResult`, MainEventTypes.SERVER, new Error(`Error waiting for result ${success}`), error);
     }
   }
-  public async createServer() {
+
+  public async createServer(): Promise<void> {
     this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.SERVER, message: 'Start Server ...', success: true });
     const _serverCert = createServer({
       cert: readFileSync(this.settings.server.certPath),
@@ -285,90 +368,12 @@ private wsToMyWs(client: WebSocket, request: IncomingMessage): MyWebSocket {
       //  ... adjust upgrade handling as needed ...
       this.server.web.handleUpgrade(request, socket, head, (client: WebSocket, request: IncomingMessage) => {
         const myWebSocket: MyWebSocket = this.wsToMyWs(client, request);
-
+        
+        const webSocketStream = createWebSocketStream(myWebSocket as MyWebSocket);
         this.callAsyncAndWaitForResult(myWebSocket, request).then(() => {
-          const webSocketStream = createWebSocketStream(myWebSocket as MyWebSocket);
+          this.setupWebSocketListeners(webSocketStream, myWebSocket);
           // TODO: Login
 
-          webSocketStream.on('end', () => {
-            // console.log('WebSocket connection ended');
-            const disconnectEvent: IClientsEvent = {
-              subType: SubEventTypes.CLIENTS.UNSUBSCRIBE,
-              message: `Client (${request.headers['sec-websocket-key']}) unsubscribed`,
-              success: true,
-              data: request,
-              id: myWebSocket.id,
-              client: myWebSocket
-            };
-            this.eV.emit(MainEventTypes.CLIENTS, disconnectEvent);
-          });
-
-          webSocketStream.on('error', (error) => {
-            const connectEvent: IClientsEvent = {
-              subType: SubEventTypes.CLIENTS.UNSUBSCRIBE,
-              message: `Client error id: ${request.headers['sec-websocket-key']}`,
-              success: true,
-              data: request,
-              id: myWebSocket.id,
-              client: myWebSocket
-            };
-            this.eV.emit(MainEventTypes.CLIENTS, connectEvent);
-            this.eV.handleError(SubEventTypes.ERROR.INFO, `Websocket Server`, MainEventTypes.SERVER, new Error(`Client error`), error);
-          });
-          webSocketStream.on('data', (data: Buffer) => { // Buffer type for data
-            const message = JSON.parse(data.toString());
-            switch (true) {
-              case (message.greeting !== undefined):
-                const greetingEvent: IClientsEvent = {
-                  subType: SubEventTypes.CLIENTS.GREETING,
-                  message: message.greeting,
-                  success: true,
-                  id: myWebSocket.id,
-                  client: myWebSocket,
-                  data: message
-                };
-                this.eV.emit(MainEventTypes.CLIENTS, greetingEvent);
-                break;
-              case (message.serverMessage !== undefined):
-                const serverEvent: IClientsEvent = {
-                  subType: SubEventTypes.CLIENTS.MESSAGE_READY,
-                  message: `serverMessage`,
-                  success: true,
-                  id: myWebSocket.id,
-                  client: myWebSocket,
-                  data: message.serverMessage
-                };
-                this.eV.emit(MainEventTypes.CLIENTS, serverEvent);
-                break;
-              case (message.updateStats !== undefined):
-                const statsEvent: IStatsEvent = {
-                  subType: SubEventTypes.STATS.UPDATE_ALL,
-                  message: 'updateStats',
-                  success: true,
-                  newValue: message.updateStats, updatedFields: Object.keys(message.updateStats)
-                };
-                this.eV.emit(MainEventTypes.STATS, statsEvent);
-                break;
-              case (message.printDebug !== undefined):
-                const debugEvent: IBaseEvent = {
-                  subType: SubEventTypes.MAIN.PRINT_DEBUG,
-                  message: 'printDebug',
-                  success: true,
-                };
-                this.eV.emit(MainEventTypes.MAIN, debugEvent);
-                break;
-              default:
-                const otherEvent: IClientsEvent = {
-                  subType: SubEventTypes.CLIENTS.OTHER,
-                  message: message,
-                  success: true,
-                  id: myWebSocket.id,
-                  client: myWebSocket,
-                  data: request
-                };
-                this.eV.emit(MainEventTypes.CLIENTS, otherEvent);
-            }
-          });
         }).catch((error) => {
           this.eV.handleError(SubEventTypes.ERROR.FATAL, `Server ON upgrade`, MainEventTypes.SERVER, new Error(`Error on upgrade`), error);
         });
@@ -452,7 +457,7 @@ private wsToMyWs(client: WebSocket, request: IncomingMessage): MyWebSocket {
   public async getPid(): Promise<void> {
     this.stats.global.lastUpdates = { ...this.stats.global.lastUpdates, "getPid": Date.now() };
     this.updatePid().then(() => {
-      this.server.pidWatcher(this.settings.pid.file, (eventType, file) => {
+      this.server.pidWatcher = fs.watch(this.settings.pid.file, (eventType, file) => {
         this.eV.emit(MainEventTypes.BASIC, {
           subType: SubEventTypes.BASIC.STATS,
           message: `getPid | eventType: ${eventType}, file: ${file}`,
@@ -475,13 +480,13 @@ private wsToMyWs(client: WebSocket, request: IncomingMessage): MyWebSocket {
   }
   private intervalStart() {
     this.stats.global.intvalStats.idleEnd = Date.now();
-    this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.STATS, message: `intervalStart | Interval started, idle time: ${this.stats.global.intvalStats.idleEnd - this.stats.global.intvalStats.idleStart}ms.`, success: true, });
+    this.eV.emitOnce(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.STATS, message: `intervalStart | Interval started, idle time: ${this.stats.global.intvalStats.idleEnd - this.stats.global.intvalStats.idleStart}ms.`, success: true, });
     // console.log(`intervalStart: Interval started, idle time: ${this.intvalStats.idleEnd - this.intvalStats.idleStart}ms.`);
     this.server.statsIntval = setInterval(() => {
-      this.eV.emit(MainEventTypes.STATS, {
+      this.eV.emitOnce(MainEventTypes.STATS, {
         subType: SubEventTypes.STATS.UPDATE_ALL
       });
-      this.eV.emit(MainEventTypes.CLIENTS, {
+      this.eV.emitOnce(MainEventTypes.CLIENTS, {
         subType: SubEventTypes.CLIENTS.UPDATE_ALL_STATS
       });
       // this.clients.handleClientsUpdateStats();
