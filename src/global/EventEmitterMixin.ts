@@ -1,13 +1,13 @@
 import { EventEmitter } from "events";
 import "reflect-metadata";
-import { MainEventTypes, IEventTypes, SubEventTypes, IEventStats, BaseEvent, debugDataCallback, ErrorEvent, IErrorEvent } from './eventInterface';
-import { Main } from "../main";
-import { inject, injectable } from "inversify";
+import { MainEventTypes, SubEventTypes, IEventStats, debugDataCallback, IErrorEvent } from './eventInterface';
+import { injectable } from "inversify";
+import { safeStringify } from "./functions";
 
 @injectable()
 export class EventEmitterMixin {
   private static _instance: EventEmitterMixin;
-  public static eventStats: IEventStats = { eventCounter: 0, activeEvents: 0, errorCounter: 0, guiEventCounter: 0, guiActiveEvents: 0 };
+  public static eventStats: IEventStats = { activeEvents: 0, errorCounter: 0, guiEventCounter: 0, guiActiveEvents: 0 };
   private _emitter: EventEmitter;
   private _events: Map<string, any> = new Map(); // Store default events
   // private _listeners: Map<string, ((...args: any[]) => void)[]> = new Map();
@@ -56,7 +56,7 @@ export class EventEmitterMixin {
   }
 
   private async emitError(subType: string, message: string, counter: number, mainSource: string, errorEvent: Error, json?: string): Promise<void> {
-    const myJSON = json ? Main.safeStringify(json, 3) : {};
+    const myJSON = json ? safeStringify(json, 3) : {};
     const newEvent: IErrorEvent = {
       subType: subType,
       message: message,
@@ -110,7 +110,7 @@ export class EventEmitterMixin {
     }
   }
   public async emit(event: string, ...args: any[]) {
-    EventEmitterMixin.eventStats.eventCounter++;
+    // EventEmitterMixin.eventStats.eventCounter++;
     // EventEmitterMixin.eventStats.activeEvents++;
     this._emitter.emit(event, ...args);
   }
@@ -119,7 +119,7 @@ export class EventEmitterMixin {
     if (!this._events.has(event)) {
       this.storeEvent(event, args); // Ensure the event is registered
     }
-    EventEmitterMixin.eventStats.eventCounter++;
+    // EventEmitterMixin.eventStats.eventCounter++;
     this._emitter.once(event, () => {
       this._emitter.emit(event, ...args);
     });

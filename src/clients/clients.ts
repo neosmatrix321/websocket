@@ -1,13 +1,13 @@
 "use strict";
-import { inject, injectable, postConstruct } from "inversify";
+import { inject, injectable } from "inversify";
 import 'reflect-metadata';
 
-import { clientsWrapper, MyWebSocket, ClientType, IClientInfo, IClientSettings, clientWrapper } from "./clientInstance";
+import { clientsWrapper, MyWebSocket, ClientType, IClientSettings, clientWrapper } from "./clientInstance";
 import si from 'systeminformation';
-import { BaseEvent, IBaseEvent, IClientsEvent, IEventTypes, MainEventTypes, SubEventTypes } from "../global/eventInterface";
+import { IBaseEvent, IClientsEvent, MainEventTypes, SubEventTypes } from "../global/eventInterface";
 import { WebSocket } from 'ws';
 import mixin, { EventEmitterMixin } from "../global/EventEmitterMixin";
-import { StatsWrapperSymbol, statsWrapper } from "../stats/statsInstance";
+import { statsWrapper } from '../stats/statsInstance';
 import { CLIENTS_WRAPPER_TOKEN } from "../main";
 import { statsContainer } from "../global/containerWrapper";
 
@@ -28,7 +28,7 @@ export class Clients {
   }
 
   private async setupEventHandlers() {
-    this.eV.on(MainEventTypes.CLIENTS, (event: IClientsEvent) => {
+    this.eV.on(MainEventTypes.CLIENTS, (event: IClientsEvent): boolean | void =>  {
       // console.log("Clients event received:", event);
       if (event) {
         switch (event.subType) {
@@ -69,7 +69,7 @@ export class Clients {
             Object.entries(event.data).map(([key, value]) => {
               this.sendMessagePacket(event.client, key, value);
             });
-
+            break;
           case SubEventTypes.CLIENTS.MESSAGE_READY:
             const wsClient = event.client;
             if (wsClient.id == "ALL" || (wsClient && ((wsClient.type == ClientType.Admin) || (wsClient.type == ClientType.Server))))
@@ -88,7 +88,7 @@ export class Clients {
                   subType: SubEventTypes.CLIENTS.MESSAGE_PAKET_READY,
                   message: `allStatsUpdated`,
                   data: [{
-                    "chatMessage": `Welcome ${event.client.id} from ${newIP} | activeClients: ${this.stats.client.activeClients} | clientsCounter: ${this.stats.client.clientsCounter}`,
+                    "chatMessage": `Welcome ${event.client.id} from ${newIP} | activeClients: ${this.stats.clients.activeClients} | clientsCounter: ${this.stats.clients.clientsCounter}`,
                     "pidInfo": { ...this.stats.global.pu }
                   },
                   { "latencyGoogle": this.stats.global.latencyGoogle },
@@ -138,9 +138,7 @@ export class Clients {
   //     }
   //   }
   // }
-  handleGreeting(id: string, messageObject: any) {
-    throw new Error("Method not implemented.");
-  }
+
   public clientsMessageReady(id: string, type: string, data: string, isBinary: boolean) {
     Object.values(this.clients.client).forEach((client) => {
       if (id == "ALL" || (client.ws && ((client.ws.type === ClientType.Admin) || (client.ws.type === ClientType.Server && id != client.ws.id)))) this.clientMessageReady(client.info.id, type, data, isBinary);
@@ -175,22 +173,23 @@ export class Clients {
     } else { this.handleClientUnsubscribe(id); }
   }
 
-  // this.sendMessagePacket(id, "pidInfo", this.stats.client.pu);
-  // this.sendMessagePacket(id, "latencyGoogle", this.stats.client.latencyGoogle);
-  // this.sendMessagePacket(id, "rconInfo", this.stats.client.rcon.info);
-  // this.sendMessagePacket(id, "rconPlayers", this.stats.client.rcon.players);
+  // this.sendMessagePacket(id, "pidInfo", this.stats.clients.pu);
+  // this.sendMessagePacket(id, "latencyGoogle", this.stats.clients.latencyGoogle);
+  // this.sendMessagePacket(id, "rconInfo", this.stats.clients.rcon.info);
+  // this.sendMessagePacket(id, "rconPlayers", this.stats.clients.rcon.players);
 
 
   public async handleClientSubscribe(client: IClientsEvent): Promise<boolean> { // Adjust 'any' type later
+    this.stats.updateLastUpdates("clients", "subscribe");
     try {
       const id = client.client.id;
       const ip = client.client.ip;
       const type = client.client.type;
-      this.stats.client.clientsCounter++;
+      this.stats.clients.clientsCounter++;
 
       this.clients.createClient(id, ip, type, client.client);
       if (type != ClientType.Server) {
-        if (++this.stats.client.activeClients == 1) {
+        if (++this.stats.clients.activeClients == 1) {
           this.stats.server.webHandle.hasConnection = true;
         }
       }
@@ -201,6 +200,7 @@ export class Clients {
       };
       this.eV.emit(MainEventTypes.BASIC, newEvent);
       this.eV.emit('clientSubscribeResult', true);
+      this.stats.updateLastUpdates("clients", "subscribe", true);
       return true;
     } catch (error) {
       this.eV.handleError(SubEventTypes.ERROR.WARNING, "handleClientSubscribe", MainEventTypes.CLIENTS, new Error(`create client failed`), error);
@@ -231,6 +231,8 @@ export class Clients {
         this.eV.emit(MainEventTypes.CLIENTS, latencyUserEvent);
         //   this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.DEFAULT, message: `client ${clientData.info.id} not updated, time_diff: ${time_diff}` });
         // }
+        this.stats.updateLastUpdates("clients", "statsUpdated", true);
+
       }
     } else {
       this.handleClientUnsubscribe(clientData.info.id);
@@ -257,7 +259,9 @@ export class Clients {
   }
 
   public async handleClientsUpdateStats(): Promise<void> {
-    // this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.CLIENTS, message: `Update all clients stats, clientsCount: ${this.stats.client.clientsCounter} | activeClients: ${this.stats.client.activeClients}`, success: true });
+    this.stats.updateLastUpdates("clients", "statsUpdated");
+    this.stats.clients.lastUpdates.statsUpdated.last = Date.now();
+    // this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.CLIENTS, message: `Update all clients stats, clientsCount: ${this.stats.clients.clientsCounter} | activeClients: ${this.stats.clients.activeClients}`, success: true });
     Object.values(this.clients.client).forEach((client) => {
       this.handleClientUpdateStats(client.info.id);
     });
@@ -265,6 +269,7 @@ export class Clients {
 
 
   public handleClientUnsubscribe(id: string): void {
+    this.stats.updateLastUpdates("clients", "unsubscribe");
     if (this.clients.client[id]) {
       const Type = this.clients.client[id].settings.type;
       this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.CLIENTS, message: `Unsubscribed client ${id}, ip: ${this.clients.client[id].info.ip}, type: ${Type}`, success: true });
@@ -272,12 +277,13 @@ export class Clients {
         if (Type !== ClientType.Server) {
           // console.dir(this.clients.client[id].info, { depth: null, colors: true });
           // console.dir(this.clients.client[id].stats, { depth: null, colors: true });
-          if (!(--this.stats.client.activeClients > 0)) {
+          if (!(--this.stats.clients.activeClients > 0)) {
             this.stats.server.webHandle.hasConnection = false;
             this.eV.emit(MainEventTypes.MAIN, { subType: SubEventTypes.SERVER.STOP_INTERVAL, message: 'Stop interval' });
           }
         }
         this.clients.removeClient(id);
+        this.stats.updateLastUpdates("clients", "unsubscribe", true);
       } else {
         // console.log("handleClientsEvent: no id found", id);
       }

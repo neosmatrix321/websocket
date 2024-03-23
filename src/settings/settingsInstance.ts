@@ -1,20 +1,16 @@
 // "use strict";
-import { injectable, Container } from "inversify";
+import { injectable } from "inversify";
 import "reflect-metadata";
 
 export interface IRconSettings {
   host: string;
   port: number;
   pw: string;
-  isConnected: boolean;
 }
 
 export interface IPidSettings {
   file: string;
   pid: number | "NaN";
-  fileExists: boolean;
-  fileReadable: boolean;
-  processFound: boolean;
 }
 
 
@@ -28,8 +24,8 @@ interface IServerSettings {
 interface IGuiSettings {
   enabled: boolean;
   period: number;
-  refreshCounter: number;
-  isPainting: boolean;
+  shouldPaint: boolean;
+  // refreshCounter: number;
   mode: string;
   min: number;
   max: number;
@@ -39,20 +35,21 @@ interface IGuiSettings {
   EOL: string;
 }
 
+interface IReadOnlySettings {
+  getSetting<T>(section: string, key: string): T | undefined;
+}
+
 @injectable()
-export class settingsWrapper {
+export class settingsWrapper implements IReadOnlySettings {
+  [key: string]: any;
   rcon: IRconSettings = {
     host: "192.168.228.7",
     port: 9998,
     pw: "Descent3$",
-    isConnected: false,
   };
   pid: IPidSettings = {
     file: "/var/www/html/pal_server/server/pal_server.pid",
     pid: "NaN",
-    fileExists: false,
-    fileReadable: false,
-    processFound: false,
   };
   server: IServerSettings = {
     certPath: '/etc/letsencrypt/live/neo.dnsfor.me/cert.pem',
@@ -63,16 +60,24 @@ export class settingsWrapper {
   gui: IGuiSettings = {
     enabled: true,
     period: 500,
-    refreshCounter: 0,
-    isPainting: false,
+    // refreshCounter: 0,
+    shouldPaint: true,
     mode: 'default',
     min: 0,
     max: 100,
     values: [],
     modeList: ['mode1', 'mode2', 'mode3'],
-    periodList: [100, 250, 500, 1000, 2000, 5000, 10000],
+    periodList: [100, 250, 500, 1000, 2000, 5000],
     EOL: '\n',
   };
+  public getSetting<T>(section: string, key: string): T | undefined {
+    const settingsSection = this[section]; // Access the appropriate section object
+    if (settingsSection && key in settingsSection) {
+      return settingsSection[key] as T; // Cast to the expected type
+    }
+    return undefined;
+  }
   constructor() { }
 }
+
 export const SettingsWrapperSymbol = Symbol('settingsWrapper'); 

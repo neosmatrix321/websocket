@@ -1,70 +1,21 @@
 
 "use strict";
-import { Container, inject, injectable } from 'inversify';
+import { injectable } from 'inversify';
 import "reflect-metadata";
 
 import mixin, { EventEmitterMixin } from "../global/EventEmitterMixin";
-import { IErrorEvent, IEventTypes, INewErr, MainEventTypes, SubEventTypes } from '../global/eventInterface';
-import { SettingsWrapperSymbol, settingsWrapper } from '../settings/settingsInstance';
-import { StatsWrapperSymbol, statsWrapper } from "../stats/statsInstance";
+import { IEventTypes, INewErr, MainEventTypes, SubEventTypes } from '../global/eventInterface';
+import { settingsWrapper } from '../settings/settingsInstance';
+import { statsWrapper } from '../stats/statsInstance';
 // Import module with ES6 syntax
-import { ConsoleManager, OptionPopup, InputPopup, PageBuilder, ButtonPopup, ConfirmPopup, FileSelectorPopup, CustomPopup, InPageWidgetBuilder, SimplifiedStyledElement, Box, KeyListenerArgs } from 'console-gui-tools'
+import { ConsoleManager, OptionPopup, InputPopup, PageBuilder, ButtonPopup, CustomPopup, InPageWidgetBuilder, SimplifiedStyledElement, Box, KeyListenerArgs } from 'console-gui-tools'
 import { settingsContainer, statsContainer } from '../global/containerWrapper';
-import { RGB } from 'console-gui-tools/dist/types/components/Utils';
 import { ErrorTable } from './errorGen';
-import { bufferCount } from 'rxjs';
-import { clear } from 'pidusage';
+import { displayLastUpdates } from './displayLastUpdates';
+import { displayGlobalStats } from './displayGlobalStats';
+import { COLORS, columnWrapperText, getRGBString, D, M, sOBJ, printAliveStatus } from '../global/functions';
+// import { displayLastUpdates } from './displayLastUpdates';
 
-export interface ColorRow {
-  text: string;
-  color: RGB;
-  bold?: boolean;
-}
-
-export function columnWrapper(text: string, color: RGB = getRGBString('default')): SimplifiedStyledElement {
-  return { text: text, color: color, bold: true };
-}
-
-export function getRGBString(colorName: string): RGB {
-  const color = COLORS[colorName] || COLORS.default; // Falls 'colorName' nicht existiert, verwende den Default.
-  return `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
-}
-
-const COLORS: Record<string, number[]> =
-{
-  "default": [245, 245, 245],
-  "black": [0, 0, 0],
-  "blackBright": [29, 29, 29],
-  "blue": [0, 0, 255],
-  "blueBright": [70, 130, 180],
-  "cyan": [0, 255, 255],
-  "cyanBright": [224, 255, 255],
-  "gray": [128, 128, 128],
-  "green": [0, 128, 0],
-  "greenBright": [144, 238, 144],
-  "yellow": [255, 255, 0],
-  "yellowBright": [255, 255, 224],
-  "magenta": [255, 0, 255],
-  "magentaBright": [255, 0, 255],
-  "red": [255, 0, 0],
-  "redBright": [255, 69, 0],
-  "white": [235, 235, 235],
-  "whiteBright": [255, 255, 255],
-}
-
-
-function createRow(...columns: string[]): string {
-  return columns.map(column => {
-    if (column) {
-      const parts = column.split(':');
-      const key = parts[0];
-      const value = parts.length > 1 ? parts[1] : '';
-      const totalPadding = Math.max(0, 18 - key.length - value.length);
-      return `${key}:${' '.repeat(totalPadding)}${value}`;
-    }
-    return '';
-  }).join(' | ');
-}
 
 function createTwoRow(obj: any, p: InPageWidgetBuilder): void {
   switch (typeof obj) {
@@ -72,9 +23,9 @@ function createTwoRow(obj: any, p: InPageWidgetBuilder): void {
       obj.forEach((value: string, key: string) => {
         if (key && value) {
           const totalPadding1 = ' '.repeat(Math.max(0, 30 - key.length - value.length));
-          const newValue1: SimplifiedStyledElement = columnWrapper(key, getRGBString(value));
-          const middle: SimplifiedStyledElement = columnWrapper(totalPadding1);
-          const newValue2: SimplifiedStyledElement = columnWrapper(key, getRGBString(value));
+          const newValue1: SimplifiedStyledElement = columnWrapperText(key, getRGBString(value));
+          const middle: SimplifiedStyledElement = columnWrapperText(totalPadding1);
+          const newValue2: SimplifiedStyledElement = columnWrapperText(key, getRGBString(value));
           p.addRow(
             {
               ...newValue1,
@@ -105,54 +56,94 @@ export class consoleGui {
   protected stats: statsWrapper = statsContainer;
   protected gui: ConsoleManager;
   protected widget: any = { stdLog: undefined };
+  protected globalStats: displayGlobalStats;
+  protected lastUpdates: displayLastUpdates;
   protected errorLog: ErrorTable;
+  protected footer: Box;
   private guiIntVat: NodeJS.Timeout;
   constructor() {
+    // super();
+    this.stats.updateLastUpdates("gui", "start");
     this.gui = new ConsoleManager({
-      title: 'Websocket Server', // Title of the console
-      logPageSize: 20, // Number of lines to show in logs page
+      title: 'WebsocketServer', // Title of the console
+      logPageSize: 100, // Number of lines to show in logs page
       logLocation: 'popup', // Location of the logs page (top or bottom)
       enableMouse: true, // Enable mouse support
       showLogKey: 'ctrl+0', // Show logs with ctrl+l
       overrideConsole: true, // Override console.log, console.error, console.warn
       layoutOptions: {
-        pageRatio: [[0.25, 0.75], [0.7, 0.3]], // Set the ratio of the top and bottom pages
+        showTitle: true, // Show the title
+        // pageRatio: [[0.30, 0.70], [0.5, 0.5]], // Set the ratio of the top and bottom pages
         changeFocusKey: 'tab', // Change focus with tab
         boxed: true, // Set to true to enable boxed layout mode
-        boxColor: 'blackBright', // The color of the box
-        boxStyle: undefined, // The style of the box (bold)
-        type: 'quad', // Layout type
-        // direction: 'horizontal', // Layout direction
+        boxColor: 'yellow', // The color of the box
+        boxStyle: 'bold', // The style of the box (bold)
+        type: 'single', // Layout type
+        // direction: 'vertical', // Layout direction
         fitHeight: true, // Fit height of the console
       },
     });
+    this.footer = new Box({
+      id: "footer",
+      x: 2,
+      y: this.gui.Screen.height - 2,
+      width: 103,
+      height: 1,
+    });
+    this.footer.show();
+    this.stats.gui.selfStats.width = this.gui.Screen.width;
+    this.stats.gui.selfStats.height = this.gui.Screen.height;
     this.guiIntVat = setInterval(async () => {
     }, 1000);
     clearInterval(this.guiIntVat);
 
-    this.errorLog = new ErrorTable(this.gui.Screen.width, this.gui.Screen.height); // Use the width of your 'ErrorLog' Box
+    this.globalStats = new displayGlobalStats(this.gui.Screen.width, this.gui.Screen.height);
+    this.lastUpdates = new displayLastUpdates();
+    this.errorLog = new ErrorTable(); // Use the width of your 'ErrorLog' Box
   }
   public startIfTTY() {
     if (!this.gui.Screen.Terminal.isTTY) return console.info('No TTY detected, skipping console-gui-tools');
+    this.setupEventListeners();
     this.drawGUI();
+    this.stats.updateLastUpdates("gui", "start", true);
+
     this.guiIntVat = setInterval(async () => {
       this.intervalRunner();
     }, this.settings.gui.period);
-    this.settings.gui.isPainting = true;
-    this.setupEventListeners();
-        // this.gui.showLogPopup();
+    this.stats.gui.selfStats.isPainting = true;
+    if (!this.settings.gui.shouldPaint) this.toggleIdleMode();
+    // this.gui.showLogPopup();
   }
+
   intervalRunner() {
-    this.settings.gui.refreshCounter += 1;
+    // this.settings.gui.refreshCounter += 1;
     this.drawGUI();
   }
+
+  private toggleIdleMode() {
+    if (this.stats.gui.selfStats.isPainting) {
+      this.stats.gui.selfStats.isPainting = false;
+      // clearInterval(this.guiIntVat);
+    } else {
+      this.stats.gui.selfStats.isPainting = true;
+      // this.guiIntVat = setInterval(async () => {
+      //   this.intervalRunner();
+      // }, this.settings.gui.period);
+    }
+    this.globalStats.printGlobalStats();
+    this.globalStats.drawConsole();
+  }
+
   private setupEventListeners() {
-    this.eV.on(MainEventTypes.GUI, (event: IErrorEvent) => {
-      EventEmitterMixin.eventStats.guiActiveEvents += 1;
-      EventEmitterMixin.eventStats.activeEvents += 1;
+    this.eV.on(MainEventTypes.GUI, (event: IEventTypes) => {
       switch (event.subType) {
         case SubEventTypes.GUI.PRINT_DEBUG:
           this.eV.emit(MainEventTypes.SERVER, { subType: SubEventTypes.SERVER.DEBUG_LOG_TO_FILE, data: this, message: `GUI` });
+          // console.log("Clients:");
+          // console.dir(this.clients, { depth: 3, colors: true });
+          break;
+        case SubEventTypes.GUI.UPDATE_STATS:
+          this.getSelfStats();
           // console.log("Clients:");
           // console.dir(this.clients, { depth: 3, colors: true });
           break;
@@ -167,8 +158,18 @@ export class consoleGui {
       this.closeApp();
     });
     this.gui.on("resize", () => {
-      this.errorLog.box.hide();
-      this.drawGUI();
+      this.errorLog.errorLogBox.hide();
+      this.gui.Screen.update();
+      this.stats.gui.selfStats.width = this.gui.Screen.width;
+      this.stats.gui.selfStats.height = this.gui.Screen.height;
+
+      this.globalStats.statsWidgets.header.box.absoluteValues.width = this.gui.Screen.width;
+      // console.info(`GUI resized to: ${this.gui.Screen.width}x${this.gui.Screen.height}`);
+      this.globalStats.printGlobalStats();
+      this.globalStats.drawConsole();
+      
+      this.printFooter();
+      this.gui.refresh();
     });
     // this.gui.Screen.update();
     // And manage the keypress event from the library
@@ -197,16 +198,7 @@ export class consoleGui {
           break;
         }
         case "space": {
-          if (this.settings.gui.isPainting) {
-            this.settings.gui.isPainting = false;
-            clearInterval(this.guiIntVat);
-          } else {
-            this.settings.gui.isPainting = true;
-            this.guiIntVat = setInterval(async () => {
-              this.intervalRunner();
-            }, this.settings.gui.period);
-          }
-          this.drawGUI();
+          this.toggleIdleMode();
           break;
         }
         case "s": {
@@ -218,7 +210,8 @@ export class consoleGui {
           }).show().on("confirm", (_mode) => {
             this.settings.gui.mode = _mode
             this.gui.warn(`NEW MODE: ${this.settings.gui.mode}`)
-            this.drawGUI()
+            this.globalStats.printGlobalStats();
+            this.globalStats.drawConsole();
           })
           break
         }
@@ -237,17 +230,26 @@ export class consoleGui {
               buttons: ["Yes", "No", "?"]
             }).show().on("confirm", (answer) => {
               if (answer === "Yes") {
+                if (this.guiIntVat.hasRef()) this.guiIntVat.unref();
                 this.settings.gui.period = _period;
-                clearInterval(this.guiIntVat);
-                this.gui.warn(`NEW PERIOD: ${this.settings.gui.period}`)
-                this.guiIntVat = setInterval(async () => {
-                  this.drawGUI();
-                }, this.settings.gui.period);
-                this.settings.gui.isPainting = true;
+                // clearInterval(this.guiIntVat);
+
+                this.gui.info(`NEW PERIOD: ${this.settings.gui.period}`)
+                // this.guiIntVat.refresh();
+                //  = setInterval(async () => {
+                //             this.globalStats.printGlobalStats();
+                this.globalStats.drawConsole();
+
+                // }, this.settings.gui.period);
+                // this.guiIntVat.
+                if (this.stats.gui.selfStats.isPainting) this.guiIntVat.refresh();
+                // this.guiIntVat.ref();
               } else if (answer === "?") {
                 this.gui.info("Choose ok to confirm period");
               }
-              this.drawGUI();
+              this.globalStats.printGlobalStats();
+              this.globalStats.drawConsole();
+
             });
           });
           break;
@@ -261,7 +263,9 @@ export class consoleGui {
           }).show().on("confirm", (_max) => {
             this.settings.gui.max = _max;
             this.gui.warn(`NEW MAX VALUE: ${this.settings.gui.max}`);
-            this.drawGUI();
+            this.globalStats.printGlobalStats();
+            this.globalStats.drawConsole();
+
           });
           break;
         }
@@ -274,8 +278,35 @@ export class consoleGui {
           }).show().on("confirm", (_min) => {
             this.settings.gui.min = _min;
             console.info(`NEW MIN VALUE: ${this.settings.gui.min}`);
-            this.drawGUI();
+            this.globalStats.printGlobalStats();
+            this.globalStats.drawConsole();
+
           });
+          break;
+        }
+        case "f5": {
+          this.globalStats.printGlobalStats();
+          this.globalStats.drawConsole();
+
+          this.gui.refresh();
+          break;
+        }
+        case "f12": {
+          this.errorLog.errorLogBox.hide();
+          this.gui.Screen.update();
+          this.globalStats.statsWidgets.widget.box.absoluteValues.x = this.globalStats.defaults.widget[0];
+          this.globalStats.statsWidgets.widget.box.absoluteValues.y = this.globalStats.defaults.widget[1];
+          this.globalStats.statsWidgets.pid.box.absoluteValues.x = this.globalStats.defaults.pid[0];
+          this.globalStats.statsWidgets.pid.box.absoluteValues.y = this.globalStats.defaults.pid[1];
+          this.globalStats.statsWidgets.web.box.absoluteValues.x = this.globalStats.defaults.web[0];
+          this.globalStats.statsWidgets.web.box.absoluteValues.y = this.globalStats.defaults.web[1];
+          this.globalStats.statsWidgets.server.box.absoluteValues.x = this.globalStats.defaults.server[0];
+          this.globalStats.statsWidgets.server.box.absoluteValues.y = this.globalStats.defaults.server[1];
+
+          this.globalStats.printGlobalStats();
+          this.globalStats.drawConsole();
+
+          this.gui.refresh();
           break;
         }
         case "f2": {
@@ -296,12 +327,12 @@ export class consoleGui {
         }
         case "f1": {
           const p = new PageBuilder(15); // Add a scroll limit so it will be scrollable with up and down     this.addAliveStatus(p1);
-          const deWhite = this.D('white', 'bgBlack');
-          const deYellow = this.D('yellow', 'bgBlack', true);
-          const minus = this.M('white', 'bgBlack');
+          const deWhite = D('white', 'bgBlack');
+          const deYellow = D('yellow', 'bgBlack', true);
+          const minus = M('white', 'bgBlack');
           p.addRow({ text: "           " }, deYellow, deYellow, deYellow, { text: "  Commands  ", color: 'yellow', bg: 'bgBlack', bold: true, underline: true }, deYellow, deYellow, deYellow);
           p.addSpacer();
-          p.addRow({ text: `        Start/stop `, color: 'white' }, minus, { text: ` 'space' `, color: 'white' }, deWhite, this.sOBJ(), this.Alive());
+          p.addRow({ text: `        Start/stop `, color: 'white' }, minus, { text: ` 'space' `, color: 'white' }, deWhite, sOBJ(), printAliveStatus(this.stats.gui.selfStats.isPainting));
           p.addRow({ text: `   Simulation mode `, color: 'white' }, minus, { text: ` 'm'     `, color: 'white' }, deWhite, { text: ` ${this.settings.gui.mode}`, color: 'cyan' });
           p.addRow({ text: `    refresh widget `, color: 'white' }, minus, { text: ` 's'     `, color: 'white' }, deWhite, { text: ` ${this.settings.gui.period} ms`, color: "cyan" });
           p.addRow({ text: `     Set max value `, color: 'white' }, minus, { text: ` 'h'     `, color: 'white' }, deWhite, { text: ` ${this.settings.gui.max}`, color: 'cyan' });
@@ -322,184 +353,61 @@ export class consoleGui {
           this.errorLog.displayErrorLog();
           break;
         }
+        case "u": {
+          this.lastUpdates.displayLastUpdates();
+          break;
+        }
       }
     });
-    
-  }
 
+  }
 
   // Funktion zur Ermittlung der Farbe für Log-Level
-  private M(color: string, bg: string, bold: boolean = true, italic: boolean = false): any {
-    return { text: `-`, color: color, bg: bg, bold: bold, italic: italic };
+  private async printFooter() {
+    const row = new InPageWidgetBuilder(1)
+
+    row.addRow(
+      { text: "F1: ", color: "white", bold: true },
+      { text: "Help", color: "black", bg: "bgCyan", bold: false },
+      { text: " f2: ", color: "white", bold: true },
+      { text: "Colors", color: "black", bg: "bgCyan", bold: false },
+      { text: " F5: ", color: "white", bold: true },
+      { text: "Refresh", color: "black", bg: "bgCyan", bold: false },
+      { text: " F12: ", color: "white", bold: true },
+      { text: "Reset Layout", color: "black", bg: "bgCyan", bold: false },
+      { text: " p: ", color: 'white', bold: true },
+      { text: "ErrorLog", color: 'black', bg: 'bgCyan', bold: false },
+      { text: " u: ", color: 'white', bold: true },
+      { text: "Last Updates", color: 'black', bg: 'bgCyan', bold: false },
+      { text: " o: ", color: 'white', bold: true },
+      { text: "Log", color: 'black', bg: 'bgCyan', bold: false },
+      { text: " space: ", color: "white", bold: true },
+      { text: "Active/Idle", color: "black", bg: "bgCyan", bold: false },
+      // { text: " s:", color: "white", bold: true },
+      // { text: "Mode", color: "black", bg: "bgCyan", bold: false },
+      // { text: " r:", color: "white", bold: true },
+      // { text: "Period", color: "black", bg: "bgCyan", bold: false },
+      // { text: ".:", color: "white", bold: true },
+      // { text: "Max  ", color: "black", bg: "bgCyan", bold: false },
+      // { text: ",:", color: "white", bold: true },
+      // { text: "Min  ", color: "black", bg: "bgCyan", bold: false },
+    )
+    this.footer.setContent(row)
   }
 
-  private D(color: string, bg: string, underline: boolean = false, bold: boolean = false): any {
-    return { text: `#`, color: color, bg: bg, underline: underline, bold: bold };
-  }
-
-  private Alive(): any {
-    if (!this.settings.gui.isPainting) {
-      return { text: `false`, color: 'red', bg: 'bgBlack', bold: true };
-    } else {
-      return { text: `true`, color: 'white', bg: 'bgBlack', bold: true };
-    }
-  }
-
-  private sSTR(spaceCount: number = 1): string {
-    return ' '.repeat(spaceCount);
-  }
-  private sOBJ(spaceCount: number = 1) {
-    return { text: ' '.repeat(spaceCount) }
-  };
-
-  async updateConsole(): Promise<void> {
-    const deWhite = this.D('white', 'bgBlack');
-    const deYellow = this.D('yellow', 'bgBlack', true, true);
-    const minus = this.M('white', 'bgBlack');
-    const p1 = new PageBuilder();
-    const p2 = new PageBuilder();
-    const p3 = new PageBuilder();
-    const p4 = new PageBuilder();
-    p1.addRow(this.sOBJ(2), deYellow, deYellow, deYellow, { text: ` Global Stats `, color: 'yellow', underline: true, bold: true }, deYellow, deYellow, deYellow,);
-    p1.addSpacer();
-    p2.addRow(this.sOBJ(6), deYellow, deYellow, deYellow, { text: ` Process Stats `, color: 'yellow', underline: true, bold: true }, deYellow, deYellow, deYellow,);
-    p2.addSpacer();
-    p3.addRow(this.sOBJ(6), deYellow, deYellow, deYellow, { text: ` Error Log `, color: 'yellow', underline: true, bold: true }, deYellow, deYellow, deYellow,);
-    p3.addSpacer();
-    p4.addRow(this.sOBJ(4), deYellow, deYellow, deYellow, { text: ` Widget Stats `, color: 'yellow', underline: true, bold: true }, deYellow, deYellow, deYellow,);
-    p4.addSpacer();
-
-
-    // Global Stats
-    p1.addRow(this.sOBJ(11), { text: `alive:`, color: 'white' }, this.sOBJ(1), this.Alive());
-    p1.addRow(this.sOBJ(1), { text: `refresh counter:`, color: 'white' }, this.sOBJ(1), { text: `${this.settings.gui.refreshCounter}`, color: 'white' });
-    p1.addRow(this.sOBJ(2), { text: `client counter:`, color: 'white' }, this.sOBJ(1), { text: `${this.stats.client.clientsCounter}`, color: 'white' });
-    p1.addRow(this.sOBJ(2), { text: `clients active:`, color: 'white' }, this.sOBJ(1), { text: `${this.stats.client.activeClients}`, color: 'white' });
-    p1.addRow(this.sOBJ(3), { text: `active events:`, color: 'white' }, this.sOBJ(1), { text: `${EventEmitterMixin.eventStats.activeEvents}`, color: 'white' });
-    p1.addRow(this.sOBJ(3), { text: `event counter:`, color: 'white' }, this.sOBJ(1), { text: `${EventEmitterMixin.eventStats.eventCounter}`, color: 'white' });
-    p1.addRow(this.sOBJ(3), { text: `active GUI E:`, color: 'white' }, this.sOBJ(1), { text: `${EventEmitterMixin.eventStats.guiActiveEvents}`, color: 'white' });
-    p1.addRow(this.sOBJ(3), { text: `event GUI C:`, color: 'white' }, this.sOBJ(1), { text: `${EventEmitterMixin.eventStats.guiEventCounter}`, color: 'white' });
-    p1.addRow(this.sOBJ(3), { text: `messages sent:`, color: 'whiteBright', bg: 'bgBlackBright', bold: true }, this.sOBJ(1), { text: `dummy`, color: 'white' });
-    p1.addRow(this.sOBJ(3), { text: `error counter:`, color: 'whiteBright', bg: 'bgRed', bold: true }, this.sOBJ(1), { text: `${EventEmitterMixin.eventStats.errorCounter}`, color: 'white' });
-    p1.addRow(this.sOBJ(3), { text: `captured error:`, color: 'whiteBright', bg: 'bgRed', bold: true }, this.sOBJ(1), { text: `${this.errorLog.lastErrors.length}`, color: 'white' });
-
-    p1.addSpacer();
-
-    // for (const [key, value] of Object.entries(this.stats.global.lastUpdates)) { // TODO: popup with all last updates
-    //   p2.addRow(this.S(2), { text: `${key}:`, color: 'white' }, { text: ` ${value}`, color: 'white' });
-    // }
-    // p2.addRow(this.S(2), { text: `server version:`, color: 'white' }, { text: ` ${this.stats.global.serverVersion}`, color: 'white' });
-    // p2.addRow(this.S(2), { text: `server uptime:`, color: 'white' }, { text: ` ${this.stats.global.pu.elapsed}`, color: 'white' });
-
-    const elapsedDur: string = this.calcDurationDetailed(this.stats.global.pu.elapsed as number) || "NaN";
-    const ctimeDur: string = this.calcDurationDetailed(this.stats.global.pu.ctime as number) || "NaN";
-
-    p2.addRow(this.sOBJ(5), columnWrapper(`address:`), columnWrapper(`${this.sSTR(1)}${this.settings.rcon.host}:${this.settings.server.streamServerPort}`));
-    p2.addRow(this.sOBJ(1), columnWrapper(createRow(
-      `exists:${this.settings.pid.fileExists}`,
-      `upTime:${elapsedDur}`,
-      `web alive:${this.stats.server.webHandle.isAlive}`
-    )));
-    p2.addRow(this.sOBJ(1), columnWrapper(createRow(
-      `readable:${this.settings.pid.fileReadable}`,
-      `cTime:${ctimeDur}`,
-      `has conn:${this.stats.server.webHandle.hasConnection}`
-    )));
-    const dur: number = Math.floor(Date.now() - this.stats.global.intvalStats.idleStart);
-    const duration: string = this.calcDurationDetailed(dur) || "NaN";
-    p2.addRow(this.sOBJ(1), columnWrapper(createRow(
-      `pid:${this.settings.pid.pid}`,
-      `cpu:${this.stats.global.pu.cpu}%`,
-      `IDLE time:${duration}`
-    )));
-
-    p2.addRow(this.sOBJ(1), columnWrapper(createRow(
-      `SI pid:${this.stats.global.si.pid}`,
-      `SI Mem:${this.stats.global.si.mem}`,
-      `IDLE start:${Math.floor(this.stats.global.intvalStats.idleStart / 1000).toFixed(0)}`
-    )));
-    p2.addRow(this.sOBJ(1), columnWrapper(createRow(
-      `PU pid:${this.stats.global.pu.pid}`,
-      `PU Mem:${this.stats.global.pu.memory}`,
-      `IDLE end:${Math.floor(this.stats.global.intvalStats.idleEnd / 1000).toFixed(0)}`
-    )));
-    p2.addRow(this.sOBJ(1), columnWrapper(createRow(
-      `found:${this.settings.pid.processFound}`,
-      `moin:dummy`,
-      `6:3`
-    )));
-
-    // Widget Stats
-
-    const selfStats = this.getSelfStats();
-    p4.addRow(this.sOBJ(2), { text: `uptime:`, color: 'white' }, { text: ` ${selfStats.uptime}`, color: 'white' });
-    const cpu = Math.floor(selfStats.cpuUsage as unknown as number / 8);
-    p4.addRow(this.sOBJ(2), { text: `cpu :`, color: 'white' }, { text: ` ${cpu}%`, color: 'white' });
-    p4.addRow(this.sOBJ(2), { text: `memory usage:`, color: 'white' }, { text: ` ${selfStats.memoryUsage} MB`, color: 'white' });
-    p4.addRow(this.sOBJ(2), { text: `heap memory usage:`, color: 'white' }, { text: ` ${selfStats.memoryUsageHeap} MB`, color: 'white' });
-    p4.addRow(this.sOBJ(2), { text: `total heap memory:`, color: 'white' }, { text: ` ${selfStats.memoryUsageHeapTotal} MB`, color: 'white' });
-    p4.addSpacer(3);
-    p4.addRow(this.sOBJ(4), { text: "press 'f1' for HELP!", color: 'white', bg: 'bgBlackBright', overline: true });
-
-    this.gui.setPage(p1, 0);
-    this.gui.setPage(p2, 1);
-    this.gui.setPage(p3, 2);
-    this.gui.setPage(p4, 3);
-    // this.gui.setPages([p1, p2, p3, p4], ["Top Left", "Top Right", "Bottom Left", "Bottom Right"]);
-  }
-
-  private calcDuration(timestamp: number): string {
-    const hours = Math.floor(timestamp / 3600);
-    const minutes = Math.floor((timestamp % 3600) / 60);
-    const seconds = Math.floor(timestamp % 60);
-    return `${hours}:${minutes}:${seconds}`;
-  }
-
-  private calcDurationDetailed(duration: number): string {
-    // console.info(`duration: ${duration}`);
-    if (isNaN(duration) || !(duration > 1)) {
-      return "NaN";
-    }
-    const milliseconds = Math.floor((duration % 1) * 1000);
-    const seconds = Math.floor((duration / 1000) % 60);
-    const minutes = Math.floor((duration / (1000 * 60)) % 60);
-    const hours = Math.floor((duration / (1000 * 60 * 60)) % 24);
-    const days = Math.floor(duration / (1000 * 60 * 60 * 24));
-
-    let durationSTR = '';
-    if (days > 0) {
-      durationSTR += `${days}d `;
-    }
-    if (hours > 0) {
-      durationSTR += `${hours}h `;
-    }
-    if (minutes > 0) {
-      durationSTR += `${minutes}m `;
-    }
-    if (seconds > 0) {
-      durationSTR += `${seconds}s `;
-    }
-    if (milliseconds > 0) {
-      durationSTR += `${milliseconds}ms`;
-    }
-    return durationSTR.trim();
-  }
-  private getSelfStats() {
-    const uptime = process.uptime();
-    const uptimeText = this.calcDuration(uptime);
-    const ownCPU = process.cpuUsage();
-    const cpuUsage = (ownCPU.user + ownCPU.system) / 1000000;
+  getSelfStats(): void {
     const memoryUsage = process.memoryUsage();
-    const memoryUsageMB = memoryUsage.rss / 1024 / 1024;
-    const memoryUsageHeapMB = memoryUsage.heapUsed / 1024 / 1024;
-    const memoryUsageHeapTotalMB = memoryUsage.heapTotal / 1024 / 1024;
-    return {
-      uptime: uptimeText,
-      cpuUsage: cpuUsage.toFixed(2),
-      memoryUsage: memoryUsageMB.toFixed(2),
-      memoryUsageHeap: memoryUsageHeapMB.toFixed(2),
-      memoryUsageHeapTotal: memoryUsageHeapTotalMB.toFixed(2)
-    }
+    this.stats.gui.selfStats.capturedErrors = this.errorLog.lastErrors.length;
+    // this.stats.gui.selfStats.userTime = convertTimestampToTime(ownCPU.user);
+    // this.stats.gui.selfStats.systemTime = convertTimestampToTime(ownCPU.system);
+    const memoryValueFormat = Intl.NumberFormat('en-US', { notation: "compact", style: 'unit', unit: 'megabyte', unitDisplay: 'narrow', maximumFractionDigits: 0 });
+
+    const memMB = memoryValueFormat.format(memoryUsage.rss / 1024 / 1024);
+    const memHeap = memoryValueFormat.format(memoryUsage.heapUsed / 1024 / 1024);
+    const memHeapTotal = memoryValueFormat.format(memoryUsage.heapTotal / 1024 / 1024);    
+    this.stats.global.widgetExtra.memMB = memMB;
+    this.stats.global.widgetExtra.memHeap = memHeap;
+    this.stats.global.widgetExtra.memHeapTotal = memHeapTotal;
   }
 
   private closeApp() {
@@ -507,9 +415,24 @@ export class consoleGui {
     console.clear();
     process.exit(0);
   }
+
   public async drawGUI(): Promise<void> {
-    this.updateConsole();
-    this.gui.refresh();
-    // ... rest of your drawGUI logic
+    // const p = new PageBuilder();
+    if (this.stats.gui.selfStats.isPainting) {
+      this.globalStats.printGlobalStats();
+      this.globalStats.drawConsole();
+      if (this.lastUpdates.active) this.lastUpdates.printLastUpdates();
+      this.stats.updateLastUpdates("gui", "draw", true);
+    } else {
+      const currentTime = Date.now();
+      if ((currentTime - this.stats.gui.lastUpdates.draw.last) >= 1500) {
+        this.globalStats.drawConsole();
+        if ((currentTime - this.stats.gui.lastUpdates.draw.last) >= 10000) {
+          this.stats.updateLastUpdates("gui", "draw", true);
+          this.globalStats.printGlobalStats();
+        }
+      }
+    }
+    this.printFooter();
   }
 }

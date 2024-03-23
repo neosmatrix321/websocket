@@ -21,7 +21,6 @@
             "request": "attach",
             "address": "127.0.0.1", // Assuming your Node.js process is on the same machine
             "port": 9229,
-            "webSocketUri": "ws://127.0.0.1:9229/5b4d7234-0ea9-4bda-9bcb-be78ea615e6b",  
             "localRoot": "${workspaceFolder}",
             "remoteRoot": "Absolute path to the remote directory containing the program", 
             "skipFiles": [

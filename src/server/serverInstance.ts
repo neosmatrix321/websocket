@@ -2,10 +2,9 @@
 import "reflect-metadata";
 
 // Interfaces (potentially in a separate file, interfaces.ts)
-import { WebSocketServer, WebSocket } from 'ws'
+import { WebSocketServer } from 'ws'
 import { RconConnection } from "../rcon/lib/server/connection";
 import * as fs from 'fs';
-import { stats } from '../global/containerWrapper';
 import Logger from "../global/fileLogger";
 
 export interface IHandle {

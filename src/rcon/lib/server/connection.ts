@@ -2,7 +2,7 @@ import net from 'net';
 import crypto from 'crypto';
 import {
   SERVERDATA_AUTH,
-  SERVERDATA_AUTH_RESPONSE,
+  // SERVERDATA_AUTH_RESPONSE,
   SERVERDATA_EXECCOMMAND,
   createRequest,
   readResponse,

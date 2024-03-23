@@ -1,42 +1,35 @@
 import { InPageWidgetBuilder, SimplifiedStyledElement, Box, KeyListenerArgs } from 'console-gui-tools'
-import { consoleGui, getRGBString } from './gui';
-import { RGB } from 'console-gui-tools/dist/types/components/Utils';
-import { IErrorEvent } from '../global/eventInterface';
+import { getLogLevelColor, getRGBString } from '../global/functions';
+import { statsContainer } from '../global/containerWrapper';
 
 interface ErrorDescriptor {
   [key: string]: any;
 }
 
 export class ErrorTable {
+  errorLogBox: Box;
+  detailBox: Box;
+  errorTable: InPageWidgetBuilder;
+  detailedErrorTable: InPageWidgetBuilder;
   selectedRow: number;
   errorTab: ErrorDescriptor[];
   header: string[];
-  errorTable: InPageWidgetBuilder;
-  detailedErrorTable: InPageWidgetBuilder;
   maxSizes: number[];
   spacing: number;
-  box: Box;
   lastErrors: any[];
-  detailBox: Box;
   active: boolean = false;
-
-  constructor(width: number, height: number) {
-    this.selectedRow = 0;
-    this.errorTab = [];
-    this.header = [];
-    this.maxSizes = [];
-    this.spacing = 2;
-    this.errorTable = new InPageWidgetBuilder((width - 4));
-    this.detailedErrorTable = new InPageWidgetBuilder((width - 4));
-
-    this.lastErrors = [];
-    this.box = new Box({
+  width: number;
+  height: number;
+  constructor() {
+    this.width = statsContainer.gui.selfStats.width;
+    this.height = statsContainer.gui.selfStats.height;
+    this.errorLogBox = new Box({
       id: "ErrorLog",
       draggable: false,
       visible: false,
       x: 1,
       y: 1,
-      width: (width - 2),
+      width: (this.width - 2),
       height: 10,
       style: {
         label: "Error Log",
@@ -44,15 +37,15 @@ export class ErrorTable {
         boxed: true,
       }
     });
-    this.box.hide();
+    this.errorLogBox.hide();
     this.detailBox = new Box({
       id: "ErrorDetail",
       draggable: false,
       visible: false,
       x: 1, // Position to the right of your ErrorLog 
-      y: 12,
-      width:(width - 2),
-      height: height - this.box.content.getViewedPageHeight() - 14,
+      y: this.errorLogBox.content.getViewedPageHeight() + 1,
+      width: (this.width - 2),
+      height: this.height - this.errorLogBox.content.getViewedPageHeight() - 2,
       style: {
         label: "Error Details",
         color: "cyan",
@@ -60,13 +53,28 @@ export class ErrorTable {
       }
     });
     this.detailBox.hide(); // Initially hidden
+    this.errorTable = new InPageWidgetBuilder((this.width - 4));
+    this.detailedErrorTable = new InPageWidgetBuilder((this.width - 4));
+    this.selectedRow = 0;
+    this.errorTab = [];
+    this.header = [];
+    this.maxSizes = [];
+    this.spacing = 2;
+
+    this.lastErrors = [];
     this.active = false;
     this.setupErrorLogListeners();
   }
+  
   setupErrorLogListeners(): void {
-    this.box.on("keypress", (key: KeyListenerArgs) => {
-      // console.info(`ErrorLog keypress: ${key.name} | ${this.box.focused} | ${this.box.isFocused()} `);
-      if (!this.active || !this.box.isFocused()) {
+    // this.errorLogBox.on("resize", () => {
+    //   this.detailBox.absoluteValues.y = this.errorLogBox.content.getViewedPageHeight() + 1;
+    //   this.detailBox.absoluteValues.height = this.height - this.errorLogBox.content.getViewedPageHeight() - 2;
+    //   console.info(`ErrorLog resize: ${this.errorLogBox.content.getViewedPageHeight()} | ${this.detailBox.content.getViewedPageHeight()}`);
+    // });
+    this.errorLogBox.on("keypress", (key: KeyListenerArgs) => {
+      // console.info(`ErrorLog keypress: ${key.name} | ${this.errorLogBox.focused} | ${this.errorLogBox.isFocused()} `);
+      if (!this.active || !this.errorLogBox.isFocused()) {
         return;
       }
       switch (key.name) {
@@ -85,41 +93,39 @@ export class ErrorTable {
           }
           break
         case "return":
-          this.box.emit('rowChange', this.selectedRow);
+          this.errorLogBox.emit('rowChange', this.selectedRow);
           break;
       }
       // this.drawErrorTable();
     });
-    this.box.on("rowChange", (row: number) => {
+    this.errorLogBox.on("rowChange", (row: number) => {
       this.displayErrorDetails(row);
       this.detailBox.show();
     });
-    // this.box.on("unfocus", () => {
-    //   this.box.unfocus();
-    //   this.box.removeAllListeners();
-    //   this.box.hide();
+    // this.errorLogBox.on("unfocus", () => {
+    //   this.errorLogBox.unfocus();
+    //   this.errorLogBox.removeAllListeners();
+    //   this.errorLogBox.hide();
     //   this.detailBox.hide();
     // });
   }
-  addJsonDetailsToTable(jsonData: any) {
+  addJsonDetailsToTable(jsonData: any): void {
     const errorDetails = JSON.parse(jsonData);
     if (!errorDetails) return;
     const keys = Object.keys(errorDetails);
     let numRows = Math.ceil(keys.length / 2); // Calculate rows needed
 
     for (let i = 0; i < numRows; i++) {
-      const rowData = [];
       for (let j = 0; j < 2; j++) {
         const index = i * 2 + j;
         if (index < keys.length) {
           const key = keys[index];
           const value = jsonData[key];
-          rowData.push({ text: `${key}: ${value}`, color: getRGBString("whiteBright") });
+          this.detailedErrorTable.addRow({ text: `${key}: ${value}`, color: 'whiteBright' });
         }
       }
 
       // Assuming detailedErrorTable has an addRow method similar to InPageWidgetBuilder
-      return { ...rowData };
     }
   }
 
@@ -130,20 +136,16 @@ export class ErrorTable {
 
     // Assume your `message` field has the main message, and you have a `json` field 
     const detailMessage = selectedError.message;
-    this.detailedErrorTable.addRow({ text: `   ### from: ${selectedError.no} ###`, color: getRGBString("cyanBright"), bold: true } as SimplifiedStyledElement);
-    this.detailedErrorTable.addRow({ text: `Message: ${detailMessage}`, color: getRGBString("whiteBright") } as SimplifiedStyledElement);
+    this.detailedErrorTable.addRow({ text: `   ### from: ${selectedError.no} ###`, color: 'cyanBright', bold: true } as SimplifiedStyledElement);
+    this.detailedErrorTable.addRow({ text: `Message: ${detailMessage}`, color: 'whiteBright' } as SimplifiedStyledElement);
     try {
       const myJSON = selectedError.json;
       if (!myJSON) throw new Error('No JSON data');
       console.info(`JSON try: ${myJSON}`)
-      const detailText = this.addJsonDetailsToTable(myJSON);
-        if (!detailText) throw new Error('addJsonDetailsToTable error');
-        this.detailedErrorTable.addRow(...detailText);
-      
 
       // this.detailedErrorTable.addRow( // TODO: Add a table for the JSON data
     } catch (error: any) {
-      this.detailedErrorTable.addRow({ text: `No JSON data ${error.message}`, color: getRGBString("whiteBright") });
+      this.detailedErrorTable.addRow({ text: `No JSON data ${error.message}`, color: 'whiteBright' });
     }
     this.detailBox.setContent(this.detailedErrorTable);
   }
@@ -152,7 +154,7 @@ export class ErrorTable {
     this.errorTable.addRow(
       ...this.header.map((headerItem, i) => {
         const cellText = `${headerItem}${` `.repeat(Math.max(this.maxSizes[i] - headerItem.length, 0) + this.spacing)}`;
-        return { text: cellText, color: getRGBString("whiteBright"), bold: true } as SimplifiedStyledElement;
+        return { text: cellText, color: 'whiteBright', bold: true } as SimplifiedStyledElement;
       })
     );
     this.errorTab.forEach((row, index) => {
@@ -160,13 +162,13 @@ export class ErrorTable {
       this.errorTable.addRow(
         ...this.header.map((headerItem, i) => {
           const cellValue = row[headerItem];
-          const color = (headerItem == 'logLevel') ? getRGBString(this.getLogLevelColor(cellValue)) : getRGBString("whiteBright");
+          const color = (headerItem == 'logLevel') ? getRGBString(getLogLevelColor(cellValue)) : 'whiteBright';
           const cellText = `${cellValue}${` `.repeat(Math.max(this.maxSizes[i] - (`${cellValue}`).length, 0) + this.spacing)}`;
           return { text: cellText, color: color, bg: background, bold: true } as SimplifiedStyledElement;
         })
       );
     });
-    this.box.setContent(this.errorTable);
+    this.errorLogBox.setContent(this.errorTable);
   }
 
   updateErrorTable(errorTab: ErrorDescriptor[], header: string[], maxSizes: number[], spacing: number): void {
@@ -200,42 +202,32 @@ export class ErrorTable {
 
       this.drawErrorTable(); // Render the table
 
-      // console.info(`errortable: ${this.errorTable.getViewedPageHeight()} | ${this.box.content.getViewedPageHeight()} | box: ${this.detailBox.content.getViewedPageHeight()}`);	
+      // console.info(`errortable: ${this.errorTable.getViewedPageHeight()} | ${this.errorLogBox.content.getViewedPageHeight()} | errorLogBox: ${this.detailBox.content.getViewedPageHeight()}`);	
     }
   }
   public displayErrorLog(): void {
     if (!this.active) {
       // const p = new ErrorTable(this.gui.Screen.width, this.gui.Screen.height);
       this.selectedRow = 0;
-      // this.box.absoluteValues.width = this.gui.Terminal.columns - 2;
-      this.box.content.clear();
+      // this.errorLogBox.absoluteValues.width = this.gui.Terminal.columns - 2;
+      this.errorLogBox.content.clear();
       this.printError();
-      this.box.show();
-      this.box.focus();
+      this.detailBox.absoluteValues.y = this.errorLogBox.content.getViewedPageHeight() + 3;
+      this.detailBox.absoluteValues.height = this.height - this.errorLogBox.content.getViewedPageHeight() - 2;
+      console.info(`ErrorLog resize: ${this.errorLogBox.content.getViewedPageHeight()} | ${this.detailBox.content.getViewedPageHeight()}`);
+
+      this.errorLogBox.show();
+      this.errorLogBox.focus();
       this.active = true;
       this.setupErrorLogListeners();
-  } else if (this.active) {
-    // if (this.box.isVisible()) {
-    // } else if (this.box.isVisible() && !this.box.isFocused()) {
+    } else if (this.active) {
+      // if (this.errorLogBox.isVisible()) {
+      // } else if (this.errorLogBox.isVisible() && !this.errorLogBox.isFocused()) {
       this.active = false;
-      this.box.removeAllListeners();
+      this.errorLogBox.removeAllListeners();
       this.detailBox.hide();
-      this.box.hide();
-    // }
-  }
-}
-  getLogLevelColor(logLevel: string): string {
-    switch (logLevel) {
-      case 'DEBUG':
-        return `magentaBright`;
-      case 'ERROR':
-        return `red`;
-      case 'WARNING':
-        return 'yellow';
-      case 'INFO':
-        return "cyan";
-      default:
-        return `yellow`;
+      this.errorLogBox.hide();
+      // }
     }
   }
 }

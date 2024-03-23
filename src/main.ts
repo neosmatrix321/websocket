@@ -1,15 +1,16 @@
 "use strict";
-import { Container, inject, injectable, postConstruct } from "inversify";
+import { Container, injectable } from "inversify";
 import "reflect-metadata";
 import mixin, { EventEmitterMixin } from "./global/EventEmitterMixin";
 // import Stats from "./stats/stats";
 // import Server from "./server/server";
 // import Clients from "./clients/clients";
-import { SubEventTypes, MainEventTypes, IEventTypes, IMainEvent, BaseEvent, IBaseEvent, debugDataCallback, IErrorEvent, IClientsEvent, IServerEvent, INewErr } from './global/eventInterface';
+import { SubEventTypes, MainEventTypes, IEventTypes, IBaseEvent, IErrorEvent } from './global/eventInterface';
 import { Server } from './server/server';
 import { Clients } from "./clients/clients";
 import { Stats } from "./stats/stats";
 import { consoleGui } from "./gui/gui";
+
 
 
 export const STATS_WRAPPER_TOKEN = Symbol('statsWrapper');
@@ -40,34 +41,12 @@ export class Main {
       }
       console.log("Main Initialization ...");
       this.setupEventHandlers();
+      this.eV.handleError(SubEventTypes.ERROR.DEBUG, "Main Initialization", MainEventTypes.MAIN, new Error(`start Routine`), { "test": "works", "time": Date.now() });
       this.eV.emit(MainEventTypes.SERVER, { subType: SubEventTypes.SERVER.START, message: `starting server`, success: true, });
     } catch (error) {
       this.eV.handleError(SubEventTypes.ERROR.FATAL, "Main Initialization", MainEventTypes.MAIN, new Error(`start Routine`), error);
       console.error("Main Initialization Error: ", error);
     }
-  }
-
-  public static safeStringify(obj: any, maxDepth = 4, space: string | number = ''): string {
-    const cache = new WeakSet(); // Use a WeakSet to handle circular references
-    let depth = 0;
-
-    return JSON.stringify(obj, (key, value) => {
-      if (typeof value === 'object' && value !== null) {
-        if (cache.has(value)) return;
-        cache.add(value);
-
-        if (depth > maxDepth) {
-          return `[DEPTH LIMIT REACHED]: ${maxDepth}`; // Indicate depth limit
-        }
-        depth++;
-
-        // Optionally try to get a custom string representation
-        if (typeof value !== 'object' && typeof value.toString === 'function' && value.toString !== Object.prototype.toString) {
-          return value.toString();
-        }
-      }
-      return typeof value === 'function' ? value.toString() : value;
-    }, space);
   }
 
   protected setupEventHandlers() {
@@ -122,13 +101,13 @@ export class Main {
     //   // console.warn(`Unknown event: ${mainType}.${event.subType}`);
     // });
   }
-
+  
   private handleMainEvent(event: IEventTypes) {
     switch (event.subType) {
       case SubEventTypes.MAIN.PID_AVAILABLE:
         const newEvent: IBaseEvent = {
           subType: SubEventTypes.BASIC.STATS,
-          message: `getPid | Pid Watcher online`,
+          message: `startPidWatcher | Pid Watcher online`,
           success: true,
         };
         this.eV.emit(MainEventTypes.BASIC, newEvent);
@@ -163,27 +142,9 @@ export class Main {
       // console.error('Unknown MAIN event subtype:', event.subType);
     }
   }
-
-
-  // private async gatherAndSendStats() {
-  //   await this.stats.updateAllStats();
-
-  //   Object.values(this.clients).forEach((client: any) => {
-  //     if (client.readyState === client.OPEN) {
-  //       // . detailed logic to build and send the stats payload.
-  //       const statsData = { ...this.stats, ...client.info };
-  //       client.send(JSON.stringify(statsData));
-
-  //     }
-  //   });
-  // }
 }
 const mainContainer = new Container();
 
 mainContainer.bind<Main>(MAIN_WRAPPER_TOKEN).to(Main).inSingletonScope();
-
-// Bind your services to their respective interfaces
-
-// Get an instance of Main
 
 export const mainAPP = mainContainer.get<Main>(MAIN_WRAPPER_TOKEN);

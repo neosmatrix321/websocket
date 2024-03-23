@@ -1,2 +1,7 @@
 {
+    "eslint.onIgnoredFiles": "off",
+    "problems.autoReveal": true,
+    "problems.defaultViewMode": "table",
+    "problems.showCurrentInStatus": true,
+    "task.verboseLogging": true
 }

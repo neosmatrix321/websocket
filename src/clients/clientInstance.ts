@@ -1,6 +1,5 @@
 "use strict";
 import 'reflect-metadata';
-import { Clients } from './clients';
 import { WebSocket } from 'ws';
 
 export enum ClientType {

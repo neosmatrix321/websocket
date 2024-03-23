@@ -1,9 +1,7 @@
 "use strict";
 
-import { timer } from "rxjs";
-import { ClientType, MyWebSocket } from "../clients/clientInstance";
+import { MyWebSocket } from "../clients/clientInstance";
 import { EventEmitterMixin } from "./EventEmitterMixin";
-import { stats } from './containerWrapper';
 
 export const MainEventTypes = {
   BASIC: 'BASIC',
@@ -36,6 +34,7 @@ export const SubEventTypes = {
   },
   GUI: {
     PRINT_DEBUG: 'PRINT_DEBUG',
+    UPDATE_STATS: 'UPDATE_STATS',
     FILL_ERROR_ARRAY: 'FILL_ERROR_ARRAY',
   },
   STATS: {
@@ -105,8 +104,8 @@ export const DEFAULT_VALUE_CALLBACKS = {
     return `${currentDate.getHours()}:${currentDate.getMinutes()}:${currentDate.getSeconds()}`;
   },
   // clientName: (clientId: string) => `Client-${clientId}`,
-  activeEvents: (() => EventEmitterMixin.eventStats.activeEvents),
-  eventCounter: (() => EventEmitterMixin.eventStats.eventCounter++)
+  activeEvents: (() => EventEmitterMixin.eventStats.activeEvents++),
+  // eventCounter: (() => EventEmitterMixin.eventStats.eventCounter++)
 };
 
 export class DebugEventGenerator {
@@ -124,7 +123,7 @@ export class DebugEventGenerator {
         endTime: DEFAULT_VALUE_CALLBACKS.timestamp(),
         duration: 0,
         activeEvents: -1,
-        eventCounter: -1
+        // eventCounter: -1
     };
   }
   updateDuration(): void {
@@ -135,7 +134,7 @@ export class DebugEventGenerator {
     this.generateDebugData().endTime = endTime;
     this.generateDebugData().duration = duration;
     this.generateDebugData().activeEvents = DEFAULT_VALUE_CALLBACKS.activeEvents();
-    this.generateDebugData().eventCounter = DEFAULT_VALUE_CALLBACKS.eventCounter();
+    // this.generateDebugData().eventCounter = DEFAULT_VALUE_CALLBACKS.eventCounter();
   }
 }
 
@@ -186,7 +185,7 @@ export interface IDebugEvent {
     endTime: number;
     duration: number;
     activeEvents: number;
-    eventCounter: number;
+    // eventCounter: number;
   updateDuration?(): void;
 }
 
@@ -288,7 +287,7 @@ export interface INewErr {
 
 
 export interface IEventStats {
-  eventCounter: number;
+  // eventCounter: number;
   activeEvents: number;
   errorCounter: number;
   guiEventCounter: number;

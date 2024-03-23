@@ -1,5 +1,5 @@
 "use strict";
-import { inject, injectable, postConstruct } from 'inversify';
+import { inject, injectable } from 'inversify';
 import 'reflect-metadata';
 
 import { readFile } from 'node:fs/promises';
@@ -7,22 +7,19 @@ import { createServer } from 'https';
 import { readFileSync } from 'fs';
 import { IncomingMessage } from 'http';
 import { Duplex } from 'stream';
-import { WebSocket, WebSocketServer, createWebSocketStream } from 'ws';
+import { WebSocket, createWebSocketStream } from 'ws';
 
 import mixin, { EventEmitterMixin } from "../global/EventEmitterMixin";
-import { serverWrapper, IServerWrapper, IHandle } from "../server/serverInstance";
-import { MainEventTypes, IEventTypes, SubEventTypes, IBaseEvent, BaseEvent, IClientsEvent, debugDataCallback, IServerEvent, IStatsEvent, IMainEvent, INewErr } from "../global/eventInterface";
+import { serverWrapper } from "../server/serverInstance";
+import { MainEventTypes, SubEventTypes, IBaseEvent, IClientsEvent, IServerEvent, IStatsEvent, INewErr } from "../global/eventInterface";
 import { ClientType, MyWebSocket } from '../clients/clientInstance';
 import { RconConnection } from '../rcon/lib/server/connection'; // Adjust the path
 import { parsePlayers, splitInfo } from '../rcon/lib/player';
 import * as fs from 'fs';
-import { SettingsWrapperSymbol, settingsWrapper } from '../settings/settingsInstance';
-import { StatsWrapperSymbol, statsWrapper } from "../stats/statsInstance";
-import { get } from 'systeminformation';
+import { settingsWrapper } from '../settings/settingsInstance';
+import { statsWrapper } from "../stats/statsInstance";
 import { SERVER_WRAPPER_TOKEN } from '../main';
 import { settingsContainer, statsContainer } from '../global/containerWrapper';
-import Logger from '../global/fileLogger';
-
 
 
 @injectable()
@@ -65,6 +62,7 @@ export class Server {
         client: myWebSocket
       };
       this.eV.emit(MainEventTypes.CLIENTS, disconnectEvent);
+      webSocketStream.removeAllListeners();
     });
 
     webSocketStream.on('error', (error) => {
@@ -77,6 +75,7 @@ export class Server {
       };
       this.eV.emit(MainEventTypes.CLIENTS, connectEvent);
       this.eV.handleError(SubEventTypes.ERROR.INFO, `Websocket Server`, MainEventTypes.SERVER, new Error(`Client error`), error);
+      webSocketStream.removeAllListeners();
     });
     webSocketStream.on('data', (data: Buffer) => { // Buffer type for data
       const message = JSON.parse(data.toString());
@@ -142,16 +141,10 @@ export class Server {
         case SubEventTypes.SERVER.DEBUG_LOG_TO_FILE:
           this.server.file.logDebugError(event);
           break;
-        // case SubEventTypes.SERVER.START:
-        //   this.createServer();
-        //   break;
-        // case SubEventTypes.SERVER.LISTEN:
-        //   console.log('Server listen event');
-        //   this.getPid();
-        //   break;
         case SubEventTypes.SERVER.KILLED:
           this.stats.server.webHandle.isAlive = false;
           this.eV.handleError(SubEventTypes.ERROR.FATAL, "Server killed", MainEventTypes.SERVER, new Error("Server killed"));
+          break;
         case SubEventTypes.SERVER.START:
           console.log("Server start event");
           this.createServer();
@@ -170,7 +163,14 @@ export class Server {
         case SubEventTypes.SERVER.RCON_CONNECT:
           try {
             this.rconConnect().then(() => {
-              this.sendRconCommand('info').then((response) => {
+              this.rconGetStats().then(() => {
+                const newEvent: IBaseEvent = {
+                  subType: SubEventTypes.BASIC.STATS,
+                  message: `RCON connected`,
+                  success: true,
+                };
+                this.eV.emit(MainEventTypes.BASIC, newEvent);
+                this.stats.updateLastUpdates("server", "rconConnect", true);
               });
             });
           } catch (error) {
@@ -188,7 +188,7 @@ export class Server {
     });
   }
   async rconConnect(): Promise<void> {
-    this.stats.global.lastUpdates = { ...this.stats.global.lastUpdates, "rconConnect": Date.now() };
+    this.stats.updateLastUpdates("server", "rconConnect");
     this.server.rcon = new RconConnection();
     try {
       const RCON_HOSTNAME = this.settings.rcon.host;
@@ -197,16 +197,9 @@ export class Server {
 
       await this.server.rcon.connect(RCON_HOSTNAME, RCON_PORT, RCON_PASSWORD);
       if (!this.server.rcon.connectedWithoutError) throw new Error(`RCON connected with error`);
-      this.settings.rcon.isConnected = true;
-      const newEvent: IBaseEvent = {
-        subType: SubEventTypes.BASIC.STATS,
-        message: `RCON connected`,
-        success: true,
-      };
-      this.eV.emit(MainEventTypes.BASIC, newEvent);
-      this.rconGetStats();
+      this.stats.global.rcon.isConnected = true;
     } catch (error: any) {
-      this.settings.rcon.isConnected = false;
+      this.stats.global.rcon.isConnected = false;
       this.rconDisconnect();
       const newEvent: IBaseEvent = {
         subType: SubEventTypes.BASIC.STATS,
@@ -218,26 +211,27 @@ export class Server {
   }
 
   rconDisconnect() {
-    this.stats.global.lastUpdates = { ...this.stats.global.lastUpdates, "rconDisconnect": Date.now() };
+    this.stats.updateLastUpdates("server", "rconDisconnect");
     if (this.server.rcon) {
       this.server.rcon.client.resetAndDestroy();
-      this.settings.rcon.isConnected = false;
+      this.stats.global.rcon.isConnected = false;
       const newEvent: IBaseEvent = {
         subType: SubEventTypes.BASIC.STATS,
         message: `RCON`,
         success: false,
       };
       this.eV.emit(MainEventTypes.BASIC, newEvent);
+      this.stats.updateLastUpdates("server", "rconDisconnect", true);
     }
   }
 
   async rconGetStats(force: boolean = false): Promise<void> {
-    if (!this.settings.rcon.isConnected) return this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.STATS, message: `RCON not connected`, success: false });
-    if (force || !this.stats.global.lastUpdates.rconGetStatsInfo || (Date.now() - this.stats.global.lastUpdates.rconGetStatsInfo) > 60000) {
+    if (!this.stats.global.rcon.isConnected) return this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.STATS, message: `RCON not connected`, success: false });
+    if (force || !this.stats.server.lastUpdates.rconGetStatsInfo.last || (Date.now() - this.stats.server.lastUpdates.rconGetStatsInfo.last) > 60000) {
       try {
         const info = await this.sendRconCommand('Info');
         if (!info) throw new Error(`No info from rcon`);
-        this.stats.global.lastUpdates = { ...this.stats.global.lastUpdates, "rconGetStatsInfo": Date.now() };
+        this.stats.updateLastUpdates("server", "rconGetStatsInfo");
         this.stats.global.rcon.info = splitInfo(info);
         const rconInfoEvent: IBaseEvent = {
           subType: SubEventTypes.BASIC.STATS,
@@ -245,31 +239,33 @@ export class Server {
           success: true,
         };
         this.eV.emit(MainEventTypes.BASIC, rconInfoEvent);
+        this.stats.updateLastUpdates("server", "rconGetStatsInfo", true);
       } catch (error) {
         this.stats.global.rcon.info = { name: "NaN", ver: "NaN" };
         this.eV.handleError(SubEventTypes.ERROR.INFO, `RCON Info`, MainEventTypes.STATS, new Error(`rconGetStatsInfo failed`), error);
       };
     }
-    if (!this.stats.global.lastUpdates.rconGetStatsShowPlayers || (Date.now() - this.stats.global.lastUpdates.rconGetStatsShowPlayers) > 5000) {
+    if (!this.stats.server.lastUpdates.rconGetStatsPlayers.last || (Date.now() - this.stats.server.lastUpdates.rconGetStatsPlayers.last) > 5000) {
       try {
         const players = await this.sendRconCommand('ShowPlayers');
         if (!players) throw new Error(`No players from rcon`);
-        this.stats.global.lastUpdates = { ...this.stats.global.lastUpdates, "rconGetStatsShowPlayers": Date.now() };
+        this.stats.updateLastUpdates("server", "rconGetStatsPlayers");
         this.stats.global.rcon.players = parsePlayers(players);
         const rconPlayersEvent: IBaseEvent = {
           subType: SubEventTypes.BASIC.STATS,
-          message: `rconPlayers updated ${this.stats.global.lastUpdates.rconGetStatsShowPlayers}`,
+          message: `rconPlayers updated ${this.stats.global.lastUpdates.rconGetStatsPlayers}`,
           success: true,
         };
-        this.eV.emit(MainEventTypes.STATS, rconPlayersEvent);
+        this.eV.emit(MainEventTypes.BASIC, rconPlayersEvent);
+        this.stats.updateLastUpdates("server", "rconGetStatsPlayers", true);
       } catch (error) {
         this.stats.global.rcon.players = [{ name: "NaN", playeruid: "NaN", steamid: "NaN" }];
-        this.eV.handleError(SubEventTypes.ERROR.INFO, `RCON ShowPlayers`, MainEventTypes.STATS, new Error("rconGetStatsShowPlayers failed"), error);
+        this.eV.handleError(SubEventTypes.ERROR.INFO, `RCON ShowPlayers`, MainEventTypes.STATS, new Error("rconGetStatsPlayers failed"), error);
       }
     }
   }
   async sendRconCommand(command: string): Promise<string | undefined> {
-    if (this.server.rcon && this.settings.rcon.isConnected) {
+    if (this.server.rcon && this.stats.global.rcon.isConnected) {
       try {
         // Ensure RCON connection if not open? rconConnection.connect();
         const response = await this.server.rcon.exec(command);
@@ -279,13 +275,13 @@ export class Server {
         // Return an error message
       }
     } else {
-      this.eV.handleError(SubEventTypes.ERROR.INFO, `RCON`, MainEventTypes.STATS, new Error("RCON not connected"), { isConnected: this.settings.rcon.isConnected });
+      this.eV.handleError(SubEventTypes.ERROR.INFO, `RCON`, MainEventTypes.STATS, new Error("RCON not connected"), { isConnected: this.stats.global.rcon.isConnected });
     }
+    return undefined;
   }
 
 private wsToMyWs(client: WebSocket, request: IncomingMessage): MyWebSocket {
   let ws: MyWebSocket = client as unknown as MyWebSocket;
-  let success = false;
   if (
     typeof ws.id !== 'string' ||
     typeof ws.ip !== 'string' ||
@@ -306,10 +302,8 @@ private wsToMyWs(client: WebSocket, request: IncomingMessage): MyWebSocket {
       if (typeof ws.id !== 'string') throw new Error(`invalid id ( ${ws.id} )`);
       if (typeof ws.ip !== 'string') throw new Error(`invalid ip ( ${ws.ip} )`);
       if (typeof ws.type !== 'number') throw new Error(`invalid type ( ${ws.type} )`);
-      success = true;
       return ws as MyWebSocket;
     } catch (error) {
-      success = false;
       // Erstellen Sie ein neues Error-Objekt, um den Stacktrace zu erfassen
       const errorWithStack = error instanceof Error ? new Error(`Error in wsToMyWs: ${error.message}`) : new Error(`Unexpected error: ${error}`);
       errorWithStack.stack = error instanceof Error ? error.stack : ''; // Übernehmen Sie den Stacktrace des ursprünglichen Fehlers
@@ -358,6 +352,8 @@ private wsToMyWs(client: WebSocket, request: IncomingMessage): MyWebSocket {
   }
 
   public async createServer(): Promise<void> {
+    this.stats.updateLastUpdates("main", "init", true);
+    this.stats.updateLastUpdates("server", "createServer");
     this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.SERVER, message: 'Start Server ...', success: true });
     const _serverCert = createServer({
       cert: readFileSync(this.settings.server.certPath),
@@ -382,10 +378,8 @@ private wsToMyWs(client: WebSocket, request: IncomingMessage): MyWebSocket {
 
     try {
       _serverCert.listen(this.settings.server.streamServerPort, this.settings.server.ip, () => {
-        // console.log(this.server.web.eventNames());
-        // console.log(`HTTPS server ${this.settings.server.ip} listening on ${this.settings.server.streamServerPort}`);
-        this.getPid();
-
+        this.stats.updateLastUpdates("server", "createServer", true);
+        this.startPidWatcher();
         this.stats.server.webHandle.isAlive = true;
         this.eV.emit(MainEventTypes.BASIC, {
           subType: SubEventTypes.BASIC.SERVER,
@@ -412,15 +406,16 @@ private wsToMyWs(client: WebSocket, request: IncomingMessage): MyWebSocket {
       this.eV.handleError(SubEventTypes.ERROR.FATAL, `listen | ERROR`, MainEventTypes.SERVER, new Error("Error creating server"), error);
     }
   }
-  private async updatePid() {
+  private async updatePid(): Promise<void> {
+    this.stats.updateLastUpdates("server", "updatePid");
     try {
       const data = await readFile(this.settings.pid.file, 'utf-8' as BufferEncoding);
       if (!data || !(data.length > 0)) throw `No data in pid file: ${this.settings.pid.file}`;
-      this.settings.pid.fileExists = true;
+      this.stats.global.pid.fileExists = true;
       this.settings.pid.pid = parseInt(data, 10)
 
-      if (!this.settings.pid.fileExists || !this.settings.pid.pid || typeof this.settings.pid.pid !== 'number' || !(this.settings.pid.pid > 0)) throw new Error(`updatePid | pid: ${this.settings.pid.pid}`);
-      this.settings.pid.fileReadable = true;
+      if (!this.stats.global.pid.fileExists || !this.settings.pid.pid || typeof this.settings.pid.pid !== 'number' || !(this.settings.pid.pid > 0)) throw new Error(`updatePid | pid: ${this.settings.pid.pid}`);
+      this.stats.global.pid.fileReadable = true;
       const pidEvent: IBaseEvent = {
         subType: SubEventTypes.MAIN.PID_AVAILABLE, // Define an appropriate subType
         message: `updatePid | pid: ${this.settings.pid.pid}`,
@@ -433,6 +428,7 @@ private wsToMyWs(client: WebSocket, request: IncomingMessage): MyWebSocket {
         success: true,
       };
       this.eV.emit(MainEventTypes.BASIC, newEvent);
+      this.stats.updateLastUpdates("server", "updatePid", true);
       // ... restliche Logik zum Verarbeiten der neuen PID
     } catch (error) {
       const pidEvent: IBaseEvent = {
@@ -447,20 +443,20 @@ private wsToMyWs(client: WebSocket, request: IncomingMessage): MyWebSocket {
         success: false,
       };
       this.eV.emit(MainEventTypes.BASIC, newEvent);
-      this.settings.pid.fileReadable = false;
+      this.stats.global.pid.fileReadable = false;
       this.settings.pid.pid = "NaN";
-      this.settings.pid.processFound = false;
-      this.eV.handleError(SubEventTypes.ERROR.INFO, "updatePid | ERROR", MainEventTypes.STATS, new Error(`pidFileExists: ${this.settings.pid.fileExists}, pid file readable: ${this.settings.pid.fileReadable}, pid: ${this.settings.pid.pid}, SI pid: ${this.stats.global.si.pid}`), error);
+      this.stats.global.pid.processFound = false;
+      this.eV.handleError(SubEventTypes.ERROR.INFO, "updatePid | ERROR", MainEventTypes.STATS, new Error(`pidFileExists: ${this.stats.global.pid.fileExists}, pid file readable: ${this.stats.global.pid.fileReadable}, pid: ${this.settings.pid.pid}, SI pid: ${this.stats.global.si.pid}`), error);
     }
   }
 
-  public async getPid(): Promise<void> {
-    this.stats.global.lastUpdates = { ...this.stats.global.lastUpdates, "getPid": Date.now() };
+  public async startPidWatcher(): Promise<void> {
+    this.stats.updateLastUpdates("server", "startPidWatcher");
     this.updatePid().then(() => {
       this.server.pidWatcher = fs.watch(this.settings.pid.file, (eventType, file) => {
         this.eV.emit(MainEventTypes.BASIC, {
           subType: SubEventTypes.BASIC.STATS,
-          message: `getPid | eventType: ${eventType}, file: ${file}`,
+          message: `startPidWatcher | eventType: ${eventType}, file: ${file}`,
           success: true,
         });
         if (eventType === 'change') {
@@ -468,9 +464,10 @@ private wsToMyWs(client: WebSocket, request: IncomingMessage): MyWebSocket {
         }
       });
     }).catch((error) => {
-      this.eV.handleError(SubEventTypes.ERROR.FATAL, "getPid", MainEventTypes.STATS, new Error(`getPid | pidFileExists: ${this.settings.pid.fileExists}, pid file readable: ${this.settings.pid.fileReadable}, pid: ${this.settings.pid.pid}, SI pid: ${this.stats.global.si.pid}`), error);
-      this.settings.pid.fileReadable = false;
-      this.settings.pid.fileExists = false;
+      this.stats.updateLastUpdates("server", "startPidWatcher");
+      this.eV.handleError(SubEventTypes.ERROR.FATAL, "startPidWatcher", MainEventTypes.STATS, new Error(`startPidWatcher | pidFileExists: ${this.stats.global.pid.fileExists}, pid file readable: ${this.stats.global.pid.fileReadable}, pid: ${this.settings.pid.pid}, SI pid: ${this.stats.global.si.pid}`), error);
+      this.stats.global.pid.fileReadable = false;
+      this.stats.global.pid.fileExists = false;
       this.settings.pid.pid = "NaN";
     });
   }
@@ -483,10 +480,10 @@ private wsToMyWs(client: WebSocket, request: IncomingMessage): MyWebSocket {
     this.eV.emitOnce(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.STATS, message: `intervalStart | Interval started, idle time: ${this.stats.global.intvalStats.idleEnd - this.stats.global.intvalStats.idleStart}ms.`, success: true, });
     // console.log(`intervalStart: Interval started, idle time: ${this.intvalStats.idleEnd - this.intvalStats.idleStart}ms.`);
     this.server.statsIntval = setInterval(() => {
-      this.eV.emitOnce(MainEventTypes.STATS, {
+      this.eV.emit(MainEventTypes.STATS, {
         subType: SubEventTypes.STATS.UPDATE_ALL
       });
-      this.eV.emitOnce(MainEventTypes.CLIENTS, {
+      this.eV.emit(MainEventTypes.CLIENTS, {
         subType: SubEventTypes.CLIENTS.UPDATE_ALL_STATS
       });
       // this.clients.handleClientsUpdateStats();
