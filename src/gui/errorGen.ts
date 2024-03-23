@@ -18,18 +18,14 @@ export class ErrorTable {
   spacing: number;
   lastErrors: any[];
   active: boolean = false;
-  width: number;
-  height: number;
   constructor() {
-    this.width = statsContainer.gui.selfStats.width;
-    this.height = statsContainer.gui.selfStats.height;
     this.errorLogBox = new Box({
       id: "ErrorLog",
       draggable: false,
       visible: false,
       x: 1,
       y: 1,
-      width: (this.width - 2),
+      width: (statsContainer.gui.selfStats.width - 2),
       height: 10,
       style: {
         label: "Error Log",
@@ -44,8 +40,8 @@ export class ErrorTable {
       visible: false,
       x: 1, // Position to the right of your ErrorLog 
       y: this.errorLogBox.content.getViewedPageHeight() + 1,
-      width: (this.width - 2),
-      height: this.height - this.errorLogBox.content.getViewedPageHeight() - 2,
+      width: (statsContainer.gui.selfStats.width - 2),
+      height: statsContainer.gui.selfStats.height - this.errorLogBox.content.getViewedPageHeight() - 2,
       style: {
         label: "Error Details",
         color: "cyan",
@@ -53,8 +49,8 @@ export class ErrorTable {
       }
     });
     this.detailBox.hide(); // Initially hidden
-    this.errorTable = new InPageWidgetBuilder((this.width - 4));
-    this.detailedErrorTable = new InPageWidgetBuilder((this.width - 4));
+    this.errorTable = new InPageWidgetBuilder((statsContainer.gui.selfStats.width - 4));
+    this.detailedErrorTable = new InPageWidgetBuilder((statsContainer.gui.selfStats.width - 4));
     this.selectedRow = 0;
     this.errorTab = [];
     this.header = [];
@@ -69,7 +65,7 @@ export class ErrorTable {
   setupErrorLogListeners(): void {
     // this.errorLogBox.on("resize", () => {
     //   this.detailBox.absoluteValues.y = this.errorLogBox.content.getViewedPageHeight() + 1;
-    //   this.detailBox.absoluteValues.height = this.height - this.errorLogBox.content.getViewedPageHeight() - 2;
+    //   this.detailBox.absoluteValues.height = statsContainer.gui.selfStats.height - this.errorLogBox.content.getViewedPageHeight() - 2;
     //   console.info(`ErrorLog resize: ${this.errorLogBox.content.getViewedPageHeight()} | ${this.detailBox.content.getViewedPageHeight()}`);
     // });
     this.errorLogBox.on("keypress", (key: KeyListenerArgs) => {
@@ -207,14 +203,14 @@ export class ErrorTable {
   }
   public displayErrorLog(): void {
     if (!this.active) {
-      // const p = new ErrorTable(this.gui.Screen.width, this.gui.Screen.height);
+      // const p = new ErrorTable(statsContainer.gui.selfStats.width, statsContainer.gui.selfStats.height);
       this.selectedRow = 0;
       // this.errorLogBox.absoluteValues.width = this.gui.Terminal.columns - 2;
       this.errorLogBox.content.clear();
       this.printError();
       this.detailBox.absoluteValues.y = this.errorLogBox.content.getViewedPageHeight() + 3;
-      this.detailBox.absoluteValues.height = this.height - this.errorLogBox.content.getViewedPageHeight() - 2;
-      console.info(`ErrorLog resize: ${this.errorLogBox.content.getViewedPageHeight()} | ${this.detailBox.content.getViewedPageHeight()}`);
+      this.detailBox.absoluteValues.height = statsContainer.gui.selfStats.height - this.errorLogBox.content.getViewedPageHeight() - 2;
+      // console.info(`ErrorLog resize: ${this.errorLogBox.content.getViewedPageHeight()} | ${this.detailBox.content.getViewedPageHeight()}`);
 
       this.errorLogBox.show();
       this.errorLogBox.focus();

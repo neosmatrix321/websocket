@@ -15,11 +15,7 @@ export class displayLastUpdates {
   maxSizes: number[] = [10, 25, 15, 10, 5, 5]	;
   spacing: number;
   active: boolean = false;
-  protected width: number;
-  protected height: number;
   constructor() {
-    this.width = statsContainer.gui.selfStats.width;
-    this.height = statsContainer.gui.selfStats.height;
     this.lastUpdateBox = new Box({
       id: "LastUpdates",
       draggable: false,
@@ -27,7 +23,7 @@ export class displayLastUpdates {
       x: 1,
       y: 1,
       width: 90,
-      height: (this.height - 2),
+      height: (statsContainer.gui.selfStats.height - 2),
       style: {
         label: "Last Updates",
         color: "blackBright",
@@ -35,7 +31,7 @@ export class displayLastUpdates {
       }
     });
     this.lastUpdateBox.hide();
-    this.lastUpdatesTable = new InPageWidgetBuilder((this.width - 4));
+    this.lastUpdatesTable = new InPageWidgetBuilder((statsContainer.gui.selfStats.width - 4));
     this.lastUpdatesTab = statsContainer.getFormatedLastUpdates();
     ;
     this.spacing = 2;

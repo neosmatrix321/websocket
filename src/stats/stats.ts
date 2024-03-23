@@ -10,6 +10,7 @@ import { MyWebSocket } from '../clients/clientInstance';
 import { settingsWrapper } from '../settings/settingsInstance';
 import { statsWrapper } from "../stats/statsInstance";
 import { settingsContainer, statsContainer } from '../global/containerWrapper';
+import { calcDurationDetailed } from '../global/functions';
 
 @injectable()
 export class Stats {
@@ -82,12 +83,10 @@ export class Stats {
       const cpu = cpuValueFormat.format(widgetStats.cpu / 100)
       const memoryValueFormat = Intl.NumberFormat('en-US', { notation: "compact", style: 'unit', unit: 'megabyte', unitDisplay: 'narrow', maximumFractionDigits: 0 });
       const memory = memoryValueFormat.format(widgetStats.memory / 1024 / 1024);
-      const ctime = Number((widgetStats.ctime / 1000).toFixed(0));	
-      widgetStats.ctime = ctime;
-      const elapsed = Number((widgetStats.elapsed / 1000).toFixed(0));
-      widgetStats.elapsed = elapsed;
-      const formattedTime =  new Date(widgetStats.timestamp).toLocaleTimeString();
-      this.stats.global.widget = { ...widgetStats, formattedTime: formattedTime, cpuLoad: cpu, memoryFormated: memory};
+      const ctimeFormated = new Date(widgetStats.ctime).toISOString().substr(11, 8);
+      const elapsedFormated = new Date(widgetStats.elapsed).toISOString().substr(11, 8);
+      const formattedTime = calcDurationDetailed(widgetStats.timestamp);
+      this.stats.global.widget = { ...widgetStats, formattedTime: formattedTime, cpuLoad: cpu, memoryFormated: memory, elapsedFormated: elapsedFormated, ctimeFormated: ctimeFormated };
       this.stats.updateLastUpdates("global", "widgetStats", true);
     } catch (error) {
       this.eV.handleError(SubEventTypes.ERROR.INFO, `getWidgetStats`, MainEventTypes.ERROR, new Error(`Error`), error);
@@ -215,6 +214,7 @@ import { ClientType } from '../clients/clientInstance';
 import { globalStats } from './statsInstance';
 import { settings } from '../global/containerWrapper';
 import { StatsType } from '../../.not_used/test1 copy 4';
+import { calcDurationDetailed } from '../global/functions';
 
 @injectable()
 export class StatsMonitor {

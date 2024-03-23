@@ -83,21 +83,23 @@ export class consoleGui {
         fitHeight: true, // Fit height of the console
       },
     });
+    this.gui.refresh();
+    console.info(`GUI started: ${statsContainer.gui.selfStats.width}x${statsContainer.gui.selfStats.height}`);
+    this.stats.gui.selfStats.width = statsContainer.gui.selfStats.width && statsContainer.gui.selfStats.width > 0 ? statsContainer.gui.selfStats.width : 110;
+    this.stats.gui.selfStats.height = statsContainer.gui.selfStats.height && statsContainer.gui.selfStats.height > 0 ? statsContainer.gui.selfStats.height : 30;
     this.footer = new Box({
       id: "footer",
       x: 2,
-      y: this.gui.Screen.height - 2,
-      width: 103,
+      y: this.stats.gui.selfStats.height - 1,
+      width: this.gui.Screen.width - 4,
       height: 1,
     });
     this.footer.show();
-    this.stats.gui.selfStats.width = this.gui.Screen.width;
-    this.stats.gui.selfStats.height = this.gui.Screen.height;
     this.guiIntVat = setInterval(async () => {
     }, 1000);
     clearInterval(this.guiIntVat);
 
-    this.globalStats = new displayGlobalStats(this.gui.Screen.width, this.gui.Screen.height);
+    this.globalStats = new displayGlobalStats(this.gui);
     this.lastUpdates = new displayLastUpdates();
     this.errorLog = new ErrorTable(); // Use the width of your 'ErrorLog' Box
   }
@@ -105,6 +107,7 @@ export class consoleGui {
     if (!this.gui.Screen.Terminal.isTTY) return console.info('No TTY detected, skipping console-gui-tools');
     this.setupEventListeners();
     this.drawGUI();
+    this.printFooter();
     this.stats.updateLastUpdates("gui", "start", true);
 
     this.guiIntVat = setInterval(async () => {
@@ -120,18 +123,47 @@ export class consoleGui {
     this.drawGUI();
   }
 
-  private toggleIdleMode() {
+  private toggleIdleMode(forceHalt: boolean = false) {
     if (this.stats.gui.selfStats.isPainting) {
       this.stats.gui.selfStats.isPainting = false;
-      // clearInterval(this.guiIntVat);
+      if (forceHalt) clearInterval(this.guiIntVat);
     } else {
       this.stats.gui.selfStats.isPainting = true;
-      // this.guiIntVat = setInterval(async () => {
-      //   this.intervalRunner();
-      // }, this.settings.gui.period);
+      if (forceHalt) this.guiIntVat = setInterval(async () => {
+        this.intervalRunner();
+      }, this.settings.gui.period);
     }
     this.globalStats.printGlobalStats();
     this.globalStats.drawConsole();
+  }
+
+  private resizeDefaults(reset: boolean = false) {
+    this.errorLog.errorLogBox.hide();
+    this.gui.Screen.update();
+    this.gui.refresh();
+    this.stats.gui.selfStats.width = this.gui.Screen.width;
+    this.stats.gui.selfStats.height = this.gui.Screen.height;
+    this.globalStats.statsWidgets.header.box.absoluteValues.width = this.gui.Screen.width - 7;
+    if (reset) {
+      this.globalStats.statsWidgets.widget.box.absoluteValues.x = this.globalStats.defaults.widget[0];
+      this.globalStats.statsWidgets.widget.box.absoluteValues.y = this.globalStats.defaults.widget[1];
+      this.globalStats.statsWidgets.pid.box.absoluteValues.x = this.globalStats.defaults.pid[0];
+      this.globalStats.statsWidgets.pid.box.absoluteValues.y = this.globalStats.defaults.pid[1];
+      this.globalStats.statsWidgets.web.box.absoluteValues.x = this.globalStats.defaults.web[0];
+      this.globalStats.statsWidgets.web.box.absoluteValues.y = this.globalStats.defaults.web[1];
+      this.globalStats.statsWidgets.server.box.absoluteValues.x = this.globalStats.defaults.server[0];
+      this.globalStats.statsWidgets.server.box.absoluteValues.y = this.globalStats.defaults.server[1];
+    }
+    this.globalStats.statsWidgets.console.box.absoluteValues.y = this.globalStats.defaults.console[1];
+    this.globalStats.statsWidgets.console.box.absoluteValues.width = this.globalStats.defaults.console[2];
+    this.globalStats.statsWidgets.console.box.absoluteValues.height = this.globalStats.defaults.console[3];
+    this.footer.absoluteValues.width = this.gui.Screen.width - 4;
+    this.footer.absoluteValues.y = this.stats.gui.selfStats.height - 2;
+    this.globalStats.printGlobalStats();
+    this.globalStats.drawConsole();
+    
+    this.printFooter();
+    this.gui.refresh();
   }
 
   private setupEventListeners() {
@@ -158,18 +190,8 @@ export class consoleGui {
       this.closeApp();
     });
     this.gui.on("resize", () => {
-      this.errorLog.errorLogBox.hide();
-      this.gui.Screen.update();
-      this.stats.gui.selfStats.width = this.gui.Screen.width;
-      this.stats.gui.selfStats.height = this.gui.Screen.height;
-
-      this.globalStats.statsWidgets.header.box.absoluteValues.width = this.gui.Screen.width;
-      // console.info(`GUI resized to: ${this.gui.Screen.width}x${this.gui.Screen.height}`);
-      this.globalStats.printGlobalStats();
-      this.globalStats.drawConsole();
-      
-      this.printFooter();
-      this.gui.refresh();
+      this.resizeDefaults();
+      // console.info(`GUI resized to: ${statsContainer.gui.selfStats.width}x${statsContainer.gui.selfStats.height}`);
     });
     // this.gui.Screen.update();
     // And manage the keypress event from the library
@@ -180,25 +202,14 @@ export class consoleGui {
         case "o": {
           if (!this.gui.popupCollection["logPopup"]) {
             this.gui.showLogPopup();
-            // this.gui.registerPopup("logPopup");
-            // this.gui.popupCollection.pop("logPopup");
+            this.gui.setLogPageSize(100);
+            // this.gui.Screen.Terminal. = this.gui.Screen.height - 4;
+            
           }
-          //  else {
-          //   console.info(`unregisterPopup`);
-          //   this.gui.unregisterPopup("logPopup");
-          // }
-          // this.eV.handleError(SubEventTypes.ERROR.WARNING, "showLogPopup", MainEventTypes.GUI, new Error(`from ErrorLog`), this.gui.popupCollection["logPopup"]);
-          // if (!this.gui.popupCollection.includes("showLogPopup")) {
-          //   const key = this.gui.popupCollection.unregisterPopup();
-          //   console.log(`Unregistered popup: ${key}`);
-          // } else {
-          // console.log(`Unregistered popup:`, key.name);
-          // this.eV.handleError(SubEventTypes.ERROR.WARNING, "showLogPopup", MainEventTypes.GUI, new Error(`from ErrorLog`), index);
-          // this.gui.popupCollection.push("logPopup");
           break;
         }
         case "space": {
-          this.toggleIdleMode();
+          this.toggleIdleMode(true);
           break;
         }
         case "s": {
@@ -232,8 +243,11 @@ export class consoleGui {
               if (answer === "Yes") {
                 if (this.guiIntVat.hasRef()) this.guiIntVat.unref();
                 this.settings.gui.period = _period;
-                // clearInterval(this.guiIntVat);
-
+                clearInterval(this.guiIntVat);
+                this.guiIntVat = setInterval(async () => {
+                  this.intervalRunner();
+                }, this.settings.gui.period);
+                // this.guiIntVat.ref();
                 this.gui.info(`NEW PERIOD: ${this.settings.gui.period}`)
                 // this.guiIntVat.refresh();
                 //  = setInterval(async () => {
@@ -242,7 +256,7 @@ export class consoleGui {
 
                 // }, this.settings.gui.period);
                 // this.guiIntVat.
-                if (this.stats.gui.selfStats.isPainting) this.guiIntVat.refresh();
+                // if (this.stats.gui.selfStats.isPainting) this.guiIntVat.refresh();
                 // this.guiIntVat.ref();
               } else if (answer === "?") {
                 this.gui.info("Choose ok to confirm period");
@@ -285,28 +299,11 @@ export class consoleGui {
           break;
         }
         case "f5": {
-          this.globalStats.printGlobalStats();
-          this.globalStats.drawConsole();
-
-          this.gui.refresh();
+          this.resizeDefaults();
           break;
         }
         case "f12": {
-          this.errorLog.errorLogBox.hide();
-          this.gui.Screen.update();
-          this.globalStats.statsWidgets.widget.box.absoluteValues.x = this.globalStats.defaults.widget[0];
-          this.globalStats.statsWidgets.widget.box.absoluteValues.y = this.globalStats.defaults.widget[1];
-          this.globalStats.statsWidgets.pid.box.absoluteValues.x = this.globalStats.defaults.pid[0];
-          this.globalStats.statsWidgets.pid.box.absoluteValues.y = this.globalStats.defaults.pid[1];
-          this.globalStats.statsWidgets.web.box.absoluteValues.x = this.globalStats.defaults.web[0];
-          this.globalStats.statsWidgets.web.box.absoluteValues.y = this.globalStats.defaults.web[1];
-          this.globalStats.statsWidgets.server.box.absoluteValues.x = this.globalStats.defaults.server[0];
-          this.globalStats.statsWidgets.server.box.absoluteValues.y = this.globalStats.defaults.server[1];
-
-          this.globalStats.printGlobalStats();
-          this.globalStats.drawConsole();
-
-          this.gui.refresh();
+          this.resizeDefaults(true);
           break;
         }
         case "f2": {
@@ -433,6 +430,5 @@ export class consoleGui {
         }
       }
     }
-    this.printFooter();
   }
 }

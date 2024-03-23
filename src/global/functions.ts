@@ -52,33 +52,50 @@ export function calcDuration(timestamp: number): string {
 }
 
 export function calcDurationDetailed(duration: number): string {
-  // console.info(`duration: ${duration}`);
   if (isNaN(duration) || !(duration > 1)) {
     return "NaN";
   }
-  const milliseconds = Math.floor((duration % 1) * 1000);
+  const milliseconds = Math.floor((duration % 1000));
   const seconds = Math.floor((duration / 1000) % 60);
   const minutes = Math.floor((duration / (1000 * 60)) % 60);
   const hours = Math.floor((duration / (1000 * 60 * 60)) % 24);
   const days = Math.floor(duration / (1000 * 60 * 60 * 24));
 
   let durationSTR = '';
-  if (days > 0) {
-    durationSTR += `${days}d `;
+  if (days > 0 && days < 365) {
+    durationSTR += `${days.toString().padStart(1, '0')}d `;
   }
   if (hours > 0) {
-    durationSTR += `${hours}h `;
+    durationSTR += `${hours.toString().padStart(2, '0')}h `;
   }
   if (minutes > 0) {
-    durationSTR += `${minutes}m `;
+    durationSTR += `${minutes.toString().padStart(2, '0')}m `;
   }
-  if (seconds > 0) {
-    durationSTR += `${seconds}s `;
+  if (seconds >= 0) {
+    durationSTR += `${seconds.toString().padStart(2, '0')}s `;
   }
-  if (milliseconds > 0) {
-    durationSTR += `${milliseconds}ms`;
+  if (milliseconds >= 0) {
+    durationSTR += `${milliseconds.toString().padStart(3, '0')}ms`;
   }
   return durationSTR.trim();
+}
+
+export function calcTimeDetailed(duration: number): string {
+  if (isNaN(duration) || !(duration > 1)) {
+    return "NaN";
+  }
+  const milliseconds = Math.floor((duration % 1000));
+  const seconds = Math.floor((duration / 1000) % 60);
+  const minutes = Math.floor((duration / (1000 * 60)) % 60);
+  const hours = Math.floor((duration / (1000 * 60 * 60)) % 24);
+
+  let durationSTR = '';
+  durationSTR += `${hours.toString().padStart(2, '0')}:`;
+  durationSTR += `${minutes.toString().padStart(2, '0')}:`;
+  durationSTR += `${seconds.toString().padStart(2, '0')}:`;
+  durationSTR += `${milliseconds.toString().padStart(3, '0')}ms`;
+
+  return durationSTR;
 }
 
 export function convertTimestampToTime(timestamp: number): string {

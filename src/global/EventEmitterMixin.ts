@@ -19,7 +19,7 @@ export class EventEmitterMixin {
   private storeEvent(event: string, eventData: any) {
     let key = event;
     let data = eventData;
-
+    // console.info(`EventEmitterMixin.storeEvent: ${key}`);
     if (!this.isValidEvent(key, data)) {
       // Attempt to extract a valid prefix based on MainEventTypes
       for (const mainEventType of Object.values(MainEventTypes)) {
@@ -36,6 +36,8 @@ export class EventEmitterMixin {
       }
     }
     EventEmitterMixin.eventStats.activeEvents++;
+    // console.info(`EventEmitterMixin.storeEvent: ${key}`);
+
     this._events.set(key, data);
   }
   // private createEvent(event: string, ...args: any[]): { customKey: string, customData: IEventTypes } {

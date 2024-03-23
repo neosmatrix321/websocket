@@ -2,7 +2,7 @@
 
 import { injectable } from "inversify";
 import 'reflect-metadata';
-import { convertTimestampToTime, calcDurationDetailed } from '../global/functions';
+import { convertTimestampToTime, calcDurationDetailed, calcTimeDetailed } from '../global/functions';
 import { EventEmitterMixin } from "../global/EventEmitterMixin";
 import { settingsContainer } from "../global/containerWrapper";
 
@@ -22,7 +22,7 @@ interface IIntValStats {
 
 interface IGlobalStats {
   latencyGoogle: string,
-  widget: { cpu: number, memory: number, pid: number, ctime: number, elapsed: number, timestamp: number, formattedTime: string, cpuLoad: string, memoryFormated: string },
+  widget: { cpu: number, memory: number, pid: number, ctime: number, elapsed: number, timestamp: number, formattedTime: string, cpuLoad: string, memoryFormated: string, elapsedFormated: string, ctimeFormated: string, },
   pid: { fileExists: boolean, fileReadable: boolean, processFound: boolean, },
   si: { proc: string, pid: number, cpu: number, mem: number, memFormated: string, },
   pu: { cpu: number, memory: number, pid: number, ctime: number, elapsed: number, timestamp: number, elapsedFormated: string, ctimeFormated: string, cpuFormated: string, memFormated: string, },
@@ -100,7 +100,7 @@ export interface IFormatedLastUpdates extends Array<{ cat: string, function: str
 
 export class globalStats implements IGlobalStats {
   latencyGoogle = "NaN";
-  widget = { cpu: -1, memory: -1, pid: -1, ctime: -1, elapsed: -1, timestamp: -1, formattedTime: "NaN", cpuLoad: "NaN", memoryFormated: "NaN", };
+  widget = { cpu: -1, memory: -1, pid: -1, ctime: -1, elapsed: -1, timestamp: -1, formattedTime: "NaN", cpuLoad: "NaN", memoryFormated: "NaN", elapsedFormated: "NaN", ctimeFormated: "NaN", };
   pid = { fileExists: false, fileReadable: false, processFound: false };
   si = { proc: "NaN", pid: -1, cpu: -1, mem: -1, memFormated: "NaN",};
   pu = { cpu: -1, memory: -1, pid: -1, ctime: -1, elapsed: -1, timestamp: -1, elapsedFormated: "NaN", ctimeFormated: "NaN", cpuFormated: "NaN", memFormated: "NaN", };
@@ -129,7 +129,6 @@ export interface IFormatedStats {
     "ctime": string,
     "CPU load": string,
     "memory usage": string,
-    "timestamp": string,
     "heap memory": string,
     "total heap": string,
     "ErrLog count": number,
@@ -147,11 +146,11 @@ export interface IFormatedStats {
     [key: string]: string | boolean,
   };
   "web": {
-    "web has conn": boolean,
-    "clients alive": number,
-    "client counter": number,
-    "messages sent": number,
-    "IDLE time": string,
+    " IDLE time": string,
+    "  has conn": boolean,
+    "clients <3": number,
+    "clients ##": number,
+    "messages #": number,
     [key: string]: string | boolean | number,
   };
   "server": {
@@ -159,7 +158,13 @@ export interface IFormatedStats {
     "CPU load": string,
     "SI Mem": string,
     "PU Mem": string,
-    [key: string]: string | boolean,
+    [key: string]: string,
+  };
+  "extras": {
+    'localTime': string,
+    'firstHeader': string,
+    'secondHeader': string,
+    [key: string]: string,
   };
   [key: string]: { [key: string]: boolean | string | number } | string | boolean | number;
 }
@@ -260,7 +265,8 @@ export class statsWrapper implements IStatsWrapper {
       return lastUpdatesTab as IFormatedLastUpdates;
     };
     this.getFormatedStats = (): IFormatedStats => {
-      const dur: number = Math.floor(Date.now() - this.global.intvalStats.idleStart);
+      const dur = calcDurationDetailed(Math.floor(Date.now() - this.global.intvalStats.idleStart));
+      const time = calcTimeDetailed(Math.floor(Date.now()));
       const FormatedStats = {
         "header": {
           "address": `${settingsContainer.getSetting('rcon', 'host')}:${settingsContainer.getSetting('server', 'streamServerPort')}`,
@@ -270,11 +276,10 @@ export class statsWrapper implements IStatsWrapper {
         },
         "widget": {
           "refresh rate": this.gui.selfStats.isPainting,  // , guiAlive: `${this.settings.gui.period} ms`)
-          "uptime": `${this.global.widget.elapsed}`,
-          "ctime": `${this.global.widget.ctime}`,
+          "uptime": `${this.global.widget.elapsedFormated}`,
+          "ctime": `${this.global.widget.ctimeFormated}`,
           "CPU load": `${this.global.widget.cpuLoad}`,
           "memory usage": `${this.global.widget.memoryFormated}`,
-          "timestamp": `${this.global.widget.formattedTime}`,
           "heap memory": `${this.global.widgetExtra.memHeap}`,
           "total heap": `${this.global.widgetExtra.memHeapTotal}`,
           "ErrLog count": this.gui.selfStats.capturedErrors,
@@ -291,11 +296,11 @@ export class statsWrapper implements IStatsWrapper {
           "cTime": this.global.pu.ctimeFormated,
         },
         "web": {
-          "web has conn": this.server.webHandle.hasConnection,
-          "clients alive": this.clients.activeClients,
-          "client counter": this.clients.clientsCounter,
-          "messages sent": -1,
-          "IDLE time": `${typeof dur === 'number' && dur > 0 ? calcDurationDetailed(dur) : 'NaN'}`,
+          " IDLE time": `${dur}`,
+          "  has conn": this.server.webHandle.hasConnection,
+          "clients <3": this.clients.activeClients,
+          "clients ##": this.clients.clientsCounter,
+          "messages #": -1,
           //"IDLE start": idleStart,
           //"IDLE end": idleEnd,
         },
@@ -304,6 +309,11 @@ export class statsWrapper implements IStatsWrapper {
           "CPU load": `${this.global.pu.cpuFormated}`,
           "SI Mem": `${this.global.si.memFormated}`,
           "PU Mem": `${this.global.pu.memFormated}`,
+        },
+        "extras": {
+          'localTime': `${time}`,
+          'firstHeader': `This Widget controls:`,
+          'secondHeader': `(insert Palserver name)`,
         },
       };
       return FormatedStats;

@@ -33,8 +33,9 @@ export class Main {
 
   public async start() {
     try {
-      console.info(`Console is TTY: ${process.stdout.isTTY}`)
-      if (process.stdout.isTTY) {
+      const TTYonly = process.argv.includes('--tty') || process.argv.includes('-t') ? true : false;
+      console.info(`Console is TTY: ${process.stdout.isTTY} | TTYonly: ${TTYonly}`)
+      if (!TTYonly && process.stdout.isTTY) {
         const MyGUI = new consoleGui();
         MyGUI.startIfTTY();
         // this.server.createServer();
@@ -64,6 +65,7 @@ export class Main {
           console.log(`${event.subType} event | result: ${event.success} | message: ${event.message}`);
           break;
         default:
+          console.log(`${event.subType} event | result: ${event.success} | message: ${event.message}`);
           this.eV.handleError(SubEventTypes.ERROR.WARNING, "BASIC event", MainEventTypes.ERROR, new Error(`Unknown BASIC event subtype ${event.subType}`), event);
       }
       // console.log(createCustomDebugEvent(event, ...data));
@@ -77,6 +79,7 @@ export class Main {
     this.eV.on(MainEventTypes.ERROR, (errorEvent: IErrorEvent) => {  // FIXME:
       this.eV.emit(MainEventTypes.GUI, { subType: SubEventTypes.GUI.FILL_ERROR_ARRAY, message: errorEvent });
       this.eV.emit(MainEventTypes.SERVER, { subType: SubEventTypes.SERVER.LOG_TO_FILE, message: errorEvent });
+      console.error(`Global ERROR Handler: ${errorEvent}`);
     });
     this.eV.on(MainEventTypes.DEBUG, (errorEvent: IEventTypes) => {
       // console.log(errorEvent);
@@ -120,15 +123,16 @@ export class Main {
         break;
       case SubEventTypes.MAIN.PID_UNAVAILABLE:
         // TODO: let interval run and send dummy data
-        const pidUnEvent: IBaseEvent = {
-          subType: SubEventTypes.SERVER.RCON_DISCONNECT,
-          message: `disconnect to rcon`,
-          success: true,
-        };
-        this.eV.emit(MainEventTypes.STATS, pidUnEvent);
+        // const pidUnEvent: IBaseEvent = {
+        //   subType: SubEventTypes.SERVER.RCON_DISCONNECT,
+        //   message: `disconnect to rcon`,
+        //   success: true,
+        // };
+        // this.eV.emit(MainEventTypes.STATS, pidUnEvent);
+        return;
         break;
       case SubEventTypes.MAIN.PROCESS_FOUND:
-        this.eV.emit(MainEventTypes.SERVER, { subType: SubEventTypes.SERVER.RCON_CONNECT, message: `connect to rcon`, success: true });
+        // this.eV.emit(MainEventTypes.SERVER, { subType: SubEventTypes.SERVER.RCON_CONNECT, message: `connect to rcon`, success: true });
         this.eV.emit(MainEventTypes.SERVER, { subType: SubEventTypes.SERVER.START_INTERVAL, message: 'Start interval', success: true });
         break;
       case SubEventTypes.MAIN.PRINT_DEBUG:
