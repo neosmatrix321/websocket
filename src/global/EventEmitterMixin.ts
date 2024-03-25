@@ -22,39 +22,18 @@ export class EventEmitterMixin {
     // console.info(`EventEmitterMixin.storeEvent: ${key}`);
     if (!this.isValidEvent(key, data)) {
       // Attempt to extract a valid prefix based on MainEventTypes
-      for (const mainEventType of Object.values(MainEventTypes)) {
-        if (key.startsWith(mainEventType)) {
-          key = mainEventType;  // Update the key
-          break;
-        }
-      }
-
-      if (!this.isValidEvent(key, data)) {
-        // Still invalid, handle as an error
-        this.handleError(SubEventTypes.ERROR.WARNING, `EventEmitterMixin.createEvent`, MainEventTypes.EVENT, new Error(`from ${event}`), { ...data });
-        return; // Stop processing 
-      }
+      key = MainEventTypes.ERROR;  // Update the key
     }
     EventEmitterMixin.eventStats.activeEvents++;
-    // console.info(`EventEmitterMixin.storeEvent: ${key}`);
-
     this._events.set(key, data);
   }
-  // private createEvent(event: string, ...args: any[]): { customKey: string, customData: IEventTypes } {
-  //   let originalEvent = this._events.get(event);
-  //   if (!originalEvent) {
-  //     this.handleError(SubEventTypes.ERROR.WARNING, `EventEmitterMixin.createEvent`, MainEventTypes.EVENT, new Error(`from ${event}`), { ...args });
-  //   }
-  //   return { customKey: event, customData: { ...args[0] } };
-  // }
-  private isValidEvent(event: string, eventData?: any): boolean {
-    for (const mainEventType of Object.values(MainEventTypes)) {
-      if (event.startsWith(mainEventType)) {
-        return true;
-      }
+
+  private isValidEvent(event: string, eventData?: any): boolean { //  || event !== typeof MainEventTypes
+    if (!event || typeof event !== 'string') {
+      this.handleError(SubEventTypes.ERROR.WARNING, `EventEmitterMixin.isValidEvent`, MainEventTypes.EVENT, new Error(`Invalid event: ${event}`), eventData);
+      return false;
     }
-    this.handleError(SubEventTypes.ERROR.WARNING, `EventEmitterMixin.isValidEvent`, MainEventTypes.EVENT, new Error(`Invalid event: ${event}`), eventData);
-    return false;
+    return true;
   }
 
   private async emitError(subType: string, message: string, counter: number, mainSource: string, errorEvent: Error, json?: string): Promise<void> {

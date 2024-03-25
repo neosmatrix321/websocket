@@ -4,27 +4,28 @@ import 'reflect-metadata';
 
 import pidusage, { Status } from 'pidusage';
 import si from 'systeminformation';
-import { IBaseEvent, IClientsEvent, IStatsEvent, MainEventTypes, SubEventTypes } from "../global/eventInterface";
+import { IBaseEvent, IStatsEvent, MainEventTypes, SubEventTypes } from "../global/eventInterface";
 import mixin, { EventEmitterMixin } from "../global/EventEmitterMixin";
-import { MyWebSocket } from '../clients/clientInstance';
 import { settingsWrapper } from '../settings/settingsInstance';
-import { statsWrapper } from "../stats/statsInstance";
+import { statsWrapper } from "../global/statsInstance";
 import { settingsContainer, statsContainer } from '../global/containerWrapper';
 import { calcDurationDetailed } from '../global/functions';
 
 @injectable()
 export class Stats {
   private eV: EventEmitterMixin = mixin;
+  protected gatherStatsIntval: NodeJS.Timeout = setInterval(() => { }, 10000);
   protected settings: settingsWrapper = settingsContainer;
   protected stats: statsWrapper = statsContainer;
   constructor() {
+    clearInterval(this.gatherStatsIntval);
     this.stats.global.widget.pid = process.pid;
     this.stats.updateLastUpdates("global", "initStats", true);
     // this.updateAllStats();
     this.setupEventHandlers();
   }
 
- 
+
   private setupEventHandlers() {
     this.eV.on(MainEventTypes.STATS, (event: IStatsEvent) => {
       const type = event.subType;
@@ -33,12 +34,12 @@ export class Stats {
         case SubEventTypes.STATS.UPDATE_ALL:
           this.updateAllStats();
           break;
-        // case SubEventTypes.STATS.FORCE_UPDATE_ALL:
-        //   this.forceUpdateAllStats();
-        //   break;
-        // case SubEventTypes.STATS.FORCE_UPDATE_ALL_FOR_ME:
-        //   this.forceUpdateAllStats(event.message);
-        //   break;
+        case SubEventTypes.STATS.START_INTERVAL:
+          this.gatherStatsIntvalToggle('start');
+          break;
+        case SubEventTypes.STATS.STOP_INTERVAL:
+          this.gatherStatsIntvalToggle('stop');
+          break;
         case SubEventTypes.STATS.PRINT_DEBUG:
           // console.log("Stats:");
           this.eV.emit(MainEventTypes.SERVER, { subType: SubEventTypes.SERVER.DEBUG_LOG_TO_FILE, data: this, message: `STATS` });
@@ -58,17 +59,20 @@ export class Stats {
 
   private async updateAllStats(): Promise<void> {
     this.stats.updateLastUpdates("global", "updateAllStats");
-    if (this.stats.global.pid.processFound) {
-      // this.rconGetStats(); // TODO: Fix this
-      Promise.all([this.getSI(), this.getPU(), this.getWidgetStats()]).then(() => {;
-        this.stats.updateLastUpdates("global", "updateAllStats", true);
-      }).catch((error) => {
-        this.eV.handleError(SubEventTypes.ERROR.WARNING, `updateAllStats`, MainEventTypes.STATS, new Error(`Promise updateStats all failed`), error);
-      });
-    }
     const time_diff = Date.now() - this.stats.global.lastUpdates.getLatencyGoogle.last;
     if (!this.stats.global.lastUpdates.getLatencyGoogle.last || time_diff > 5000) {
       this.getLatencyGoogle();
+    }
+    if (this.stats.global.pid.processFound) {
+      // this.rconGetStats(); // TODO: Fix this
+      Promise.all([this.getSI(), this.getPU(), this.getWidgetStats()]).then(() => {
+        ;
+        Promise.resolve();
+        this.stats.updateLastUpdates("global", "updateAllStats", true);
+      }).catch((error) => {
+        Promise.reject();
+        this.eV.handleError(SubEventTypes.ERROR.WARNING, `updateAllStats`, MainEventTypes.STATS, new Error(`Promise updateStats ALL failed`), error);
+      });
     }
     // console.dir(this.settings);
   }
@@ -183,15 +187,15 @@ export class Stats {
         const elapsedFormated = new Date(pidInfo.elapsed).toISOString().substr(11, 8);
         const ctimeFormated = new Date(pidInfo.ctime).toISOString().substr(11, 8);
         this.stats.global.pu = { ...pidInfo, elapsedFormated: elapsedFormated, ctimeFormated: ctimeFormated, cpuFormated: cpuFormated, memFormated: memFormated, }; // Map relevant properties
-        const puEvent: IClientsEvent = {
-          subType: SubEventTypes.CLIENTS.MESSAGE_READY,
-          message: `pidInfo`,
-          success: true,
-          data: this.stats.global.pu,
-          id: "ALL",
-          client: {} as MyWebSocket,
-        };
-        this.eV.emit(MainEventTypes.CLIENTS, puEvent);
+        // const puEvent: IClientsEvent = {
+        //   subType: SubEventTypes.CLIENTS.MESSAGE_READY,
+        //   message: `pidInfo`,
+        //   success: true,
+        //   data: this.stats.global.pu,
+        //   id: "ALL",
+        //   client: {} as MyWebSocket,
+        // };
+        // this.eV.emit(MainEventTypes.CLIENTS, puEvent);
         // const newEvent: IBaseEvent = {
         //   subType: SubEventTypes.BASIC.STATS,
         //   message: `getPU`,
@@ -205,6 +209,28 @@ export class Stats {
       }
     }
   }
+  private gatherStatsIntvalToggle(action: string) {
+    switch (action) {
+      case 'start':
+        this.stats.updateLastUpdates('global', 'gatherStatsIntval', true);
+        this.eV.emitOnce(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.STATS, message: `intervalStart | Interval started, idle time: ${Date.now() - this.stats.global.lastUpdates.gatherStatsIntval.last} ms.`, success: true, });
+        // console.log(`intervalStart: Interval started, idle time: ${this.intvalStats.idleEnd - this.intvalStats.idleStart}ms.`);
+        this.gatherStatsIntval = setInterval(() => {
+          this.updateAllStats();
+          // this.clients.handleClientsUpdateStats();
+        }, 1000);
+        break;
+      case 'stop':
+        this.stats.updateLastUpdates('global', 'gatherStatsIntval');
+        // console.log("intervalStart: no action taken. clientsCounter:");
+        clearInterval(this.gatherStatsIntval);
+        this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.STATS, message: `intervalStop | Interval stopped.`, success: true, });
+        break;
+      default:
+        this.eV.handleError(SubEventTypes.ERROR.WARNING, `gatherStatsIntvalToggle`, MainEventTypes.STATS, new Error(`Unknown status: ${this.stats.global.lastUpdates.gatherStatsIntval.success}`));
+    }
+  }
+
 }
 /*
 import { inject, injectable } from 'inversify';

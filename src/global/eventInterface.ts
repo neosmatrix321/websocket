@@ -13,6 +13,7 @@ export const MainEventTypes = {
   ERROR: 'ERROR',
   DEBUG: 'DEBUG',
   EVENT: 'EVENT',
+  PROMISE: 'PROMISE',
 };
 export const SubEventTypes = {
   BASIC: {
@@ -44,6 +45,8 @@ export const SubEventTypes = {
     UPDATE_OTHER: 'UPDATE_OTHER',
     PREPARE: 'PREPARE',
     PRINT_DEBUG: 'PRINT_DEBUG',
+    START_INTERVAL: 'START_INTERVAL',
+    STOP_INTERVAL: 'STOP_INTERVAL',
   },
   SERVER: {
     LISTEN: 'LISTEN',
@@ -53,8 +56,6 @@ export const SubEventTypes = {
     DISCONNECT: 'DISCONNECT',
     MESSAGE: 'MESSAGE',
     PRINT_DEBUG: 'PRINT_DEBUG',
-    START_INTERVAL: 'START_INTERVAL',
-    STOP_INTERVAL: 'STOP_INTERVAL',
     LOG_TO_FILE: 'LOG_TO_FILE',
     DEBUG_LOG_TO_FILE: 'DEBUG_LOG_TO_FILE',
     RCON_CONNECT: 'RCON_CONNECT',
@@ -75,7 +76,8 @@ export const SubEventTypes = {
     MESSAGE_READY: 'MESSAGE_READY',
     SERVER_MESSAGE_READY: 'SERVER_MESSAGE_READY',
     PRINT_DEBUG: 'PRINT_DEBUG',
-    MESSAGE_PAKET_READY: 'MESSAGE_PAKET_READY',
+    START_INTERVAL: 'START_INTERVAL',
+    STOP_INTERVAL: 'STOP_INTERVAL',
   },
   ERROR: {
     INFO: 'INFO',
@@ -83,6 +85,9 @@ export const SubEventTypes = {
     FATAL: 'FATAL',
     DEBUG: 'DEBUG',
   },
+  PROMISE: {
+    CLIENT_SUBSCRIBE: 'CLIENT_SUBSCRIBE',
+  }
 };
 
 
@@ -167,9 +172,10 @@ export interface IServerEvent extends IBaseEvent {
 }
 
 export interface IClientsEvent extends IBaseEvent {
-  id?: string;
+  id: string;
   client: MyWebSocket;
-  data?: any;
+  type: string[];
+  data: any;
 }
 
 export interface IErrorEvent extends IBaseEvent {
@@ -187,6 +193,10 @@ export interface IDebugEvent {
     activeEvents: number;
     // eventCounter: number;
   updateDuration?(): void;
+}
+
+export interface IPromiseEvent<T> extends IBaseEvent {
+  (value?: T | PromiseLike<T>): void;
 }
 
 export type IEventTypes = Partial<IBaseEvent> | Partial<IMainEvent> | Partial<IStatsEvent> | Partial<IServerEvent> | Partial<IClientsEvent>;
@@ -249,13 +259,15 @@ export class ServerEvent extends BaseEvent implements IServerEvent {
 }
 
 export class ClientsEvent extends BaseEvent implements IClientsEvent {
-  id?: string;
+  id: string;
   client: MyWebSocket;
-  data?: any;
+  type: string[];
+  data: any;
 
-  constructor(client: MyWebSocket, subType: string, message: string, success: boolean, debugEvent?: IDebugEvent, id?: string, data?: any, json?: any) {
+  constructor(subType: string, id: string, message: string, client: MyWebSocket, success: boolean, type: string[],data: any, debugEvent?: IDebugEvent, json?: any) {
     super(subType, message, success, debugEvent, json);
     this.id = id;
+    this.type = type;
     this.client = client;
     this.data = data;
   }
@@ -273,6 +285,18 @@ export class ErrorEvent extends BaseEvent implements IErrorEvent{
     this.errorEvent = errorEvent;
   }
 }
+
+// export class promiseEvent<T> implements IPromiseEvent {
+//   (value?: T | PromiseLike<T>): void;
+//     constructor(subType: string, message: string, success: boolean, debugEvent?: IDebugEvent, json?: any, (value?: any)) {
+//     super(subType, message, success, debugEvent, json);
+//     this.value = value;
+//     get value() {
+//     return await value;
+//     }
+
+//   }
+// }
 
 export interface INewErr {
   counter: number;

@@ -6,48 +6,49 @@ import "reflect-metadata";
 import mixin, { EventEmitterMixin } from "../global/EventEmitterMixin";
 import { IEventTypes, INewErr, MainEventTypes, SubEventTypes } from '../global/eventInterface';
 import { settingsWrapper } from '../settings/settingsInstance';
-import { statsWrapper } from '../stats/statsInstance';
+import { statsWrapper } from '../global/statsInstance';
 // Import module with ES6 syntax
-import { ConsoleManager, OptionPopup, InputPopup, PageBuilder, ButtonPopup, CustomPopup, InPageWidgetBuilder, SimplifiedStyledElement, Box, KeyListenerArgs } from 'console-gui-tools'
+import { ConsoleManager, OptionPopup, InputPopup, PageBuilder, ButtonPopup, CustomPopup, InPageWidgetBuilder, Box, KeyListenerArgs } from 'console-gui-tools'
 import { settingsContainer, statsContainer } from '../global/containerWrapper';
 import { ErrorTable } from './errorGen';
 import { displayLastUpdates } from './displayLastUpdates';
 import { displayGlobalStats } from './displayGlobalStats';
-import { COLORS, columnWrapperText, getRGBString, D, M, sOBJ, printAliveStatus } from '../global/functions';
+import { D, M, sOBJ, printAliveStatus } from '../global/functions';
 // import { displayLastUpdates } from './displayLastUpdates';
 
 
-function createTwoRow(obj: any, p: InPageWidgetBuilder): void {
-  switch (typeof obj) {
-    case 'object':
-      obj.forEach((value: string, key: string) => {
-        if (key && value) {
-          const totalPadding1 = ' '.repeat(Math.max(0, 30 - key.length - value.length));
-          const newValue1: SimplifiedStyledElement = columnWrapperText(key, getRGBString(value));
-          const middle: SimplifiedStyledElement = columnWrapperText(totalPadding1);
-          const newValue2: SimplifiedStyledElement = columnWrapperText(key, getRGBString(value));
-          p.addRow(
-            {
-              ...newValue1,
-              ...middle,
-              ...newValue2
-            });
-        }
-      });
-      break;
-    default:
-      console.warn(`createTwoRow: unknown type: ${typeof obj}`);
-    // this.eV.handleError(SubEventTypes.ERROR.WARNING, "createTwoRow", new CustomErrorEvent(`from ${obj}`, MainEventTypes.MAIN, obj));
-  }
-}
-function printAvailableColors(p: InPageWidgetBuilder): void {
-  p.addRow({ text: "Available Colors:", color: `yellow` });
-  p.addSpacer();
-  // for (let i = 0; i < COLORS.length; i += 1) {
-  createTwoRow(COLORS, p);
-  // }
+// function createTwoRow(obj: any, p: InPageWidgetBuilder): void {
+//   switch (typeof obj) {
+//     case 'object':
+//       obj.forEach((value: string, key: string) => {
+//         if (key && value) {
+//           const totalPadding1 = ' '.repeat(Math.max(0, 30 - key.length - value.length));
+//           const newValue1: SimplifiedStyledElement = columnWrapperText(key, getRGBString(value));
+//           const middle: SimplifiedStyledElement = columnWrapperText(totalPadding1);
+//           const newValue2: SimplifiedStyledElement = columnWrapperText(key, getRGBString(value));
+//           p.addRow(
+//             {
+//               ...newValue1,
+//               ...middle,
+//               ...newValue2
+//             });
+//         }
+//       });
+//       break;
+//     default:
+//       console.warn(`createTwoRow: unknown type: ${typeof obj}`);
+//     // this.eV.handleError(SubEventTypes.ERROR.WARNING, "createTwoRow", new CustomErrorEvent(`from ${obj}`, MainEventTypes.MAIN, obj));
+//   }
+// }
 
-}
+// function printAvailableColors(p: InPageWidgetBuilder): void {
+//   p.addRow({ text: "Available Colors:", color: `yellow` });
+//   p.addSpacer();
+//   // for (let i = 0; i < COLORS.length; i += 1) {
+//   createTwoRow(COLORS, p);
+//   // }
+
+// }
 
 @injectable()
 export class consoleGui {
@@ -114,7 +115,7 @@ export class consoleGui {
       this.intervalRunner();
     }, this.settings.gui.period);
     this.stats.gui.selfStats.isPainting = true;
-    if (!this.settings.gui.shouldPaint) this.toggleIdleMode();
+    if (!this.settings.gui.shouldPaint) this.toggleStopMode();
     // this.gui.showLogPopup();
   }
 
@@ -123,13 +124,15 @@ export class consoleGui {
     this.drawGUI();
   }
 
-  private toggleIdleMode(forceHalt: boolean = false) {
-    if (this.stats.gui.selfStats.isPainting) {
+  private toggleStopMode() {
+    if (!this.settings.gui.shouldStop) {
+      this.settings.gui.shouldStop = true;
       this.stats.gui.selfStats.isPainting = false;
-      if (forceHalt) clearInterval(this.guiIntVat);
+      clearInterval(this.guiIntVat);
     } else {
+      this.settings.gui.shouldStop = false;
       this.stats.gui.selfStats.isPainting = true;
-      if (forceHalt) this.guiIntVat = setInterval(async () => {
+      this.guiIntVat = setInterval(async () => {
         this.intervalRunner();
       }, this.settings.gui.period);
     }
@@ -208,8 +211,12 @@ export class consoleGui {
           }
           break;
         }
+        case "q": {
+          this.closeApp();
+          break;
+        }
         case "space": {
-          this.toggleIdleMode(true);
+          this.toggleStopMode();
           break;
         }
         case "s": {
@@ -306,20 +313,31 @@ export class consoleGui {
           this.resizeDefaults(true);
           break;
         }
+        // case "f8": { // TODO: colors ?
+        //   const p = new InPageWidgetBuilder(20);
+        //   printAvailableColors(p);
+        //   new Box({
+        //     id: "colorDisplay",
+        //     x: 10,
+        //     y: 2,
+        //     width: 80,
+        //     height: 25,
+        //     draggable: true,
+        //     style: {
+        //       boxed: true,
+        //     }
+        //   }).setContent(p).show();
+        //   break;
+        // }
         case "f2": {
-          const p = new InPageWidgetBuilder(20);
-          printAvailableColors(p);
-          new Box({
-            id: "colorDisplay",
-            x: 10,
-            y: 2,
-            width: 80,
-            height: 25,
-            draggable: true,
-            style: {
-              boxed: true,
-            }
-          }).setContent(p).show();
+          if (this.settings.gui.shouldIdle) {
+            this.settings.gui.shouldIdle = false;
+          } else {
+            this.settings.gui.shouldIdle = true;
+            this.settings.gui.shouldStop = false;
+          }
+          this.globalStats.printGlobalStats();
+          this.globalStats.drawConsole();
           break;
         }
         case "f1": {
@@ -367,7 +385,7 @@ export class consoleGui {
       { text: "F1: ", color: "white", bold: true },
       { text: "Help", color: "black", bg: "bgCyan", bold: false },
       { text: " f2: ", color: "white", bold: true },
-      { text: "Colors", color: "black", bg: "bgCyan", bold: false },
+      { text: "IDLE", color: "black", bg: "bgCyan", bold: false },
       { text: " F5: ", color: "white", bold: true },
       { text: "Refresh", color: "black", bg: "bgCyan", bold: false },
       { text: " F12: ", color: "white", bold: true },
@@ -415,7 +433,7 @@ export class consoleGui {
 
   public async drawGUI(): Promise<void> {
     // const p = new PageBuilder();
-    if (this.stats.gui.selfStats.isPainting) {
+    if (!this.settings.gui.shouldIdle) { // stats.gui.selfStats.isPainting
       this.globalStats.printGlobalStats();
       this.globalStats.drawConsole();
       if (this.lastUpdates.active) this.lastUpdates.printLastUpdates();

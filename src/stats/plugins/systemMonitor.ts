@@ -4,7 +4,7 @@
 
 // class SystemMonitor {
 //   async getUpdatedStats() {
-//     const [cpuData, memData, processData] = await Promise.all([
+//     const [cpuData, memData, processData] = await Promise.ALL([
 //       si.cpu(),
 //       si.mem(),
 //       this.getProcessStats() 

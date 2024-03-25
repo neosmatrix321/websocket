@@ -1,6 +1,7 @@
 import { Box, InPageWidgetBuilder, KeyListenerArgs, SimplifiedStyledElement } from "console-gui-tools";
 import { statsContainer } from "../global/containerWrapper";
-import { IFormatedLastUpdates } from "../stats/statsInstance";
+import { IFormatedLastUpdates } from "../global/statsInstance";
+import { sOBJ, sSTR } from "../global/functions";
 
 export interface LastUpdatesDescriptor {
   [key: string]: any;
@@ -11,8 +12,8 @@ export class displayLastUpdates {
   lastUpdateBox: Box;
   lastUpdatesTable: InPageWidgetBuilder;
   lastUpdatesTab: IFormatedLastUpdates;
-  header: string[] = ["cat", "function", "lastUpdate", "idleTime", "no", "success"];
-  maxSizes: number[] = [10, 25, 15, 10, 5, 5]	;
+  header: string[] = ["cat", "function", "lastUpdate", "idleTime", "no", "result"];
+  maxSizes: number[] = [9, 25, 12, 15, 8, 3]; // TODO: FAKE 2 as rest of table?
   spacing: number;
   active: boolean = false;
   constructor() {
@@ -22,7 +23,7 @@ export class displayLastUpdates {
       visible: false,
       x: 1,
       y: 1,
-      width: 90,
+      width: 77,
       height: (statsContainer.gui.selfStats.height - 2),
       style: {
         label: "Last Updates",
@@ -75,36 +76,35 @@ export class displayLastUpdates {
 
   drawLastUpdates(): void {
     this.lastUpdatesTable.clear();
-    this.lastUpdatesTable.addRow(
+    this.lastUpdatesTable.addRow(sOBJ(1),
       ...this.header.map((headerItem, i) => {
-        const cellText = `  ${headerItem}${` `.repeat(Math.max(this.maxSizes[i] - headerItem.length - 2, 0) + this.spacing)}`;
+        const key = (headerItem == 'result') ? '?' : headerItem;
+        const cellText = `${sSTR(1)}${key}${` `.repeat(Math.max(this.maxSizes[i] - key.length - this.spacing, 0))}${sSTR(1)}`;
         return { text: cellText, color: 'magentaBright', bg: 'bgBlack', bold: true, italic: false, inverse: false } as SimplifiedStyledElement;
-      })
+      }), { text: ` ` } 
     );
-    this.lastUpdatesTab.forEach((row: { cat: string, function: string, lastUpdate: string, idleTime: string, no: number, success: boolean, [key: string]: any }, index: number) => {
+    this.lastUpdatesTab.forEach((row: { cat: string, function: string, lastUpdate: string, idleTime: string, no: number, result: boolean, [key: string]: any }, index: number) => {
       const background = index % 2 !== 0 ? 'bgBlackBright' : index === this.selectedRow ? 'bgGray' : 'bgBlack';
-      this.lastUpdatesTable.addRow(
+      this.lastUpdatesTable.addRow(sOBJ(1),
         ...this.header.map((headerItem: string, i: number) => {
-          const overrideBG = headerItem == 'success' ? 'bgBlack' : background;
-          const cellValue = row[headerItem];
-          const color = headerItem == 'success' && row[headerItem] === true ? 'greenBright' : headerItem == 'success' && row[headerItem] === false ? 'redBright' : 'whiteBright';
+          const overrideBG = headerItem == 'result' ? 'bgBlack' : background;
+          const cellValue = (headerItem == 'result') ? ((row[headerItem]) ? '+' : "-") : row[headerItem];
+          const color = headerItem == 'result' && row[headerItem] === true ? 'greenBright' : headerItem == 'result' && row[headerItem] === false ? 'redBright' : 'whiteBright';
           const tempText = (
-            (headerItem != 'cat') || (
-              (headerItem == 'cat') && (
-                (row['cat'] == 'main' && row['function'] == 'init') ||
-                (row['cat'] == 'gui' && row['function'] == 'start') ||
-                (row['cat'] == 'global' && row['function'] == 'initStats') ||
-                (row['cat'] == 'server' && row['function'] == 'createServer') ||
-                (row['cat'] == 'clients' && row['function'] == 'statsUpdated')
-              )
+            (i === 0) && (
+              (row['cat'] == 'main' && row['function'] != 'init') ||
+              (row['cat'] == 'gui' && row['function'] != 'start') ||
+              (row['cat'] == 'global' && row['function'] != 'initStats') ||
+              (row['cat'] == 'server' && row['function'] != 'createServer') ||
+              (row['cat'] == 'clients' && row['function'] != 'statsUpdated')
             )
-          ) ? `${cellValue}` : ` └─> `;
+          ) ? ` └─> ` : `${cellValue}`;
 
-          const cellText = ` ${tempText}${` `.repeat(Math.max(this.maxSizes[i] - (`${tempText}`).length - 1, 0) + this.spacing)}`;
+          const cellText = (headerItem == 'cat' || headerItem == 'function') ? `${sSTR(1)}${tempText}${` `.repeat(Math.max(this.maxSizes[i] - (`${tempText}`).length - this.spacing, 0))}${sSTR(1)}` : `${sSTR(1)}${` `.repeat(Math.max(this.maxSizes[i] - (`${tempText}`).length - this.spacing, 0))}${tempText}${sSTR(1)}`;
           const inverse = index === this.selectedRow ? true : false;
           // const inverse = index % 2 !== 0 ? true : false;
           return { text: cellText, color: color, bg: overrideBG, bold: false, inverse: inverse } as SimplifiedStyledElement;
-        })
+        }), { text: ` `, bg: background}
       );
       // console.log(`row: ${index} - ${row['cat']} - ${background}`)
     });
@@ -117,7 +117,7 @@ export class displayLastUpdates {
 
   public printLastUpdates() {
     const LastUpdates = statsContainer.getFormatedLastUpdates();
-    // The sum of all numbers is 75
+    // The sum of ALL numbers is 75
     this.updateLastUpdatesTable(LastUpdates);
     this.drawLastUpdates();
   }

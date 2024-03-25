@@ -1,5 +1,5 @@
 import { Box, ConsoleManager, InPageWidgetBuilder, SimplifiedStyledElement, StyledElement } from "console-gui-tools";
-import { IFormatedStats } from '../stats/statsInstance';
+import { IFormatedStats } from '../global/statsInstance';
 import { returnBoolColor, returnStringIfBool, sOBJ } from "../global/functions";
 import { settingsContainer, statsContainer } from "../global/containerWrapper";
 
@@ -149,7 +149,7 @@ export class displayGlobalStats {
       switch (mainKey) {
         case "header":
           this.statsWidgets[mainKey].table.clear();
-          const localTime = `${FormatedObject['extras']['localTime']} ${this.gui.Screen.width}`;
+          const localTime = `${FormatedObject['extras']['localTime']}`;
           const leftHeaderText = `${FormatedObject['extras']['firstHeader']}`;
           const rightHeaderText = `${FormatedObject['extras']['secondHeader']}`;
           const freeMiddleSpace = (this.gui.Screen.width - 10 - Number(`${leftHeaderText}${rightHeaderText}${localTime}`.length));
@@ -179,11 +179,15 @@ export class displayGlobalStats {
           const tempFormatedObject = FormatedObject[mainKey] as { [key: string]: string | boolean | number; };
           const tempMaxSizes = this.maxSizes[mainKey];
           const keys = Object.keys(tempFormatedObject)
+          const shouldStop = settingsContainer.getSetting('gui', 'shouldStop');
+          const shouldIdle = settingsContainer.getSetting('gui', 'shouldIdle');
+          const altValuePeriod = `${settingsContainer.getSetting('gui', 'period')} ms`;
           this.statsWidgets[mainKey].table.clear();
           for (let key of keys) {
             const value: string | boolean | number = tempFormatedObject[key];
             const color = typeof value === 'boolean' ? returnBoolColor(value) : 'whiteBright';
-            const modifiedValue: string | boolean | number = typeof value === 'boolean' && key == 'refresh rate' ? returnStringIfBool(value, `${settingsContainer.getSetting('gui', 'period')} ms`, `idle`) : `${value}`;
+            const modifiedValue: string | boolean | number = key == 'refresh rate' ? (shouldStop || shouldIdle ? (shouldStop ? returnStringIfBool(shouldStop as boolean, `stop`) : returnStringIfBool(shouldIdle as boolean, `idle`) ) : altValuePeriod) : `${value}`;
+
             const modifiedKey = `${key}${` `.repeat(Math.max(tempMaxSizes[0] - `${key}`.length, 0))}`;
             const cellText = `${` `.repeat(Math.max(tempMaxSizes[1] - `${modifiedValue}`.length, 0))}${modifiedValue}`;
             this.statsWidgets[mainKey].table.addRow(

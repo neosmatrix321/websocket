@@ -62,10 +62,10 @@ export class Main {
         case SubEventTypes.BASIC.SERVER:
         case SubEventTypes.BASIC.CLIENTS:
         case SubEventTypes.BASIC.EVENT:
-          console.log(`${event.subType} event | result: ${event.success} | message: ${event.message}`);
+          console.log(`${event.subType} | ${event.success} | ${event.message}`);
           break;
         default:
-          console.log(`${event.subType} event | result: ${event.success} | message: ${event.message}`);
+          console.log(`${event.subType} | ${event.success} | ${event.message}`);
           this.eV.handleError(SubEventTypes.ERROR.WARNING, "BASIC event", MainEventTypes.ERROR, new Error(`Unknown BASIC event subtype ${event.subType}`), event);
       }
       // console.log(createCustomDebugEvent(event, ...data));
@@ -107,7 +107,7 @@ export class Main {
   
   private handleMainEvent(event: IEventTypes) {
     switch (event.subType) {
-      case SubEventTypes.MAIN.PID_AVAILABLE:
+    case SubEventTypes.MAIN.PID_AVAILABLE:
         const newEvent: IBaseEvent = {
           subType: SubEventTypes.BASIC.STATS,
           message: `startPidWatcher | Pid Watcher online`,
@@ -133,7 +133,7 @@ export class Main {
         break;
       case SubEventTypes.MAIN.PROCESS_FOUND:
         // this.eV.emit(MainEventTypes.SERVER, { subType: SubEventTypes.SERVER.RCON_CONNECT, message: `connect to rcon`, success: true });
-        this.eV.emit(MainEventTypes.SERVER, { subType: SubEventTypes.SERVER.START_INTERVAL, message: 'Start interval', success: true });
+        this.eV.emit(MainEventTypes.STATS, { subType: SubEventTypes.STATS.START_INTERVAL, message: 'Start interval', success: true });
         break;
       case SubEventTypes.MAIN.PRINT_DEBUG:
         this.eV.emit(MainEventTypes.SERVER, { subType: SubEventTypes.SERVER.DEBUG_LOG_TO_FILE, data: this, message: `MAIN` });
@@ -146,6 +146,7 @@ export class Main {
       // console.error('Unknown MAIN event subtype:', event.subType);
     }
   }
+
 }
 const mainContainer = new Container();
 

@@ -17,7 +17,7 @@ import { RconConnection } from '../rcon/lib/server/connection'; // Adjust the pa
 import { parsePlayers, splitInfo } from '../rcon/lib/player';
 import * as fs from 'fs';
 import { settingsWrapper } from '../settings/settingsInstance';
-import { statsWrapper } from "../stats/statsInstance";
+import { statsWrapper } from "../global/statsInstance";
 import { SERVER_WRAPPER_TOKEN } from '../main';
 import { settingsContainer, statsContainer } from '../global/containerWrapper';
 
@@ -32,7 +32,6 @@ export class Server {
   constructor() {
     // this.setupWebSocketListeners();
     this.setupEventHandlers();
-    this.stats.global.intvalStats.idleStart = Date.now();
     //   // console.log('Connected to RCON');
     //   this.sendRconCommand('info').then((response) => {
     //     // console.log('RCON response:', response);
@@ -59,6 +58,8 @@ export class Server {
         message: `Client (${myWebSocket.id}) unsubscribed`,
         success: true,
         id: myWebSocket.id,
+        type: [],
+        data: {},
         client: myWebSocket
       };
       this.eV.emit(MainEventTypes.CLIENTS, disconnectEvent);
@@ -70,6 +71,8 @@ export class Server {
         subType: SubEventTypes.CLIENTS.UNSUBSCRIBE,
         message: `Client error id: ${myWebSocket.id}`,
         success: true,
+        type: [],
+        data: { ...error },
         id: myWebSocket.id,
         client: myWebSocket
       };
@@ -86,6 +89,7 @@ export class Server {
             message: message.greeting,
             success: true,
             id: myWebSocket.id,
+            type: ["ALL"],
             client: myWebSocket,
             data: message
           };
@@ -97,6 +101,7 @@ export class Server {
             message: `serverMessage`,
             success: true,
             id: myWebSocket.id,
+            type: ["serverMessage"],
             client: myWebSocket,
             data: message.serverMessage
           };
@@ -125,6 +130,8 @@ export class Server {
             message: message,
             success: true,
             id: myWebSocket.id,
+            type: [],
+            data: message,
             client: myWebSocket,
           };
           this.eV.emit(MainEventTypes.CLIENTS, otherEvent);
@@ -148,12 +155,6 @@ export class Server {
         case SubEventTypes.SERVER.START:
           console.log("Server start event");
           this.createServer();
-          break;
-        case SubEventTypes.SERVER.START_INTERVAL:
-          this.intervalStart();
-          break;
-        case SubEventTypes.SERVER.STOP_INTERVAL:
-          this.intervalStop();
           break;
         case SubEventTypes.SERVER.PRINT_DEBUG:
           this.eV.emit(MainEventTypes.SERVER, { subType: SubEventTypes.SERVER.DEBUG_LOG_TO_FILE, data: this, message: "SERVER" });
@@ -288,6 +289,7 @@ export class Server {
       !ws.type
     ) {
       try {
+        // const newID = `${Date.now()}`;
         const newID = request.headers['sec-websocket-key'];
         let newIP;
         let newType;
@@ -327,53 +329,27 @@ export class Server {
     } as MyWebSocket;
   }
 
-  private async determineSubscriptionSuccess(event: any): Promise<boolean> {
-    // Your logic to determine subscription success
-
-    if (event.success === true) {
-      return Promise.resolve(true);
-    } else {
-      return Promise.reject(new Error("Subscription failed"));
-    }
-  }
-
   private async callAsyncAndWaitForResult(client: MyWebSocket, request: IncomingMessage): Promise<boolean> {
-    let subscribeResult: boolean; // Declare the variable
-    const outcomePromise = new Promise<boolean>((resolve, reject) => {
+    const subscriptionResult = await new Promise<boolean>((resolve, reject) => {
+      this.eV.once(`${MainEventTypes.PROMISE}.${SubEventTypes.PROMISE.CLIENT_SUBSCRIBE}`, (result: boolean) => {
+        result ? resolve(true) : reject(new Error("Subscription failed"));
+      });
+
+      // Emit the event to trigger subscription on the client
       const connectEvent: IClientsEvent = {
         subType: SubEventTypes.CLIENTS.SUBSCRIBE,
         message: `clientSubscribed`,
-        data: request,
+        data: { ...request },
         id: client.id,
-        success: subscribeResult, // Update success here
+        type: [],
+        success: subscriptionResult as boolean, // Update success here
         client: client
       };
-      this.eV.emitOnce(`${MainEventTypes.CLIENTS}.handleClientSubscribe`, connectEvent, async (event: any) => {
-
-        // ... other error handling ...
-
-        // Determine the outcome of your asynchronous process:
-        const didSubscriptionSucceed = this.determineSubscriptionSuccess(event);
-        console.info(`didSubscriptionSucceed: ${didSubscriptionSucceed}`);
-        if (await didSubscriptionSucceed) {
-          console.log("Subscription succeeded")
-          resolve(true);
-        } else {
-          console.log("Subscription failed")
-          reject(new Error("Subscription failed"));
-        }
-      });
-    }).then((result) => {
-      subscribeResult = result;
-      console.info(`subscribeResult: ${subscribeResult}`);
+      this.eV.emit(MainEventTypes.CLIENTS, connectEvent);
     }).catch((error) => {
-      subscribeResult = false;
-      this.eV.handleError(SubEventTypes.ERROR.FATAL, `callAsyncAndWaitForResult`, MainEventTypes.SERVER, new Error(`Error on async call`), error);
-    }).finally(() => {
-      console.info(`subscribeResult: ${subscribeResult}`);
-      return outcomePromise;
+      this.eV.handleError(SubEventTypes.ERROR.FATAL, `Server ON upgrade`, MainEventTypes.SERVER, new Error(`Error on upgrade`), error);
     });
-    return false;
+    return subscriptionResult as boolean;
   }
 
   public async createServer(): Promise<void> {
@@ -387,7 +363,7 @@ export class Server {
 
     _serverCert.on('upgrade', (request, socket, head) => {
       //  ... adjust upgrade handling as needed ...
-      this.server.web.handleUpgrade(request, socket, head, (client: WebSocket, request: IncomingMessage) => {
+      this.server.web.handleUpgrade(request, socket, head, (client) => {
         const myWebSocket: MyWebSocket = this.wsToMyWs(client, request);
         const webSocketStream = createWebSocketStream(myWebSocket as MyWebSocket);
 
@@ -499,32 +475,5 @@ export class Server {
 
   handleUpgrade(request: IncomingMessage, socket: Duplex, head: Buffer, callback: (ws: any) => void) {
     this.server.web.handleUpgrade(request, socket, head, callback);
-  }
-  private intervalStart() {
-    this.stats.global.intvalStats.idleEnd = Date.now();
-    this.eV.emitOnce(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.STATS, message: `intervalStart | Interval started, idle time: ${this.stats.global.intvalStats.idleEnd - this.stats.global.intvalStats.idleStart}ms.`, success: true, });
-    // console.log(`intervalStart: Interval started, idle time: ${this.intvalStats.idleEnd - this.intvalStats.idleStart}ms.`);
-    this.server.statsIntval = setInterval(() => {
-      this.eV.emit(MainEventTypes.STATS, {
-        subType: SubEventTypes.STATS.UPDATE_ALL
-      });
-      this.eV.emit(MainEventTypes.CLIENTS, {
-        subType: SubEventTypes.CLIENTS.UPDATE_ALL_STATS
-      });
-      // this.clients.handleClientsUpdateStats();
-    }, 1000);
-    //  else {
-    //   // console.log("intervalStart: no action taken. clientsCounter:");
-    // }
-  }
-
-  private intervalStop() {
-    this.stats.global.intvalStats.idleStart = Date.now();
-    clearInterval(this.server.statsIntval);
-    this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.STATS, message: `intervalStop | Interval stopped.`, success: true, });
-    // console.log("intervalStop: Interval stopped.");
-    //  else {
-    //   // console.log("intervalStop: no action taken. clientsCounter:");
-    // }
   }
 }

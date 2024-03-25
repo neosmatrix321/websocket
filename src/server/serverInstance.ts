@@ -12,7 +12,6 @@ export interface IHandle {
   file: Logger;
   rcon: RconConnection;
   pidWatcher: fs.FSWatcher | undefined;
-  statsIntval: NodeJS.Timeout;
 }
 
 export interface IServerWrapper {
@@ -24,10 +23,6 @@ export class serverWrapper implements IHandle {
   file: Logger = new Logger(new Date().toISOString().replace(/[:.]/g, '-'));
   pidWatcher: fs.FSWatcher | undefined = undefined;
   web = new WebSocketServer({ noServer: true });
-  statsIntval = setInterval(() => { }, 10000);
-  constructor() {
-    clearInterval(this.statsIntval);
-  }
 }
 
 

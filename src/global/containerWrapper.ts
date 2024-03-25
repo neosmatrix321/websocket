@@ -2,7 +2,7 @@
 import { Container } from 'inversify';
 import "reflect-metadata";
 import { SettingsWrapperSymbol, settingsWrapper } from '../settings/settingsInstance';
-import { StatsWrapperSymbol, statsWrapper } from "../stats/statsInstance";
+import { StatsWrapperSymbol, statsWrapper } from "./statsInstance";
 
 // export const MAIN_WRAPPER_TOKEN = Symbol('Main');
 

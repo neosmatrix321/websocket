@@ -25,6 +25,8 @@ interface IGuiSettings {
   enabled: boolean;
   period: number;
   shouldPaint: boolean;
+  shouldIdle: boolean;
+  shouldStop: boolean;
   // refreshCounter: number;
   mode: string;
   min: number;
@@ -62,6 +64,8 @@ export class settingsWrapper implements IReadOnlySettings {
     period: 500,
     // refreshCounter: 0,
     shouldPaint: true,
+    shouldIdle: false,
+    shouldStop: false,
     mode: 'default',
     min: 0,
     max: 100,
