@@ -4,7 +4,7 @@ import { injectable } from 'inversify';
 import "reflect-metadata";
 
 import mixin, { EventEmitterMixin } from "../global/EventEmitterMixin";
-import { IEventTypes, INewErr, MainEventTypes, SubEventTypes } from '../global/eventInterface';
+import { IBaseEvent, IEventTypes, INewErr, MainEventTypes, SubEventTypes } from '../global/eventInterface';
 import { settingsWrapper } from '../settings/settingsInstance';
 import { statsWrapper } from '../global/statsInstance';
 // Import module with ES6 syntax
@@ -146,20 +146,11 @@ export class consoleGui {
     this.gui.refresh();
     this.stats.gui.selfStats.width = this.gui.Screen.width;
     this.stats.gui.selfStats.height = this.gui.Screen.height;
-    this.globalStats.statsWidgets.header.box.absoluteValues.width = this.gui.Screen.width - 7;
-    if (reset) {
-      this.globalStats.statsWidgets.widget.box.absoluteValues.x = this.globalStats.defaults.widget[0];
-      this.globalStats.statsWidgets.widget.box.absoluteValues.y = this.globalStats.defaults.widget[1];
-      this.globalStats.statsWidgets.pid.box.absoluteValues.x = this.globalStats.defaults.pid[0];
-      this.globalStats.statsWidgets.pid.box.absoluteValues.y = this.globalStats.defaults.pid[1];
-      this.globalStats.statsWidgets.web.box.absoluteValues.x = this.globalStats.defaults.web[0];
-      this.globalStats.statsWidgets.web.box.absoluteValues.y = this.globalStats.defaults.web[1];
-      this.globalStats.statsWidgets.server.box.absoluteValues.x = this.globalStats.defaults.server[0];
-      this.globalStats.statsWidgets.server.box.absoluteValues.y = this.globalStats.defaults.server[1];
+    // this.globalStats.statsWidgets.header.box.absoluteValues.width = this.gui.Screen.width - 7;
+    if (reset) { // TODO: calculate defaults and set new on reset
+      console.log("RESET - do something?")
     }
-    this.globalStats.statsWidgets.console.box.absoluteValues.y = this.globalStats.defaults.console[1];
-    this.globalStats.statsWidgets.console.box.absoluteValues.width = this.globalStats.defaults.console[2];
-    this.globalStats.statsWidgets.console.box.absoluteValues.height = this.globalStats.defaults.console[3];
+    this.globalStats.updateDefaults();
     this.footer.absoluteValues.width = this.gui.Screen.width - 4;
     this.footer.absoluteValues.y = this.stats.gui.selfStats.height - 2;
     this.globalStats.printGlobalStats();
@@ -169,9 +160,39 @@ export class consoleGui {
     this.gui.refresh();
   }
 
+  public consoleFullscreenToggle() {
+    this.globalStats.statsWidgets.console.box.hide();
+    if (this.globalStats.statsWidgets.console.box.absoluteValues.height === this.gui.Screen.height - 2) {
+      this.globalStats.statsWidgets.console.box.absoluteValues.x = this.globalStats.defaults.console[0];
+      this.globalStats.statsWidgets.console.box.absoluteValues.y = this.globalStats.defaults.console[1];
+      this.globalStats.statsWidgets.console.box.absoluteValues.width = this.globalStats.defaults.console[2];
+      this.globalStats.statsWidgets.console.box.absoluteValues.height = this.globalStats.defaults.console[3];
+    } else {
+      this.globalStats.statsWidgets.console.box.absoluteValues.x = 2;
+      this.globalStats.statsWidgets.console.box.absoluteValues.y = 7;
+      this.globalStats.statsWidgets.console.box.absoluteValues.width = this.gui.Screen.width - 4;
+      this.globalStats.statsWidgets.console.box.absoluteValues.height = this.gui.Screen.height - 2;
+    }
+    this.globalStats.printGlobalStats();
+    this.globalStats.drawConsole();
+    this.globalStats.statsWidgets.console.box.show();
+
+  }
+
   private setupEventListeners() {
     this.eV.on(MainEventTypes.GUI, (event: IEventTypes) => {
-      switch (event.subType) {
+      let subType = typeof event.subType === 'string' ? event.subType : 'no subtype';
+      let message = typeof event.message === 'string' ? event.message : `no message | ${subType}`;
+      let success = typeof event.success === 'boolean' ? event.success : false;
+      let json = typeof event.json !== 'undefined' ? event.json : { "no": "json" };
+  
+      const newEvent: IBaseEvent = {
+        subType: SubEventTypes.BASIC.GUI,
+        success: success,
+        message: message,
+        json: json,
+      };
+      this.eV.emit(MainEventTypes.BASIC, newEvent);      switch (event.subType) {
         case SubEventTypes.GUI.PRINT_DEBUG:
           this.eV.emit(MainEventTypes.SERVER, { subType: SubEventTypes.SERVER.DEBUG_LOG_TO_FILE, data: this, message: `GUI` });
           // console.log("Clients:");
@@ -204,8 +225,10 @@ export class consoleGui {
       switch (key.name) {
         case "o": {
           if (!this.gui.popupCollection["logPopup"]) {
-            this.gui.showLogPopup();
-            this.gui.setLogPageSize(100);
+            this.consoleFullscreenToggle();
+            // this.gui.popupCollection["logPopup"].content.absoluteValues.height = this.gui.Screen.height - 4;
+            // this.eV.handleError(SubEventTypes.ERROR.INFO, "popupCollection", MainEventTypes.GUI, new Error(`popupCollection:`), this.gui.popupCollection["logPopup"]);
+            // this.gui.setLogPageSize(100);
             // this.gui.Screen.Terminal. = this.gui.Screen.height - 4;
             
           }
@@ -306,6 +329,15 @@ export class consoleGui {
           break;
         }
         case "f5": {
+          this.resizeDefaults();
+          const statsEvent: IBaseEvent = { // TODO: promise ?
+            subType: SubEventTypes.STATS.UPDATE_ALL,
+            message: 'updateStats',
+          };
+          this.eV.emit(MainEventTypes.STATS, statsEvent);
+          setTimeout(() => {
+            this.resizeDefaults();
+          }, 2000)
           this.resizeDefaults();
           break;
         }
@@ -440,12 +472,10 @@ export class consoleGui {
       this.stats.updateLastUpdates("gui", "draw", true);
     } else {
       const currentTime = Date.now();
-      if ((currentTime - this.stats.gui.lastUpdates.draw.last) >= 1500) {
+      if ((currentTime - this.stats.gui.lastUpdates.draw.last) >= 5000) {
+        this.stats.updateLastUpdates("gui", "draw", true);
+        this.globalStats.printGlobalStats();
         this.globalStats.drawConsole();
-        if ((currentTime - this.stats.gui.lastUpdates.draw.last) >= 10000) {
-          this.stats.updateLastUpdates("gui", "draw", true);
-          this.globalStats.printGlobalStats();
-        }
       }
     }
   }

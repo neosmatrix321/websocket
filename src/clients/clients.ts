@@ -9,7 +9,8 @@ import { WebSocket } from 'ws';
 import mixin, { EventEmitterMixin } from "../global/EventEmitterMixin";
 import { IPU, statsWrapper, IRconStatsPlayers, IRconStatsInfo } from '../global/statsInstance';
 import { CLIENTS_WRAPPER_TOKEN } from "../main";
-import { statsContainer } from "../global/containerWrapper";
+import { settingsContainer, statsContainer } from "../global/containerWrapper";
+import { settingsWrapper } from "../settings/settingsInstance";
 
 interface IClientMessagePaket {
   "serverMessage": string;
@@ -31,6 +32,7 @@ export class Clients {
 
   @inject(() => CLIENTS_WRAPPER_TOKEN) protected clients!: clientsWrapper;
   protected stats: statsWrapper = statsContainer;
+  protected settings: settingsWrapper = settingsContainer;
   constructor() {
     clearInterval(this.sendMessageIntval);
     this.clients = new clientsWrapper();
@@ -43,7 +45,18 @@ export class Clients {
 
   private setupEventHandlers() {
     this.eV.on(MainEventTypes.CLIENTS, (event: IClientsEvent): void => {
-      // console.log("Clients event received:", event);
+      let subType = typeof event.subType === 'string' ? event.subType : 'no subtype';
+      let message = typeof event.message === 'string' ? event.message : `no message | ${subType}`;
+      let success = typeof event.success === 'boolean' ? event.success : false;
+      let json = typeof event.json !== 'undefined' ? event.json : { "no": "json" };
+  
+      const newEvent: IBaseEvent = {
+        subType: SubEventTypes.BASIC.CLIENTS,
+        success: success,
+        message: message,
+        json: json,
+      };
+      this.eV.emit(MainEventTypes.BASIC, newEvent);      // console.log("Clients event received:", event);
       const newID = event.id;
       switch (event.subType) {
         case SubEventTypes.CLIENTS.PRINT_DEBUG:
@@ -57,6 +70,12 @@ export class Clients {
           break;
         case SubEventTypes.CLIENTS.STOP_INTERVAL:
           this.sendMessageIntvalToggle('stop');
+          break;
+        case SubEventTypes.CLIENTS.IDLE_INTERVAL:
+          this.sendMessageIntvalToggle('idle');
+          break;
+        case SubEventTypes.CLIENTS.RESUME_INTERVAL:
+          this.sendMessageIntvalToggle('resume');
           break;
         case SubEventTypes.CLIENTS.SUBSCRIBE:
           this.handleClientSubscribe(event);
@@ -80,7 +99,7 @@ export class Clients {
         //   this.clientsMessageReady(newID, event.message, event.data, event.data.isBinary);
         //   break;
         case SubEventTypes.CLIENTS.MESSAGE_READY:
-          const wsClient = this.clients.client[newID].ws;
+          const wsClient = event.client;
           if (newID == "ALL" || (wsClient && ((wsClient.type == ClientType.Admin) || (wsClient.type == ClientType.Server))))
             this.clientsMessageReady(newID, event.type, event.data);
           else
@@ -91,12 +110,7 @@ export class Clients {
           // console.dir(event.data, { depth: null, colors: true });
           if (client) {
             if (client.ws.type != ClientType.Server) { // handle client greeting && send initial data
-              this.handleClientUpdateStats(newID).then(() => {
-
-                this.clientMessageReady(newID, ["ALL"], { serverMessage: "Welcome to the server" });
-              }).catch((error) => {
-                this.eV.handleError(SubEventTypes.ERROR.WARNING, `handleClientUpdateStats`, MainEventTypes.CLIENTS, error, event);
-              });
+              this.clientMessageReady(newID, ["ALL"], { serverMessage: "Welcome to the server" });
             }
           }
           break;
@@ -163,8 +177,6 @@ export class Clients {
       });
       return newData;
     }
-    // const typeArray = Array.isArray(type) ? type : [type];
-    // this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.CLIENTS, message: 'No Client, message not sent', success: true });
     const wsclient = client.ws;
     if (!wsclient || wsclient.readyState !== WebSocket.OPEN) {
       this.handleClientUnsubscribe(id);
@@ -204,9 +216,11 @@ export class Clients {
       const type = client.client.type;
       this.stats.clients.clientsCounter++;
       this.clients.createClient(id, ip, type, client.client);
+      this.handleClientUpdateStats(id);
       if (type != ClientType.Server) {
         if (++this.stats.clients.activeClients == 1) {
           this.stats.server.webHandle.hasConnection = true;
+          this.eV.emit(MainEventTypes.STATS, { subType: SubEventTypes.STATS.RESUME_INTERVAL, message: 'resume gatherStats interval' });
           this.sendMessageIntvalToggle('start');
         }
       }
@@ -230,10 +244,10 @@ export class Clients {
     const clientData = this.clients.client[id];
     // Your existing client update logic from `createTimer` will go here
     if (!clientData || clientData.ws.readyState !== WebSocket.OPEN)
-      this.handleClientUnsubscribe(clientData.ws.id);
+      this.handleClientUnsubscribe(id);
 
     const time_diff = Date.now() - clientData.stats.lastUpdates.statsUpdated;
-    if (clientData.stats.lastUpdates.statsUpdated === 0 || time_diff > 20000) {
+    if (time_diff > 20000) {
       // this.eV.emit(SubEventTypes.CLIENTS.UPDATE_CLIENT_STATS, client.info.id);
       clientData.stats.latency = await si.inetLatency(clientData.info.ip);
       clientData.stats.eventCount++;
@@ -263,7 +277,7 @@ export class Clients {
   public async handleClientsUpdateStats(): Promise<void> {
     this.stats.updateLastUpdates("clients", "statsUpdated");
     this.stats.clients.lastUpdates.statsUpdated.last = Date.now();
-    // this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.CLIENTS, message: `Update ALL clients stats, clientsCount: ${this.stats.clients.clientsCounter} | activeClients: ${this.stats.clients.activeClients}`, success: true });
+
     if (!this.stats.server.webHandle.hasConnection) return;
     Object.values(this.clients.client).forEach((client) => {
       this.handleClientUpdateStats(client.info.id);
@@ -284,6 +298,7 @@ export class Clients {
         if (--this.stats.clients.activeClients == 0) {
           this.stats.server.webHandle.hasConnection = false;
           this.sendMessageIntvalToggle('stop');
+          this.eV.emit(MainEventTypes.STATS, { subType: SubEventTypes.STATS.RESUME_INTERVAL, message: 'Resume gatherStats interval' });
         }
       }
       this.clients.removeClient(id);
@@ -304,22 +319,50 @@ export class Clients {
   private sendMessageIntvalToggle(action: string): void {
     switch (action) {
       case 'start':
-        this.stats.updateLastUpdates('clients', 'sendMessageIntval', true);
-        this.eV.emitOnce(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.CLIENTS, message: `sendMessageIntvalToggle | started, idle time: ${Date.now() - this.stats.clients.lastUpdates.sendMessageIntval.last} ms.`, success: true, });
+        this.stats.updateLastUpdates('clients', 'messageIntval', true);
+        this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.CLIENTS, message: `messageIntvalToggle | started, idle time: ${Date.now() - this.stats.clients.lastUpdates.messageIntval.last} ms.`, success: true, });
         // console.log(`intervalStart: Interval started, idle time: ${this.intvalStats.idleEnd - this.intvalStats.idleStart}ms.`);
         this.sendMessageIntval = setInterval(() => {
           this.clientsMessageReady("ALL", ["extras", "pidInfo", "rconPlayers", "rconInfo", "latencyGoogle", "latencyUser"], {});
           // this.clients.handleClientsUpdateStats();
-        }, 1000);
+        }, this.settings.clients.period);
+        this.settings.clients.shouldStop = false;
+        this.stats.clients.isMessaging = true;
         break;
       case 'stop':
-        this.stats.updateLastUpdates('clients', 'sendMessageIntval');
+        this.stats.updateLastUpdates('clients', 'messageIntval');
         // console.log("intervalStart: no action taken. clientsCounter:");
         clearInterval(this.sendMessageIntval);
-        this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.CLIENTS, message: `sendMessageIntvalToggle | stopped.`, success: true, });
+        this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.CLIENTS, message: `messageIntvalToggle | stopped.`, success: true, });
+        this.settings.clients.shouldStop = true;
+        this.stats.clients.isMessaging = false;
+        break;
+      case 'idle':
+        this.stats.updateLastUpdates('clients', 'messageIntval', true);
+        this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.CLIENTS, message: `messageIntvalToggle | idle.`, success: true, });
+        clearInterval(this.sendMessageIntval);
+        this.sendMessageIntval = setInterval(() => {
+          this.clientsMessageReady("ALL", ["extras", "pidInfo", "rconPlayers", "rconInfo", "latencyGoogle", "latencyUser"], {});
+          // this.clients.handleClientsUpdateStats();
+        }, 10000);
+        this.settings.clients.shouldIdle = true;
+        this.settings.clients.shouldStop = false;
+        this.stats.clients.isMessaging = true;
+        break;
+      case 'resume':
+        clearInterval(this.sendMessageIntval);
+        this.sendMessageIntval = setInterval(() => {
+          this.clientsMessageReady("ALL", ["extras", "pidInfo", "rconPlayers", "rconInfo", "latencyGoogle", "latencyUser"], {});
+          // this.clients.handleClientsUpdateStats();
+        }, this.settings.clients.period);
+        this.stats.updateLastUpdates('clients', 'messageIntval', true);
+        this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.CLIENTS, message: `messageIntvalToggle | resumed.`, success: true, });
+        this.settings.clients.shouldIdle = false;
+        this.settings.clients.shouldStop = false;
+        this.stats.clients.isMessaging = true;
         break;
       default:
-        this.eV.handleError(SubEventTypes.ERROR.WARNING, `sendMessageIntvalToggle`, MainEventTypes.CLIENTS, new Error(`Unknown status: ${this.stats.clients.lastUpdates.sendMessageIntval.success}`));
+        this.eV.handleError(SubEventTypes.ERROR.WARNING, `messageIntvalToggle`, MainEventTypes.CLIENTS, new Error(`Unknown status: ${this.stats.clients.lastUpdates.messageIntval.success}`));
     }
   }
 

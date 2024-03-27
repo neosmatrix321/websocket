@@ -10,7 +10,11 @@ export interface IRconSettings {
 
 export interface IPidSettings {
   file: string;
-  pid: number | "NaN";
+  pid: number;
+  shouldIdle: boolean;
+  shouldStop: boolean;
+  period: number,
+  periodList: number[];
 }
 
 
@@ -37,6 +41,13 @@ interface IGuiSettings {
   EOL: string;
 }
 
+interface IClientsSettings {
+  shouldIdle: boolean;
+  shouldStop: boolean;
+  period: number,
+  periodList: number[];
+}
+
 interface IReadOnlySettings {
   getSetting<T>(section: string, key: string): T | undefined;
 }
@@ -51,7 +62,11 @@ export class settingsWrapper implements IReadOnlySettings {
   };
   pid: IPidSettings = {
     file: "/var/www/html/pal_server/server/pal_server.pid",
-    pid: "NaN",
+    pid: -1,
+    shouldStop: false,
+    shouldIdle: false,
+    period: 1000,
+    periodList: [100, 250, 500, 1000, 2000, 5000],
   };
   server: IServerSettings = {
     certPath: '/etc/letsencrypt/live/neo.dnsfor.me/cert.pem',
@@ -73,6 +88,12 @@ export class settingsWrapper implements IReadOnlySettings {
     modeList: ['mode1', 'mode2', 'mode3'],
     periodList: [100, 250, 500, 1000, 2000, 5000],
     EOL: '\n',
+  };
+  clients: IClientsSettings = {
+    shouldIdle: false,
+    shouldStop: true,
+    period: 1000,
+    periodList: [100, 250, 500, 1000, 2000, 5000],
   };
   public getSetting<T>(section: string, key: string): T | undefined {
     const settingsSection = this[section]; // Access the appropriate section object

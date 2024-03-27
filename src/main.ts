@@ -62,10 +62,11 @@ export class Main {
         case SubEventTypes.BASIC.SERVER:
         case SubEventTypes.BASIC.CLIENTS:
         case SubEventTypes.BASIC.EVENT:
-          console.log(`${event.subType} | ${event.success} | ${event.message}`);
+        case SubEventTypes.BASIC.GUI:
+          console.log(`${event.success ? '+' : '-'} ${event.subType}: ${event.message}`);
           break;
         default:
-          console.log(`${event.subType} | ${event.success} | ${event.message}`);
+          console.log(`${event.success ? '+' : '-'} ${event.subType}: ${event.message}`);
           this.eV.handleError(SubEventTypes.ERROR.WARNING, "BASIC event", MainEventTypes.ERROR, new Error(`Unknown BASIC event subtype ${event.subType}`), event);
       }
       // console.log(createCustomDebugEvent(event, ...data));
@@ -79,13 +80,13 @@ export class Main {
     this.eV.on(MainEventTypes.ERROR, (errorEvent: IErrorEvent) => {  // FIXME:
       this.eV.emit(MainEventTypes.GUI, { subType: SubEventTypes.GUI.FILL_ERROR_ARRAY, message: errorEvent });
       this.eV.emit(MainEventTypes.SERVER, { subType: SubEventTypes.SERVER.LOG_TO_FILE, message: errorEvent });
-      console.error(`Global ERROR Handler: ${errorEvent}`);
+      // console.error(`Global ERROR Handler: ${errorEvent}`);
     });
-    this.eV.on(MainEventTypes.DEBUG, (errorEvent: IEventTypes) => {
-      // console.log(errorEvent);
-      console.error(`Global DEBUG Handler: ${errorEvent}`);
-      // console.dir(errorEvent, { depth: null, colors: true });
-    });
+    // this.eV.on(MainEventTypes.DEBUG, (errorEvent: IEventTypes) => {
+    //   // console.log(errorEvent);
+    //   console.error(`Global DEBUG Handler: ${errorEvent}`);
+    //   // console.dir(errorEvent, { depth: null, colors: true });
+    // });
 
     // TODO: alternate Debug event handler ?
     // this.eV.on('DEBUG',  (event: IEventTypes) => {
@@ -106,34 +107,39 @@ export class Main {
   }
   
   private handleMainEvent(event: IEventTypes) {
+    let subType = typeof event.subType === 'string' ? event.subType : 'no subtype';
+    let message = typeof event.message === 'string' ? event.message : `no message | ${subType}`;
+    let success = typeof event.success === 'boolean' ? event.success : false;
+    let json = typeof event.json !== 'undefined' ? event.json : { "no": "json" };
+
+    const newEvent: IBaseEvent = {
+      subType: SubEventTypes.BASIC.MAIN,
+      success: success,
+      message: message,
+      json: json,
+    };
+    this.eV.emit(MainEventTypes.BASIC, newEvent);
+
     switch (event.subType) {
     case SubEventTypes.MAIN.PID_AVAILABLE:
-        const newEvent: IBaseEvent = {
-          subType: SubEventTypes.BASIC.STATS,
-          message: `startPidWatcher | Pid Watcher online`,
-          success: true,
-        };
-        this.eV.emit(MainEventTypes.BASIC, newEvent);
+        // const newEvent: IBaseEvent = {
+        //   subType: SubEventTypes.BASIC.STATS,
+        //   message: `startPidWatcher | Pid Watcher online`,
+        //   success: true,
+        // };
+        // this.eV.emit(MainEventTypes.BASIC, newEvent);
         const pidAvEvent: IBaseEvent = {
           subType: SubEventTypes.STATS.PREPARE,
-          message: `Prepare to gather`,
+          message: `PID_AVAILABLE -> STATS.PREPARE`,
           success: true,
         };
         this.eV.emit(MainEventTypes.STATS, pidAvEvent);
         break;
       case SubEventTypes.MAIN.PID_UNAVAILABLE:
-        // TODO: let interval run and send dummy data
-        // const pidUnEvent: IBaseEvent = {
-        //   subType: SubEventTypes.SERVER.RCON_DISCONNECT,
-        //   message: `disconnect to rcon`,
-        //   success: true,
-        // };
-        // this.eV.emit(MainEventTypes.STATS, pidUnEvent);
-        return;
+        this.eV.emit(MainEventTypes.STATS, { subType: SubEventTypes.STATS.IDLE_INTERVAL, message: 'PID_UNAVAILABLE -> STATS.IDLE_INTERVAL'});
         break;
       case SubEventTypes.MAIN.PROCESS_FOUND:
-        // this.eV.emit(MainEventTypes.SERVER, { subType: SubEventTypes.SERVER.RCON_CONNECT, message: `connect to rcon`, success: true });
-        this.eV.emit(MainEventTypes.STATS, { subType: SubEventTypes.STATS.START_INTERVAL, message: 'Start interval', success: true });
+        this.eV.emit(MainEventTypes.SERVER, { subType: SubEventTypes.SERVER.RCON_CONNECT, message: `PROCESS_FOUND -> SERVER.RCON_CONNECT` });
         break;
       case SubEventTypes.MAIN.PRINT_DEBUG:
         this.eV.emit(MainEventTypes.SERVER, { subType: SubEventTypes.SERVER.DEBUG_LOG_TO_FILE, data: this, message: `MAIN` });

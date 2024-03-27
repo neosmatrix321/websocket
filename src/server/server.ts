@@ -51,13 +51,14 @@ export class Server {
   }
 
   public setupWebSocketListeners(webSocketStream: Duplex, myWebSocket: MyWebSocket) {
+    const id = myWebSocket.id;
     webSocketStream.on('end', () => {
       // console.log('WebSocket connection ended');
       const disconnectEvent: IClientsEvent = {
         subType: SubEventTypes.CLIENTS.UNSUBSCRIBE,
         message: `Client (${myWebSocket.id}) unsubscribed`,
         success: true,
-        id: myWebSocket.id,
+        id: id,
         type: [],
         data: {},
         client: myWebSocket
@@ -69,11 +70,11 @@ export class Server {
     webSocketStream.on('error', (error) => {
       const connectEvent: IClientsEvent = {
         subType: SubEventTypes.CLIENTS.UNSUBSCRIBE,
-        message: `Client error id: ${myWebSocket.id}`,
-        success: true,
+        message: `Client error id: ${id}`,
+        success: false,
         type: [],
         data: { ...error },
-        id: myWebSocket.id,
+        id: id,
         client: myWebSocket
       };
       this.eV.emit(MainEventTypes.CLIENTS, connectEvent);
@@ -88,7 +89,7 @@ export class Server {
             subType: SubEventTypes.CLIENTS.GREETING,
             message: message.greeting,
             success: true,
-            id: myWebSocket.id,
+            id: id,
             type: ["ALL"],
             client: myWebSocket,
             data: message
@@ -100,10 +101,10 @@ export class Server {
             subType: SubEventTypes.CLIENTS.MESSAGE_READY,
             message: `serverMessage`,
             success: true,
-            id: myWebSocket.id,
+            id: 'ALL',
             type: ["serverMessage"],
             client: myWebSocket,
-            data: message.serverMessage
+            data: message
           };
           this.eV.emit(MainEventTypes.CLIENTS, serverEvent);
           break;
@@ -129,7 +130,7 @@ export class Server {
             subType: SubEventTypes.CLIENTS.OTHER,
             message: message,
             success: true,
-            id: myWebSocket.id,
+            id: id,
             type: [],
             data: message,
             client: myWebSocket,
@@ -140,6 +141,18 @@ export class Server {
   }
   public setupEventHandlers() {
     this.eV.on(MainEventTypes.SERVER, (event: IServerEvent) => {
+      let subType = typeof event.subType === 'string' ? event.subType : 'no subtype';
+      let message = typeof event.message === 'string' ? event.message : `no message | ${subType}`;
+      let success = typeof event.success === 'boolean' ? event.success : false;
+      let json = typeof event.json !== 'undefined' ? event.json : { "no": "json" };
+
+      const newEvent: IBaseEvent = {
+        subType: SubEventTypes.BASIC.SERVER,
+        success: success,
+        message: message,
+        json: json,
+      };
+      if (subType != SubEventTypes.SERVER.RCON_GET_STATS) this.eV.emit(MainEventTypes.BASIC, newEvent);
       switch (event.subType) {
         case SubEventTypes.SERVER.LOG_TO_FILE:
           const error: INewErr = event.message as unknown as INewErr;
@@ -161,35 +174,27 @@ export class Server {
           // console.log("Server:");
           // console.dir(this.server, { depth: 2, colors: true });
           break;
-        case SubEventTypes.SERVER.RCON_CONNECT:
-          try {
-            this.rconConnect().then(() => {
-              this.rconGetStats().then(() => {
-                const newEvent: IBaseEvent = {
-                  subType: SubEventTypes.BASIC.STATS,
-                  message: `RCON connected`,
-                  success: true,
-                };
-                this.eV.emit(MainEventTypes.BASIC, newEvent);
-                this.stats.updateLastUpdates("server", "rconConnect", true);
-              });
+        case SubEventTypes.SERVER.RCON_GET_STATS:
+          this.stats.updateLastUpdates("server", "rconConnect");
+          this.rconConnect().then(() => {
+            this.rconGetStats().then(() => {
+              this.stats.updateLastUpdates("server", "rconDisconnect");
+            }).catch(() => {
+              this.eV.handleError(SubEventTypes.ERROR.WARNING, "Rcon connect error", MainEventTypes.STATS, new Error("weird"), error);
+            }).finally(() => {
+              this.rconDisconnect();
             });
-          } catch (error) {
-            this.eV.handleError(SubEventTypes.ERROR.WARNING, "Rcon connect error", MainEventTypes.STATS, new Error("weird"), error);
-          }
-          // this.serverActive(event);
-          break;
-        case SubEventTypes.SERVER.RCON_DISCONNECT:
-          this.rconDisconnect();
-          // this.serverActive(event);
-          break;
+          });
+            break;
         default:
         // console.warn('Unknown server event subtype:', event.subType);
       }
     });
   }
-  async rconConnect(): Promise<void> {
-    this.stats.updateLastUpdates("server", "rconConnect");
+  private async rconConnect(): Promise<void> {
+    if (this.stats.global.rcon.isConnected || !this.stats.global.pid.processFound) return;
+    let success = false;
+    let message = ``;
     this.server.rcon = new RconConnection();
     try {
       const RCON_HOSTNAME = this.settings.rcon.host;
@@ -198,66 +203,57 @@ export class Server {
 
       await this.server.rcon.connect(RCON_HOSTNAME, RCON_PORT, RCON_PASSWORD);
       if (!this.server.rcon.connectedWithoutError) throw new Error(`RCON connected with error`);
+      success = true;
+      message = `RCON -> connected`;
       this.stats.global.rcon.isConnected = true;
     } catch (error: any) {
+      message = error.message || `no error message`;
+      success = false;
       this.stats.global.rcon.isConnected = false;
       this.rconDisconnect();
-      const newEvent: IBaseEvent = {
-        subType: SubEventTypes.BASIC.STATS,
-        message: `RCON connect failed`,
-        success: false,
-      };
-      this.eV.emit(MainEventTypes.BASIC, newEvent);
     }
+    const newEvent: IBaseEvent = {
+      subType: SubEventTypes.BASIC.SERVER,
+      message: message,
+      success: success,
+    };
+    if (!success) this.eV.emit(MainEventTypes.BASIC, newEvent);
   }
 
-  rconDisconnect() {
-    this.stats.updateLastUpdates("server", "rconDisconnect");
+  private rconDisconnect() {
     if (this.server.rcon) {
       this.server.rcon.client.resetAndDestroy();
-      this.stats.global.rcon.isConnected = false;
-      const newEvent: IBaseEvent = {
-        subType: SubEventTypes.BASIC.STATS,
-        message: `RCON`,
-        success: false,
-      };
-      this.eV.emit(MainEventTypes.BASIC, newEvent);
+      // const newEvent: IBaseEvent = {
+      //   subType: SubEventTypes.BASIC.SERVER,
+      //   message: `RCON -> disconnected`,
+      //   success: true,
+      // };
+      // this.eV.emit(MainEventTypes.BASIC, newEvent);
       this.stats.updateLastUpdates("server", "rconDisconnect", true);
     }
+    this.stats.global.rcon.isConnected = false;
   }
 
-  async rconGetStats(force: boolean = false): Promise<void> {
-    if (!this.stats.global.rcon.isConnected) return this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.STATS, message: `RCON not connected`, success: false });
+  private async rconGetStats(force: boolean = false): Promise<void> {
+    if (!this.stats.global.rcon.isConnected) return;
     if (force || !this.stats.server.lastUpdates.rconGetStatsInfo.last || (Date.now() - this.stats.server.lastUpdates.rconGetStatsInfo.last) > 60000) {
       try {
+        this.stats.updateLastUpdates("server", "rconGetStatsInfo");
         const info = await this.sendRconCommand('Info');
         if (!info) throw new Error(`No info from rcon`);
-        this.stats.updateLastUpdates("server", "rconGetStatsInfo");
         this.stats.global.rcon.info = splitInfo(info);
-        const rconInfoEvent: IBaseEvent = {
-          subType: SubEventTypes.BASIC.STATS,
-          message: `rconInfo updated ${this.stats.global.lastUpdates.rconGetStatsInfo}`,
-          success: true,
-        };
-        this.eV.emit(MainEventTypes.BASIC, rconInfoEvent);
         this.stats.updateLastUpdates("server", "rconGetStatsInfo", true);
       } catch (error) {
         this.stats.global.rcon.info = { name: "NaN", ver: "NaN" };
         this.eV.handleError(SubEventTypes.ERROR.INFO, `RCON Info`, MainEventTypes.STATS, new Error(`rconGetStatsInfo failed`), error);
       };
     }
-    if (!this.stats.server.lastUpdates.rconGetStatsPlayers.last || (Date.now() - this.stats.server.lastUpdates.rconGetStatsPlayers.last) > 5000) {
+    if (force || !this.stats.server.lastUpdates.rconGetStatsPlayers.last || (Date.now() - this.stats.server.lastUpdates.rconGetStatsPlayers.last) > 5000) {
       try {
+        this.stats.updateLastUpdates("server", "rconGetStatsPlayers");
         const players = await this.sendRconCommand('ShowPlayers');
         if (!players) throw new Error(`No players from rcon`);
-        this.stats.updateLastUpdates("server", "rconGetStatsPlayers");
         this.stats.global.rcon.players = parsePlayers(players);
-        const rconPlayersEvent: IBaseEvent = {
-          subType: SubEventTypes.BASIC.STATS,
-          message: `rconPlayers updated ${this.stats.global.lastUpdates.rconGetStatsPlayers}`,
-          success: true,
-        };
-        this.eV.emit(MainEventTypes.BASIC, rconPlayersEvent);
         this.stats.updateLastUpdates("server", "rconGetStatsPlayers", true);
       } catch (error) {
         this.stats.global.rcon.players = [{ name: "NaN", playeruid: "NaN", steamid: "NaN" }];
@@ -271,12 +267,10 @@ export class Server {
         // Ensure RCON connection if not open? rconConnection.connect();
         const response = await this.server.rcon.exec(command);
         return response.body; // Or format the response if needed
-      } catch (error) {
-        this.eV.handleError(SubEventTypes.ERROR.INFO, `RCON Command`, MainEventTypes.STATS, new Error("sedRconCommand failed"), error);
+      } catch (error: any) {
+        this.eV.handleError(SubEventTypes.ERROR.INFO, `RCON Command`, MainEventTypes.STATS, new Error(error.message || 'no error message'), error);
         // Return an error message
       }
-    } else {
-      this.eV.handleError(SubEventTypes.ERROR.INFO, `RCON`, MainEventTypes.STATS, new Error("RCON not connected"), { isConnected: this.stats.global.rcon.isConnected });
     }
     return undefined;
   }
@@ -407,69 +401,60 @@ export class Server {
       this.eV.handleError(SubEventTypes.ERROR.FATAL, `listen | ERROR`, MainEventTypes.SERVER, new Error("Error creating server"), error);
     }
   }
+
   private async updatePid(): Promise<void> {
+    let message = `update Pid started`;
+    this.stats.global.pid.fileExists = false;
+    this.stats.global.pid.processFound = false;
+    this.stats.global.pid.fileReadable = false;
+    this.settings.pid.pid = -1;
     this.stats.updateLastUpdates("server", "updatePid");
     try {
       const data = await readFile(this.settings.pid.file, 'utf-8' as BufferEncoding);
-      if (!data || !(data.length > 0)) throw `No data in pid file: ${this.settings.pid.file}`;
+      if (!data || !(data.length > 0)) {
+        throw new Error(`No data in pid file`);
+      }
       this.stats.global.pid.fileExists = true;
-      this.settings.pid.pid = parseInt(data, 10)
-
-      if (!this.stats.global.pid.fileExists || !this.settings.pid.pid || typeof this.settings.pid.pid !== 'number' || !(this.settings.pid.pid > 0)) throw new Error(`updatePid | pid: ${this.settings.pid.pid}`);
       this.stats.global.pid.fileReadable = true;
+      this.settings.pid.pid = parseInt(data, 10);
+
+      if (!this.settings.pid.pid || typeof this.settings.pid.pid !== 'number' || !(this.settings.pid.pid > 0)) {
+        this.settings.pid.pid = -1;
+        throw new Error(`Invalid pid number`)
+      }
+      this.stats.global.pid.processFound = true;
+    } catch (error: any) {
+      message = error.message || `no error message`;
+    }
+    const pidEvent: IBaseEvent = {
+      subType: SubEventTypes.MAIN.PID_AVAILABLE, // Define an appropriate subType
+      message: `updatePid | pid: ${this.settings.pid.pid} | ${message}`,
+      success: this.stats.global.pid.processFound,
+    };
+    this.eV.emit(MainEventTypes.MAIN, pidEvent);
+  }
+
+  public async startPidWatcher(): Promise<void> {
+    this.stats.updateLastUpdates("server", "startPidWatcher");
+    this.updatePid().then(() => {
+      this.server.pidWatcher = fs.watch(this.settings.pid.file, (eventType) => {
+        if (eventType === 'change') {
+          this.updatePid(); // Neue Funktion zum erneuten Einlesen
+        }
+      });
+    }).catch((error) => {
+      this.settings.pid.pid = -1;
+      this.stats.global.pid.fileReadable = false;
+      this.stats.global.pid.fileExists = false;
+      this.eV.handleError(SubEventTypes.ERROR.FATAL, "startPidWatcher", MainEventTypes.STATS, new Error(`${(error.message || `no error message`)}`), error);
+    }).finally(() => {
       const pidEvent: IBaseEvent = {
         subType: SubEventTypes.MAIN.PID_AVAILABLE, // Define an appropriate subType
         message: `updatePid | pid: ${this.settings.pid.pid}`,
         success: true,
       };
       this.eV.emit(MainEventTypes.MAIN, pidEvent);
-      const newEvent: IBaseEvent = {
-        subType: SubEventTypes.BASIC.STATS,
-        message: `updatePid | pid: ${this.settings.pid.pid}`,
-        success: true,
-      };
-      this.eV.emit(MainEventTypes.BASIC, newEvent);
-      this.stats.updateLastUpdates("server", "updatePid", true);
-      // ... restliche Logik zum Verarbeiten der neuen PID
-    } catch (error) {
-      const pidEvent: IBaseEvent = {
-        subType: SubEventTypes.MAIN.PID_UNAVAILABLE, // Define an appropriate subType
-        message: `updatePid | pid: ${this.settings.pid.pid}`,
-        success: false,
-      };
-      this.eV.emit(MainEventTypes.MAIN, pidEvent);
-      const newEvent: IBaseEvent = {
-        subType: SubEventTypes.BASIC.STATS,
-        message: `updatePid | pid: ${this.settings.pid.pid}`,
-        success: false,
-      };
-      this.eV.emit(MainEventTypes.BASIC, newEvent);
-      this.stats.global.pid.fileReadable = false;
-      this.settings.pid.pid = "NaN";
-      this.stats.global.pid.processFound = false;
-      this.eV.handleError(SubEventTypes.ERROR.INFO, "updatePid | ERROR", MainEventTypes.STATS, new Error(`pidFileExists: ${this.stats.global.pid.fileExists}, pid file readable: ${this.stats.global.pid.fileReadable}, pid: ${this.settings.pid.pid}, SI pid: ${this.stats.global.si.pid}`), error);
-    }
-  }
-
-  public async startPidWatcher(): Promise<void> {
-    this.stats.updateLastUpdates("server", "startPidWatcher");
-    this.updatePid().then(() => {
-      this.server.pidWatcher = fs.watch(this.settings.pid.file, (eventType, file) => {
-        this.eV.emit(MainEventTypes.BASIC, {
-          subType: SubEventTypes.BASIC.STATS,
-          message: `startPidWatcher | eventType: ${eventType}, file: ${file}`,
-          success: true,
-        });
-        if (eventType === 'change') {
-          this.updatePid(); // Neue Funktion zum erneuten Einlesen
-        }
-      });
-    }).catch((error) => {
-      this.stats.updateLastUpdates("server", "startPidWatcher");
-      this.eV.handleError(SubEventTypes.ERROR.FATAL, "startPidWatcher", MainEventTypes.STATS, new Error(`startPidWatcher | pidFileExists: ${this.stats.global.pid.fileExists}, pid file readable: ${this.stats.global.pid.fileReadable}, pid: ${this.settings.pid.pid}, SI pid: ${this.stats.global.si.pid}`), error);
-      this.stats.global.pid.fileReadable = false;
-      this.stats.global.pid.fileExists = false;
-      this.settings.pid.pid = "NaN";
+      this.stats.updateLastUpdates("server", "startPidWatcher", true);
     });
   }
 

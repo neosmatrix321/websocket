@@ -36,7 +36,7 @@ export interface IClientStats {
   lastUpdates: Record<string, number>;
   messagesReceived: string[];
   messagesToSend: string[];
-  latency: number | undefined;
+  latency: number;
 }
 export interface IClientSettings {
   pw_hash?: string;
@@ -65,7 +65,7 @@ export class clientWrapper implements IClientWrapper {
 
    constructor(id: string, ip: string, type: ClientType, ws: MyWebSocket) {
        this.info = { id: id, ip: ip };
-       this.stats = { eventCount: 0, lastUpdates: { 'create': Date.now() }, messagesReceived: [], messagesToSend: [], latency: undefined };
+       this.stats = { eventCount: 0, lastUpdates: { 'create': Date.now(), "statsUpdated": 999999 }, messagesReceived: [], messagesToSend: [], latency: 0 };
        this.settings = { pw_hash: "NaN", type: type };
        this.super = { customIntervallTime: false };
        this.ws = ws;

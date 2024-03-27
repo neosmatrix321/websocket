@@ -14,11 +14,10 @@ import { calcDurationDetailed } from '../global/functions';
 @injectable()
 export class Stats {
   private eV: EventEmitterMixin = mixin;
-  protected gatherStatsIntval: NodeJS.Timeout = setInterval(() => { }, 10000);
+  protected gatherStatsIntval: NodeJS.Timeout = setInterval(() => { this.updateAllStats(); }, 5000);
   protected settings: settingsWrapper = settingsContainer;
   protected stats: statsWrapper = statsContainer;
   constructor() {
-    clearInterval(this.gatherStatsIntval);
     this.stats.global.widget.pid = process.pid;
     this.stats.updateLastUpdates("global", "initStats", true);
     // this.updateAllStats();
@@ -28,7 +27,18 @@ export class Stats {
 
   private setupEventHandlers() {
     this.eV.on(MainEventTypes.STATS, (event: IStatsEvent) => {
-      const type = event.subType;
+      let subType = typeof event.subType === 'string' ? event.subType : 'no subtype';
+      let message = typeof event.message === 'string' ? event.message : `no message | ${subType}`;
+      let success = typeof event.success === 'boolean' ? event.success : false;
+      let json = typeof event.json !== 'undefined' ? event.json : { "no": "json" };
+  
+      const newEvent: IBaseEvent = {
+        subType: SubEventTypes.BASIC.STATS,
+        success: success,
+        message: message,
+        json: json,
+      };
+      this.eV.emit(MainEventTypes.BASIC, newEvent);      const type = event.subType;
       if (!type) throw new Error('No event type provided');
       switch (type) {
         case SubEventTypes.STATS.UPDATE_ALL:
@@ -39,6 +49,12 @@ export class Stats {
           break;
         case SubEventTypes.STATS.STOP_INTERVAL:
           this.gatherStatsIntvalToggle('stop');
+          break;
+        case SubEventTypes.STATS.IDLE_INTERVAL:
+          this.gatherStatsIntvalToggle('idle');
+          break;
+        case SubEventTypes.STATS.RESUME_INTERVAL:
+          this.gatherStatsIntvalToggle('resume');
           break;
         case SubEventTypes.STATS.PRINT_DEBUG:
           // console.log("Stats:");
@@ -64,9 +80,9 @@ export class Stats {
       this.getLatencyGoogle();
     }
     if (this.stats.global.pid.processFound) {
-      // this.rconGetStats(); // TODO: Fix this
+
+      this.eV.emit(MainEventTypes.SERVER, { subType: SubEventTypes.SERVER.RCON_GET_STATS, message: `STATS -> SERVER.RCON_GET_STATS` });
       Promise.all([this.getSI(), this.getPU(), this.getWidgetStats()]).then(() => {
-        ;
         Promise.resolve();
         this.stats.updateLastUpdates("global", "updateAllStats", true);
       }).catch((error) => {
@@ -81,7 +97,6 @@ export class Stats {
   private async getWidgetStats() {
     this.stats.updateLastUpdates("global", "widgetStats");
     try {
-      this.eV.emit(MainEventTypes.GUI, { subType: SubEventTypes.GUI.UPDATE_STATS, message: `updateAllStats` });
       const widgetStats = await pidusage(this.stats.global.widget.pid);
       const cpuValueFormat = Intl.NumberFormat('en-US', { style: 'percent', minimumFractionDigits: 2, maximumFractionDigits: 2 });
       const cpu = cpuValueFormat.format(widgetStats.cpu / 100)
@@ -116,115 +131,151 @@ export class Stats {
     }
   }
 
-  comparePids(): boolean {
+  private async comparePids(): Promise<boolean> {
     this.stats.updateLastUpdates("global", "comparePids");
+    let message = `comparePids started`;
     let success = false;
-    this.getSI().then(() => {
-      if (this.stats.global.pid.fileReadable && (this.settings.pid.pid !== "NaN" && this.stats.global.si.pid !== -1 && ((this.stats.global.si.pid == this.settings.pid.pid)))) {
-        success = true;
-        const processFoundEvent: IBaseEvent = {
-          subType: SubEventTypes.MAIN.PROCESS_FOUND,
-          message: `processFound`,
-          success: success,
-        };
-        this.eV.emit(MainEventTypes.MAIN, processFoundEvent);
-        this.stats.updateLastUpdates("global", "comparePids", true);
-        this.stats.updateLastUpdates("main", "start", true);
-      }
-    }).catch((error) => {
+    if (!this.stats.global.pid.fileReadable || this.settings.pid.pid === -1) return false;
+    await this.getSI().then(() => {
+      message = `comparePids getSI finished`;
+      if (this.stats.global.si.pid === -1) throw new Error(`comparePids getSI pid not found`);
+      if (this.stats.global.si.pid != this.settings.pid.pid) throw new Error(`comparePids pid mismatch`);
+
+      message = `comparePids success`;
+      success = true;
+      this.stats.updateLastUpdates("global", "comparePids", true);
+      this.stats.updateLastUpdates("main", "start", true);
+    }).catch(() => {
+      this.settings.pid.pid = -1;
       success = false;
-      this.eV.handleError(SubEventTypes.ERROR.WARNING, "comparePids", MainEventTypes.STATS, new Error(`pidFileExists: ${this.stats.global.pid.fileExists}, pid file readable: ${this.stats.global.pid.fileReadable}, pid: ${this.settings.pid.pid}, SI pid: ${this.stats.global.si.pid}`), error);
     }).finally(() => {
       this.stats.global.pid.processFound = success;
-      const newEvent: IBaseEvent = {
-        subType: SubEventTypes.BASIC.STATS,
+      const processFoundEvent: IBaseEvent = {
+        subType: SubEventTypes.MAIN.PROCESS_FOUND,
+        message: message,
         success: success,
-        message: `comparePids`,
       };
-      this.eV.emit(MainEventTypes.BASIC, newEvent);
+      this.eV.emit(MainEventTypes.MAIN, processFoundEvent);
     });
     return success;
   }
 
-  async getSI(): Promise<void> {
+  private async getSI(): Promise<void> {
     this.stats.updateLastUpdates("global", "getSI");
-    await si.processLoad("PalServer-Linux", (targetProcesses) => {
-      if (!targetProcesses || !(targetProcesses.length > 0)) throw new Error(`No targetProcesses found`);
-      const processInfo = targetProcesses.find((p) => p.pid === this.settings.pid.pid);
-      if (processInfo) {
-        const memFormatedValue = Intl.NumberFormat('en-US', { notation: "compact", style: 'unit', unit: 'megabyte', unitDisplay: 'narrow', maximumFractionDigits: 0 });
-        const memFormated = memFormatedValue.format(processInfo.mem / 1024 / 1024);
-        this.stats.global.si = { ...processInfo, memFormated: memFormated };
-        // console.dir(this.stats.global.si, { depth: null, colors: true });
-        this.stats.updateLastUpdates("global", "getSI", true);
-      } else {
-        throw new Error(`No processInfo found for pid: ${this.settings.pid.pid} in targetProcesses: ${targetProcesses}`);
-      }
+    let success = false;
+    let message = "getSI started"
+    await si.processLoad("PalServer-Linux", (targetProcesses: si.Systeminformation.ProcessesProcessLoadData[]) => {
+      if (this.settings.pid.pid === -1) return message = `getSI pid is -1`;
+      if (!targetProcesses || !(targetProcesses.length > 0))
+        return message = `getSI targetProcesses not found`;
 
+      const processInfo = targetProcesses.find((p) => p.pid === settingsContainer.getSetting('pid', 'pid'));
+      if (!processInfo) return message = `getSI processInfo not found`;
+
+      message = `getSI processInfo found`;
+      const memFormatedValue = Intl.NumberFormat('en-US', { notation: "compact", style: 'unit', unit: 'megabyte', unitDisplay: 'narrow', maximumFractionDigits: 0 });
+      const memFormated = memFormatedValue.format(processInfo.mem / 1024 / 1024);
+      this.stats.global.si = { ...processInfo, memFormated: memFormated };
+      // console.dir(this.stats.global.si, { depth: null, colors: true });
+      this.stats.updateLastUpdates("global", "getSI", true);
+      message = `getSI finished`;
+      success = true;
+      return { message: message, success: success }
     }).catch((error) => {
-      this.eV.handleError(SubEventTypes.ERROR.WARNING, `getSI`, MainEventTypes.STATS, new Error(`pidFileExists: ${this.stats.global.pid.fileExists}, pid file readable: ${this.stats.global.pid.fileReadable}, pid: ${this.settings.pid.pid}, SI pid: ${this.stats.global.si.pid}`), error);
+      message = `getSI error ${error.message ? error.message : `getSI failed with no error`}`;
+      this.settings.pid.pid = -1;
+      success = false;
+    }).finally(() => {
+      const newEvent: IBaseEvent = {
+        subType: SubEventTypes.BASIC.STATS,
+        message: `${message}`,
+        success: success,
+      };
+      if (!success) this.eV.emit(MainEventTypes.BASIC, newEvent);
     });
-    // .finally(() => {
-    //   const newEvent: IBaseEvent = {
-    //     subType: SubEventTypes.BASIC.STATS,
-    //     message: `getSI`,
-    //     success: success,
-    //   };
-    //   this.eV.emit(MainEventTypes.BASIC, newEvent);
-    // });
   }
 
   async getPU(): Promise<void> {
     this.stats.updateLastUpdates("global", "getPU");
-    if (this.settings.pid.pid !== undefined) {
-      try {
-        const pidInfo: Status = await pidusage(this.settings.pid.pid);
-        if (!pidInfo) throw new Error(`No pidInfo for pid: ${this.settings.pid.pid}`);
-        const cpuFormatedValue = Intl.NumberFormat('en-US', { style: 'percent', minimumFractionDigits: 2, maximumFractionDigits: 2 });
-        const cpuFormated = cpuFormatedValue.format(pidInfo.cpu / 8 / 100);
-        const memFormatedValue = Intl.NumberFormat('en-US', { notation: "compact", style: 'unit', unit: 'megabyte', unitDisplay: 'narrow', maximumFractionDigits: 0 });
-        const memFormated = memFormatedValue.format(pidInfo.memory / 1024 / 1024);
-        const elapsedFormated = new Date(pidInfo.elapsed).toISOString().substr(11, 8);
-        const ctimeFormated = new Date(pidInfo.ctime).toISOString().substr(11, 8);
-        this.stats.global.pu = { ...pidInfo, elapsedFormated: elapsedFormated, ctimeFormated: ctimeFormated, cpuFormated: cpuFormated, memFormated: memFormated, }; // Map relevant properties
-        // const puEvent: IClientsEvent = {
-        //   subType: SubEventTypes.CLIENTS.MESSAGE_READY,
-        //   message: `pidInfo`,
-        //   success: true,
-        //   data: this.stats.global.pu,
-        //   id: "ALL",
-        //   client: {} as MyWebSocket,
-        // };
-        // this.eV.emit(MainEventTypes.CLIENTS, puEvent);
-        // const newEvent: IBaseEvent = {
-        //   subType: SubEventTypes.BASIC.STATS,
-        //   message: `getPU`,
-        //   success: true,
-        // };
-        // this.eV.emit(MainEventTypes.BASIC, newEvent);
-        // console.dir(this.stats.global.pu, { depth: null, colors: true });
-        this.stats.updateLastUpdates("global", "getPU", true);
-      } catch (error) {
-        this.eV.handleError(SubEventTypes.ERROR.WARNING, `getPU`, MainEventTypes.STATS, new Error(`pidFileExists: ${this.stats.global.pid.fileExists}, pid file readable: ${this.stats.global.pid.fileReadable}, pid: ${this.settings.pid.pid}, SI pid: ${this.stats.global.si.pid}`), error);
-      }
+    if (!this.stats.global.pid.processFound) return;
+    try {
+      const pidInfo: Status = await pidusage(this.settings.pid.pid);
+      if (!pidInfo) throw new Error(`No pidInfo for pid: ${this.settings.pid.pid}`);
+      const cpuFormatedValue = Intl.NumberFormat('en-US', { style: 'percent', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const cpuFormated = cpuFormatedValue.format(pidInfo.cpu / 8 / 100);
+      const memFormatedValue = Intl.NumberFormat('en-US', { notation: "compact", style: 'unit', unit: 'megabyte', unitDisplay: 'narrow', maximumFractionDigits: 0 });
+      const memFormated = memFormatedValue.format(pidInfo.memory / 1024 / 1024);
+      const elapsedFormated = new Date(pidInfo.elapsed).toISOString().substr(11, 8);
+      const ctimeFormated = new Date(pidInfo.ctime).toISOString().substr(11, 8);
+      this.stats.global.pu = { ...pidInfo, elapsedFormated: elapsedFormated, ctimeFormated: ctimeFormated, cpuFormated: cpuFormated, memFormated: memFormated, }; // Map relevant properties
+      this.stats.updateLastUpdates("global", "getPU", true);
+    } catch (error) {
+      this.eV.handleError(SubEventTypes.ERROR.WARNING, `getPU`, MainEventTypes.STATS, new Error(`pidFileExists: ${this.stats.global.pid.fileExists}, pid file readable: ${this.stats.global.pid.fileReadable}, pid: ${this.settings.pid.pid}, SI pid: ${this.stats.global.si.pid}`), error);
     }
   }
   private gatherStatsIntvalToggle(action: string) {
     switch (action) {
       case 'start':
-        this.stats.updateLastUpdates('global', 'gatherStatsIntval', true);
+        this.stats.updateLastUpdates('global', 'gatherIntval', true);
         this.eV.emitOnce(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.STATS, message: `intervalStart | Interval started, idle time: ${Date.now() - this.stats.global.lastUpdates.gatherStatsIntval.last} ms.`, success: true, });
         // console.log(`intervalStart: Interval started, idle time: ${this.intvalStats.idleEnd - this.intvalStats.idleStart}ms.`);
+        this.updateAllStats();
         this.gatherStatsIntval = setInterval(() => {
           this.updateAllStats();
           // this.clients.handleClientsUpdateStats();
-        }, 1000);
+        }, this.settings.pid.period);
+        this.settings.pid.shouldStop = false;
+        this.stats.global.isGathering = true;
         break;
       case 'stop':
-        this.stats.updateLastUpdates('global', 'gatherStatsIntval');
+        this.settings.pid.shouldStop = true;
+        this.stats.global.isGathering = false;
+
+        this.stats.updateLastUpdates('global', 'gatherIntval');
         // console.log("intervalStart: no action taken. clientsCounter:");
         clearInterval(this.gatherStatsIntval);
         this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.STATS, message: `intervalStop | Interval stopped.`, success: true, });
+        this.stats.global.isGathering = false;
+        break;
+      case 'idle':
+        this.settings.pid.shouldIdle = true;
+        this.settings.pid.shouldStop = false;
+        this.stats.global.isGathering = true;
+        this.stats.updateLastUpdates('global', 'gatherIntval', true);
+        // console.log("intervalStart: no action taken. clientsCounter:");
+        clearInterval(this.gatherStatsIntval);
+        this.gatherStatsIntval = setInterval(() => {
+          this.updateAllStats();
+          // this.clients.handleClientsUpdateStats();
+        }, 30000);
+        
+        this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.STATS, message: `intervalIdle | Interval idle.`, success: true, });
+        break;
+      case 'resume':
+        this.settings.pid.shouldIdle = false;
+        this.settings.pid.shouldStop = false;
+        this.stats.global.isGathering = true;
+        this.stats.updateLastUpdates('global', 'gatherIntval', true);
+        // console.log("intervalStart: no action taken. clientsCounter:");
+        this.updateAllStats();
+        clearInterval(this.gatherStatsIntval);
+        this.gatherStatsIntval = setInterval(() => {
+          this.updateAllStats();
+          // this.clients.handleClientsUpdateStats();
+        }, this.settings.pid.period);
+        this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.STATS, message: `intervalResume | Interval resumed.`, success: true, });
+        break;
+      case 'change':
+        this.settings.pid.shouldStop = false;
+        this.settings.pid.shouldIdle = false;
+        this.stats.global.isGathering = true;
+        this.stats.updateLastUpdates('global', 'gatherIntval');
+        clearInterval(this.gatherStatsIntval);
+        this.gatherStatsIntval = setInterval(() => {
+          this.updateAllStats();
+          // this.clients.handleClientsUpdateStats();
+        }, this.settings.pid.period);
+        this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.STATS, message: `intervalChange | Interval changed.`, success: true, });
         break;
       default:
         this.eV.handleError(SubEventTypes.ERROR.WARNING, `gatherStatsIntvalToggle`, MainEventTypes.STATS, new Error(`Unknown status: ${this.stats.global.lastUpdates.gatherStatsIntval.success}`));

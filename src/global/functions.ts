@@ -62,17 +62,27 @@ export function calcDurationDetailed(duration: number): string {
   const days = Math.floor(duration / (1000 * 60 * 60 * 24));
 
   let durationSTR = '';
+  let count = 0;
+
   if (days > 0 && days < 365) {
     durationSTR += `${days.toString().padStart(1, '0')}d `;
+    count++;
+    if (count >= 2) return durationSTR.trim();
   }
   if (hours > 0) {
     durationSTR += `${hours.toString().padStart(2, '0')}h `;
+    count++;
+    if (count >= 2) return durationSTR.trim();
   }
   if (minutes > 0) {
     durationSTR += `${minutes.toString().padStart(2, '0')}m `;
+    count++;
+    if (count >= 2) return durationSTR.trim();
   }
   if (seconds >= 0) {
     durationSTR += `${seconds.toString().padStart(2, '0')}s `;
+    count++;
+    if (count >= 2) return durationSTR.trim();
   }
   if (milliseconds >= 0) {
     durationSTR += `${milliseconds.toString().padStart(3, '0')}ms`;

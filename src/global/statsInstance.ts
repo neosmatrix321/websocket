@@ -72,6 +72,7 @@ export interface ILastUpdates {
 }
 
 interface IGlobalStats {
+  isGathering: boolean,
   latencyGoogle: string,
   widget: IWidget,
   pid: IPid,
@@ -118,7 +119,7 @@ interface ILastUpdatesGUI {
 
 interface ILastUpdatesSTATS {
   updateAllStats: { last: number, count: number, success: boolean },
-  gatherStatsIntval: { last: number, count: number, success: boolean },
+  gatherIntval: { last: number, count: number, success: boolean },
   comparePids: { last: number, count: number, success: boolean },
   getSI: { last: number, count: number, success: boolean },
   getPU: { last: number, count: number, success: boolean },
@@ -140,7 +141,7 @@ interface ILastUpdatesSERVER {
 
 interface ILastUpdatesCLIENTS {
   statsUpdated: { last: number, count: number, success: boolean },
-  sendMessageIntval: { last: number, count: number, success: boolean },
+  messageIntval: { last: number, count: number, success: boolean },
   subscribe: { last: number, count: number, success: boolean },
   unsubscribe: { last: number, count: number, success: boolean },
   messagePayload: { last: number, count: number, success: boolean },
@@ -151,6 +152,7 @@ interface ILastUpdatesCLIENTS {
 export interface IFormatedLastUpdates extends Array<{ cat: string, function: string, lastUpdate: string, idleTime: string, no: number, result: boolean, [key: string]: string | number | boolean }> {}
 
 export class globalStats implements IGlobalStats {
+  isGathering = false;
   latencyGoogle = "NaN";
   widget = { cpu: -1, memory: -1, pid: -1, ctime: -1, elapsed: -1, timestamp: -1, formattedTime: "NaN", cpuLoad: "NaN", memoryFormated: "NaN", elapsedFormated: "NaN", ctimeFormated: "NaN", };
   pid = { fileExists: false, fileReadable: false, processFound: false };
@@ -159,7 +161,7 @@ export class globalStats implements IGlobalStats {
   rcon: IRconStats = { isConnected: false, info: { name: "NaN", ver: "NaN" }, players: [{ name: "NaN", playeruid: "NaN", steamid: "NaN" }] }; // { name: "name", playeruid: "playeruid", steamid: "steamid" },
   widgetExtra = { memMB: "NaN", memHeap: "NaN", memHeapTotal: "NaN" };
   lastUpdates: ILastUpdatesSTATS = {
-    gatherStatsIntval: { last: Date.now(), count: 0, success: false }, initStats: { last: 0, count: 0, success: false }, comparePids: { last: 0, count: 0, success: false }, updateAllStats: { last: 0, count: 0, success: false }, getSI: { last: 0, count: 0, success: false }, getPU: { last: 0, count: 0, success: false }, getLatencyGoogle: {
+    gatherIntval: { last: 0, count: 0, success: false }, initStats: { last: 0, count: 0, success: false }, comparePids: { last: 0, count: 0, success: false }, updateAllStats: { last: 0, count: 0, success: false }, getSI: { last: 0, count: 0, success: false }, getPU: { last: 0, count: 0, success: false }, getLatencyGoogle: {
       last: 0, count: 0, success: false
     }, widgetStats: { last: 0, count: 0, success: false }
   }
@@ -186,19 +188,18 @@ export interface IFormatedStats {
     [key: string]: string | boolean | number,
   };
   "pid": {
+    "gather": boolean,
     "exists": boolean,
     "readable": boolean,
     "found": boolean,
     "pid": string,
-    "SI pid": string,
-    "PU pid": string,
     "upTime": string,
     "cTime": string,
     [key: string]: string | boolean,
   };
   "web": {
-    " IDLE time": string,
-    "  has conn": boolean,
+    "websocket": boolean,
+    "has conn": boolean,
     "clients <3": number,
     "clients ##": number,
     "messages #": number,
@@ -206,18 +207,24 @@ export interface IFormatedStats {
   };
   "server": {
     "Ping": string,
+    "SI pid": string,
+    "PU pid": string,
     "CPU load": string,
     "SI Mem": string,
     "PU Mem": string,
     [key: string]: string,
   };
+  "rcon": {
+    "players": IRconStatsPlayers[],
+     [key: string]: { [key: string]: string } | IRconStatsPlayers[],
+  }
   "extras": {
     'localTime': string,
     'firstHeader': string,
     'secondHeader': string,
-    [key: string]: string,
+    [key: string]: string ,
   };
-  [key: string]: { [key: string]: boolean | string | number } | string | boolean | number;
+  [key: string]: { [key: string]: boolean | string | number | { [key: string]: string } | IRconStatsPlayers[] } | string | boolean | number;
 }
 
 interface IMainStats {
@@ -263,6 +270,7 @@ export class serverStats implements IServerStats {
 }
 
 interface IClientsStats {
+  isMessaging: boolean,
   webHandle: IwebHandleStats,
   fileHandle: IfileHandleStats,
   messageCounter: number,
@@ -272,12 +280,13 @@ interface IClientsStats {
 }
 
 export class clientsStats implements IClientsStats {
+  isMessaging = false;
   webHandle = { connectedClients: 0 };
   fileHandle = { connectedClients: 0 };
   messageCounter = 0;
   clientsCounter = 0;
   activeClients = 0;
-  lastUpdates = { sendMessageIntval: { last: Date.now(), count: 0, success: false }, statsUpdated: { last: 0, count: 0, success: false }, subscribe: { last: 0, count: 0, success: false }, unsubscribe: { last: 0, count: 0, success: false }, messagePayload: { last: 0, count: 0, success: false } };
+  lastUpdates = { messageIntval: { last: Date.now(), count: 0, success: false }, statsUpdated: { last: 0, count: 0, success: false }, subscribe: { last: 0, count: 0, success: false }, unsubscribe: { last: 0, count: 0, success: false }, messagePayload: { last: 0, count: 0, success: false } };
   constructor() { }
 }
 
@@ -305,9 +314,9 @@ export class statsWrapper implements IStatsWrapper {
       const functions: { [key: string]: string[] } = {
         "main": ["init", "start"],
         "gui": ["start", "stop", "draw", "guiStart"],
-        "global": ["initStats", "gatherStatsIntval", "comparePids", "updateAllStats", "getSI", "getPU", "widgetStats", "getLatencyGoogle"],
+        "global": ["initStats", "gatherIntval", "comparePids", "updateAllStats", "getSI", "getPU", "widgetStats", "getLatencyGoogle"],
         "server": ["createServer", "rconConnect", "rconDisconnect", "rconGetStatsInfo", "rconGetStatsPlayers", "startPidWatcher", "updatePid"],
-        "clients": ["statsUpdated", "sendMessageIntval", "subscribe", "unsubscribe", "messagePayload"]
+        "clients": ["statsUpdated", "messageIntval", "subscribe", "unsubscribe", "messagePayload"]
       };
   
       for (let category of categories) {
@@ -318,7 +327,6 @@ export class statsWrapper implements IStatsWrapper {
       return lastUpdatesTab as IFormatedLastUpdates;
     };
     this.getFormatedStats = (): IFormatedStats => {
-      const dur = calcDurationDetailed(Math.floor(Date.now() - this.global.lastUpdates.gatherStatsIntval.last));
       const time = calcTimeDetailed(Math.floor(Date.now()));
       const FormatedStats = {
         "header": {
@@ -337,20 +345,18 @@ export class statsWrapper implements IStatsWrapper {
           "total heap": `${this.global.widgetExtra.memHeapTotal}`,
           "ErrLog count": this.gui.selfStats.capturedErrors,
         },
-
         "pid": {
+          "gather": this.global.isGathering,
           "exists": this.global.pid.fileExists,
           "readable": this.global.pid.fileReadable,
           "found": this.global.pid.processFound,
           "pid": `${settingsContainer.getSetting('pid', 'pid')}`,
-          "SI pid": `${this.global.si.pid}`,
-          "PU pid": `${this.global.pu.pid}`,
           "upTime": this.global.pu.elapsedFormated,
           "cTime": this.global.pu.ctimeFormated,
         },
         "web": {
-          " IDLE time": `${dur}`,
-          "  has conn": this.server.webHandle.hasConnection,
+          "websocket": this.clients.isMessaging,
+          "has conn": this.server.webHandle.hasConnection,
           "clients <3": this.clients.activeClients,
           "clients ##": this.clients.clientsCounter,
           "messages #": this.clients.messageCounter,
@@ -359,14 +365,19 @@ export class statsWrapper implements IStatsWrapper {
         },
         "server": {
           "Ping": `${this.global.latencyGoogle}`,
+          "SI pid": `${this.global.si.pid}`,
+          "PU pid": `${this.global.pu.pid}`,
           "CPU load": `${this.global.pu.cpuFormated}`,
           "SI Mem": `${this.global.si.memFormated}`,
           "PU Mem": `${this.global.pu.memFormated}`,
         },
+        "rcon": {
+          "players": this.global.rcon.players,
+        },
         "extras": {
           'localTime': `${time}`,
           'firstHeader': `This Widget controls:`,
-          'secondHeader': `(insert Palserver name)`,
+          'secondHeader': `Servername: ${this.global.rcon.info.name} [${this.global.rcon.info.ver}]`,
         },
       };
       return FormatedStats;

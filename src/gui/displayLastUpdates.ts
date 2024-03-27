@@ -36,10 +36,10 @@ export class displayLastUpdates {
     this.lastUpdatesTab = statsContainer.getFormatedLastUpdates();
     ;
     this.spacing = 2;
-    this.setupErrorLogListeners();
+    this.setupLastUpdatesListeners();
   }
 
-  setupErrorLogListeners(): void {
+  setupLastUpdatesListeners(): void {
     this.lastUpdateBox.on("keypress", (key: KeyListenerArgs) => {
       if (!this.active || !this.lastUpdateBox.isFocused()) {
         return;
