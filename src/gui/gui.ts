@@ -84,7 +84,6 @@ export class consoleGui {
         fitHeight: true, // Fit height of the console
       },
     });
-    this.gui.refresh();
     console.info(`GUI started: ${statsContainer.gui.selfStats.width}x${statsContainer.gui.selfStats.height}`);
     this.stats.gui.selfStats.width = statsContainer.gui.selfStats.width && statsContainer.gui.selfStats.width > 0 ? statsContainer.gui.selfStats.width : 110;
     this.stats.gui.selfStats.height = statsContainer.gui.selfStats.height && statsContainer.gui.selfStats.height > 0 ? statsContainer.gui.selfStats.height : 30;
@@ -103,18 +102,19 @@ export class consoleGui {
     this.globalStats = new displayGlobalStats(this.gui);
     this.lastUpdates = new displayLastUpdates();
     this.errorLog = new ErrorTable(); // Use the width of your 'ErrorLog' Box
+    this.gui.refresh();
   }
   public startIfTTY() {
     if (!this.gui.Screen.Terminal.isTTY) return console.info('No TTY detected, skipping console-gui-tools');
     this.setupEventListeners();
     this.drawGUI();
     this.printFooter();
-    this.stats.updateLastUpdates("gui", "start", true);
-
+    
     this.guiIntVat = setInterval(async () => {
       this.intervalRunner();
     }, this.settings.gui.period);
     this.stats.gui.selfStats.isPainting = true;
+    this.stats.updateLastUpdates("gui", "start", true);
     if (!this.settings.gui.shouldPaint) this.toggleStopMode();
     // this.gui.showLogPopup();
   }
@@ -140,45 +140,64 @@ export class consoleGui {
     this.globalStats.drawConsole();
   }
 
+  private setDefaults() {
+    this.globalStats.statsWidgets.header.box.absoluteValues.x = this.globalStats.defaults.header.x;
+    this.globalStats.statsWidgets.header.box.absoluteValues.y = this.globalStats.defaults.header.y;
+    this.globalStats.statsWidgets.header.box.absoluteValues.width = this.globalStats.defaults.header.width;
+    this.globalStats.statsWidgets.header.box.absoluteValues.height = this.globalStats.defaults.header.height;
+
+    this.globalStats.statsWidgets.widget.box.absoluteValues.x = this.globalStats.defaults.widget.x;
+    this.globalStats.statsWidgets.widget.box.absoluteValues.y = this.globalStats.defaults.widget.y;
+    this.globalStats.statsWidgets.widget.box.absoluteValues.width = this.globalStats.defaults.widget.width;
+    this.globalStats.statsWidgets.widget.box.absoluteValues.height = this.globalStats.defaults.widget.height;
+
+    this.globalStats.statsWidgets.pid.box.absoluteValues.x = this.globalStats.defaults.pid.x;
+    this.globalStats.statsWidgets.pid.box.absoluteValues.y = this.globalStats.defaults.pid.y;
+    this.globalStats.statsWidgets.pid.box.absoluteValues.width = this.globalStats.defaults.pid.width;
+    this.globalStats.statsWidgets.pid.box.absoluteValues.height = this.globalStats.defaults.pid.height;
+
+    this.globalStats.statsWidgets.web.box.absoluteValues.x = this.globalStats.defaults.web.x;
+    this.globalStats.statsWidgets.web.box.absoluteValues.y = this.globalStats.defaults.web.y;
+    this.globalStats.statsWidgets.web.box.absoluteValues.width = this.globalStats.defaults.web.width;
+    this.globalStats.statsWidgets.web.box.absoluteValues.height = this.globalStats.defaults.web.height;
+
+    this.globalStats.statsWidgets.server.box.absoluteValues.x = this.globalStats.defaults.server.x;
+    this.globalStats.statsWidgets.server.box.absoluteValues.y = this.globalStats.defaults.server.y;
+    this.globalStats.statsWidgets.server.box.absoluteValues.width = this.globalStats.defaults.server.width;
+    this.globalStats.statsWidgets.server.box.absoluteValues.height = this.globalStats.defaults.server.height;
+
+    this.globalStats.statsWidgets.console.box.absoluteValues.x = this.globalStats.defaults.console.x;
+    this.globalStats.statsWidgets.console.box.absoluteValues.y = this.globalStats.defaults.console.y;
+    this.globalStats.statsWidgets.console.box.absoluteValues.width = this.globalStats.defaults.console.width;
+    this.globalStats.statsWidgets.console.box.absoluteValues.height = this.globalStats.defaults.console.height;
+
+    this.globalStats.statsWidgets.rcon.box.absoluteValues.x = this.globalStats.defaults.rcon.x;
+    this.globalStats.statsWidgets.rcon.box.absoluteValues.y = this.globalStats.defaults.rcon.y;
+    this.globalStats.statsWidgets.rcon.box.absoluteValues.width = this.globalStats.defaults.rcon.width;
+    this.globalStats.statsWidgets.rcon.box.absoluteValues.height = this.globalStats.defaults.rcon.height;
+  }
+
+
+
+
   private resizeDefaults(reset: boolean = false) {
     this.errorLog.errorLogBox.hide();
     this.gui.Screen.update();
     this.gui.refresh();
     this.stats.gui.selfStats.width = this.gui.Screen.width;
     this.stats.gui.selfStats.height = this.gui.Screen.height;
+    this.globalStats.updateDefaults();
     // this.globalStats.statsWidgets.header.box.absoluteValues.width = this.gui.Screen.width - 7;
     if (reset) { // TODO: calculate defaults and set new on reset
-      console.log("RESET - do something?")
+      this.setDefaults();
     }
-    this.globalStats.updateDefaults();
-    this.footer.absoluteValues.width = this.gui.Screen.width - 4;
-    this.footer.absoluteValues.y = this.stats.gui.selfStats.height - 2;
     this.globalStats.printGlobalStats();
     this.globalStats.drawConsole();
     
     this.printFooter();
     this.gui.refresh();
   }
-
-  public consoleFullscreenToggle() {
-    this.globalStats.statsWidgets.console.box.hide();
-    if (this.globalStats.statsWidgets.console.box.absoluteValues.height === this.gui.Screen.height - 2) {
-      this.globalStats.statsWidgets.console.box.absoluteValues.x = this.globalStats.defaults.console[0];
-      this.globalStats.statsWidgets.console.box.absoluteValues.y = this.globalStats.defaults.console[1];
-      this.globalStats.statsWidgets.console.box.absoluteValues.width = this.globalStats.defaults.console[2];
-      this.globalStats.statsWidgets.console.box.absoluteValues.height = this.globalStats.defaults.console[3];
-    } else {
-      this.globalStats.statsWidgets.console.box.absoluteValues.x = 2;
-      this.globalStats.statsWidgets.console.box.absoluteValues.y = 7;
-      this.globalStats.statsWidgets.console.box.absoluteValues.width = this.gui.Screen.width - 4;
-      this.globalStats.statsWidgets.console.box.absoluteValues.height = this.gui.Screen.height - 2;
-    }
-    this.globalStats.printGlobalStats();
-    this.globalStats.drawConsole();
-    this.globalStats.statsWidgets.console.box.show();
-
-  }
-
+  
   private setupEventListeners() {
     this.eV.on(MainEventTypes.GUI, (event: IEventTypes) => {
       let subType = typeof event.subType === 'string' ? event.subType : 'no subtype';
@@ -214,7 +233,7 @@ export class consoleGui {
       this.closeApp();
     });
     this.gui.on("resize", () => {
-      this.resizeDefaults();
+      this.resizeDefaults(true);
       // console.info(`GUI resized to: ${statsContainer.gui.selfStats.width}x${statsContainer.gui.selfStats.height}`);
     });
     // this.gui.Screen.update();
@@ -224,14 +243,18 @@ export class consoleGui {
       EventEmitterMixin.eventStats.guiEventCounter += 1;
       switch (key.name) {
         case "o": {
-          if (!this.gui.popupCollection["logPopup"]) {
-            this.consoleFullscreenToggle();
+          if (this.globalStats.consoleFUllscreenMode) {
+            this.globalStats.consoleFUllscreenMode = false;
+          } else {
+            this.globalStats.consoleFUllscreenMode = true;
+          }
+          this.globalStats.drawConsole();
+          this.gui.refresh();
+          // this.drawGUI();
             // this.gui.popupCollection["logPopup"].content.absoluteValues.height = this.gui.Screen.height - 4;
             // this.eV.handleError(SubEventTypes.ERROR.INFO, "popupCollection", MainEventTypes.GUI, new Error(`popupCollection:`), this.gui.popupCollection["logPopup"]);
             // this.gui.setLogPageSize(100);
             // this.gui.Screen.Terminal. = this.gui.Screen.height - 4;
-            
-          }
           break;
         }
         case "q": {
@@ -362,14 +385,7 @@ export class consoleGui {
         //   break;
         // }
         case "f2": {
-          if (this.settings.gui.shouldIdle) {
-            this.settings.gui.shouldIdle = false;
-          } else {
-            this.settings.gui.shouldIdle = true;
-            this.settings.gui.shouldStop = false;
-          }
-          this.globalStats.printGlobalStats();
-          this.globalStats.drawConsole();
+          this.toggleIdleMode();
           break;
         }
         case "f1": {
@@ -409,6 +425,17 @@ export class consoleGui {
 
   }
 
+  private toggleIdleMode() {
+    if (this.settings.gui.shouldIdle) {
+      this.settings.gui.shouldIdle = false;
+    } else {
+      this.settings.gui.shouldIdle = true;
+      this.settings.gui.shouldStop = false;
+    }
+    this.globalStats.printGlobalStats();
+    this.globalStats.drawConsole();
+  }
+
   // Funktion zur Ermittlung der Farbe für Log-Level
   private async printFooter() {
     const row = new InPageWidgetBuilder(1)
@@ -440,7 +467,9 @@ export class consoleGui {
       // { text: "Min  ", color: "black", bg: "bgCyan", bold: false },
     )
     this.footer.setContent(row)
-  }
+    this.footer.absoluteValues.width = this.gui.Screen.width - 4;
+    this.footer.absoluteValues.y = this.gui.Screen.height - 2;
+}
 
   getSelfStats(): void {
     const memoryUsage = process.memoryUsage();
@@ -465,18 +494,13 @@ export class consoleGui {
 
   public async drawGUI(): Promise<void> {
     // const p = new PageBuilder();
-    if (!this.settings.gui.shouldIdle) { // stats.gui.selfStats.isPainting
+    const currentTime = Date.now();
+    this.stats.updateLastUpdates("gui", "draw");
+    if (!this.settings.gui.shouldIdle || this.settings.gui.shouldIdle && (currentTime - this.stats.gui.lastUpdates.draw.last) >= 5000) { // stats.gui.selfStats.isPainting
       this.globalStats.printGlobalStats();
       this.globalStats.drawConsole();
       if (this.lastUpdates.active) this.lastUpdates.printLastUpdates();
       this.stats.updateLastUpdates("gui", "draw", true);
-    } else {
-      const currentTime = Date.now();
-      if ((currentTime - this.stats.gui.lastUpdates.draw.last) >= 5000) {
-        this.stats.updateLastUpdates("gui", "draw", true);
-        this.globalStats.printGlobalStats();
-        this.globalStats.drawConsole();
-      }
     }
   }
 }

@@ -62,7 +62,7 @@ export class settingsWrapper implements IReadOnlySettings {
   };
   pid: IPidSettings = {
     file: "/var/www/html/pal_server/server/pal_server.pid",
-    pid: -1,
+    pid: 0,
     shouldStop: false,
     shouldIdle: false,
     period: 1000,

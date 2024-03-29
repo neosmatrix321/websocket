@@ -14,11 +14,13 @@ import { calcDurationDetailed } from '../global/functions';
 @injectable()
 export class Stats {
   private eV: EventEmitterMixin = mixin;
-  protected gatherStatsIntval: NodeJS.Timeout = setInterval(() => { this.updateAllStats(); }, 5000);
+  protected gatherStatsIntval: NodeJS.Timeout = setInterval(() => { this.updateAllStats(); }, 1000);
   protected settings: settingsWrapper = settingsContainer;
   protected stats: statsWrapper = statsContainer;
   constructor() {
-    this.stats.global.widget.pid = process.pid;
+    // this.gatherStatsIntvalToggle('start');
+
+    this.stats.updateLastUpdates('global', 'gatherIntval');
     this.stats.updateLastUpdates("global", "initStats", true);
     // this.updateAllStats();
     this.setupEventHandlers();
@@ -31,16 +33,20 @@ export class Stats {
       let message = typeof event.message === 'string' ? event.message : `no message | ${subType}`;
       let success = typeof event.success === 'boolean' ? event.success : false;
       let json = typeof event.json !== 'undefined' ? event.json : { "no": "json" };
-  
+
       const newEvent: IBaseEvent = {
         subType: SubEventTypes.BASIC.STATS,
         success: success,
         message: message,
         json: json,
       };
-      this.eV.emit(MainEventTypes.BASIC, newEvent);      const type = event.subType;
+      this.eV.emit(MainEventTypes.BASIC, newEvent);
+      const type = event.subType;
       if (!type) throw new Error('No event type provided');
       switch (type) {
+        case SubEventTypes.STATS.READY:
+          this.updateAllStats();
+          break;
         case SubEventTypes.STATS.UPDATE_ALL:
           this.updateAllStats();
           break;
@@ -62,9 +68,12 @@ export class Stats {
           // console.dir(this.handle, { depth: 2, colors: true });
           break;
         case SubEventTypes.STATS.PREPARE:
+          this.getLatencyGoogle();
+          this.stats.updateLastUpdates("main", "start", true);
           this.stats.updateLastUpdates("server", "startPidWatcher", true);
           this.stats.updateLastUpdates("main", "start");
           this.comparePids();
+          // this.updateAllStats();
           break;
         default:
           this.eV.handleError(SubEventTypes.ERROR.WARNING, `Unknown stats event subtype: ${event.subType}`, MainEventTypes.STATS, new Error(`Unknown stats event subtype: ${event.subType}`), event);
@@ -74,15 +83,20 @@ export class Stats {
   }
 
   private async updateAllStats(): Promise<void> {
+    const time_diffMessageIntval = Date.now() - this.stats.clients.lastUpdates.messageIntval.last;
+    if (!this.stats.clients.isMessaging && time_diffMessageIntval > 30000 && !this.settings.pid.shouldIdle) this.eV.emit(MainEventTypes.STATS, { subType: SubEventTypes.STATS.IDLE_INTERVAL, message: `updateAllStats -> STATS.IDLE_INTERVAL` });
+    const time_diffUpdateAllStats = Date.now() - this.stats.global.lastUpdates.updateAllStats.last;
+    if (this.settings.pid.shouldIdle && time_diffUpdateAllStats < 10000) return;
+
     this.stats.updateLastUpdates("global", "updateAllStats");
     const time_diff = Date.now() - this.stats.global.lastUpdates.getLatencyGoogle.last;
     if (!this.stats.global.lastUpdates.getLatencyGoogle.last || time_diff > 5000) {
       this.getLatencyGoogle();
     }
+    this.getWidgetStats();
     if (this.stats.global.pid.processFound) {
-
-      this.eV.emit(MainEventTypes.SERVER, { subType: SubEventTypes.SERVER.RCON_GET_STATS, message: `STATS -> SERVER.RCON_GET_STATS` });
-      Promise.all([this.getSI(), this.getPU(), this.getWidgetStats()]).then(() => {
+      if (this.stats.global.rcon.portOpen) this.eV.emit(MainEventTypes.SERVER, { subType: SubEventTypes.SERVER.RCON_GET_STATS, message: `updateAllStats -> SERVER.RCON_GET_STATS` });
+      Promise.all([this.getSI(), this.getPU()]).then(() => {
         Promise.resolve();
         this.stats.updateLastUpdates("global", "updateAllStats", true);
       }).catch((error) => {
@@ -117,6 +131,8 @@ export class Stats {
     try {
       const letenceFormatedValue = Intl.NumberFormat('en-US', { notation: "compact", style: 'unit', unit: 'millisecond', unitDisplay: 'narrow', maximumFractionDigits: 0 });
       const latency = await si.inetLatency();
+      if (latency === 0) this.stats.server.isReachable = false;
+      else this.stats.server.isReachable = true;
       this.stats.global.latencyGoogle = letenceFormatedValue.format(latency);
       // const latencyGoogleEvent: IBaseEvent = {
       //   subType: SubEventTypes.BASIC.STATS,
@@ -131,25 +147,24 @@ export class Stats {
     }
   }
 
-  private async comparePids(): Promise<boolean> {
-    this.stats.updateLastUpdates("global", "comparePids");
-    let message = `comparePids started`;
+  private comparePids(): boolean {
+    let message = "comparePids started";
     let success = false;
-    if (!this.stats.global.pid.fileReadable || this.settings.pid.pid === -1) return false;
-    await this.getSI().then(() => {
-      message = `comparePids getSI finished`;
-      if (this.stats.global.si.pid === -1) throw new Error(`comparePids getSI pid not found`);
+    if (!this.stats.global.pid.fileReadable || !this.settings.pid.pid) return false;
+    this.stats.updateLastUpdates("global", "comparePids");
+    this.getSI().then(() => {
+      if (!this.stats.global.si.pid) throw new Error(`comparePids getSI pid not found`);
       if (this.stats.global.si.pid != this.settings.pid.pid) throw new Error(`comparePids pid mismatch`);
-
-      message = `comparePids success`;
       success = true;
       this.stats.updateLastUpdates("global", "comparePids", true);
-      this.stats.updateLastUpdates("main", "start", true);
-    }).catch(() => {
-      this.settings.pid.pid = -1;
-      success = false;
+    }).catch((error) => {
+      this.settings.pid.pid = 0;
+      message = `comparePids error ${error.message ? error.message : `comparePids failed with no error`}`;
     }).finally(() => {
       this.stats.global.pid.processFound = success;
+      if (!success) {
+        this.stats.global.si = { proc: "NaN", pid: 0, cpu: 0, mem: 0, memFormated: "NaN"};	
+      }
       const processFoundEvent: IBaseEvent = {
         subType: SubEventTypes.MAIN.PROCESS_FOUND,
         message: message,
@@ -164,8 +179,8 @@ export class Stats {
     this.stats.updateLastUpdates("global", "getSI");
     let success = false;
     let message = "getSI started"
-    await si.processLoad("PalServer-Linux", (targetProcesses: si.Systeminformation.ProcessesProcessLoadData[]) => {
-      if (this.settings.pid.pid === -1) return message = `getSI pid is -1`;
+    if (!this.settings.pid.pid) return;
+      await si.processLoad("PalServer-Linux", (targetProcesses: si.Systeminformation.ProcessesProcessLoadData[]) => {
       if (!targetProcesses || !(targetProcesses.length > 0))
         return message = `getSI targetProcesses not found`;
 
@@ -183,7 +198,7 @@ export class Stats {
       return { message: message, success: success }
     }).catch((error) => {
       message = `getSI error ${error.message ? error.message : `getSI failed with no error`}`;
-      this.settings.pid.pid = -1;
+      this.settings.pid.pid = 0;
       success = false;
     }).finally(() => {
       const newEvent: IBaseEvent = {
@@ -197,7 +212,7 @@ export class Stats {
 
   async getPU(): Promise<void> {
     this.stats.updateLastUpdates("global", "getPU");
-    if (!this.stats.global.pid.processFound) return;
+    if (!this.stats.global.pid.processFound || !this.settings.pid.pid) return;
     try {
       const pidInfo: Status = await pidusage(this.settings.pid.pid);
       if (!pidInfo) throw new Error(`No pidInfo for pid: ${this.settings.pid.pid}`);
@@ -216,69 +231,51 @@ export class Stats {
   private gatherStatsIntvalToggle(action: string) {
     switch (action) {
       case 'start':
+        if (this.gatherStatsIntval) clearInterval(this.gatherStatsIntval);
         this.stats.updateLastUpdates('global', 'gatherIntval', true);
-        this.eV.emitOnce(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.STATS, message: `intervalStart | Interval started, idle time: ${Date.now() - this.stats.global.lastUpdates.gatherStatsIntval.last} ms.`, success: true, });
         // console.log(`intervalStart: Interval started, idle time: ${this.intvalStats.idleEnd - this.intvalStats.idleStart}ms.`);
-        this.updateAllStats();
         this.gatherStatsIntval = setInterval(() => {
           this.updateAllStats();
-          // this.clients.handleClientsUpdateStats();
         }, this.settings.pid.period);
+        this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.STATS, message: `Interval started, period: ${this.settings.pid.period}ms.`, success: true, });
         this.settings.pid.shouldStop = false;
+        this.settings.pid.shouldIdle = false;
         this.stats.global.isGathering = true;
         break;
       case 'stop':
         this.settings.pid.shouldStop = true;
+        this.settings.pid.shouldIdle = false;
         this.stats.global.isGathering = false;
 
-        this.stats.updateLastUpdates('global', 'gatherIntval');
-        // console.log("intervalStart: no action taken. clientsCounter:");
-        clearInterval(this.gatherStatsIntval);
-        this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.STATS, message: `intervalStop | Interval stopped.`, success: true, });
-        this.stats.global.isGathering = false;
-        break;
-      case 'idle':
-        this.settings.pid.shouldIdle = true;
-        this.settings.pid.shouldStop = false;
-        this.stats.global.isGathering = true;
         this.stats.updateLastUpdates('global', 'gatherIntval', true);
         // console.log("intervalStart: no action taken. clientsCounter:");
-        clearInterval(this.gatherStatsIntval);
-        this.gatherStatsIntval = setInterval(() => {
-          this.updateAllStats();
-          // this.clients.handleClientsUpdateStats();
-        }, 30000);
-        
-        this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.STATS, message: `intervalIdle | Interval idle.`, success: true, });
-        break;
-      case 'resume':
-        this.settings.pid.shouldIdle = false;
-        this.settings.pid.shouldStop = false;
-        this.stats.global.isGathering = true;
-        this.stats.updateLastUpdates('global', 'gatherIntval', true);
-        // console.log("intervalStart: no action taken. clientsCounter:");
-        this.updateAllStats();
-        clearInterval(this.gatherStatsIntval);
-        this.gatherStatsIntval = setInterval(() => {
-          this.updateAllStats();
-          // this.clients.handleClientsUpdateStats();
-        }, this.settings.pid.period);
-        this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.STATS, message: `intervalResume | Interval resumed.`, success: true, });
+        if (this.gatherStatsIntval) clearInterval(this.gatherStatsIntval);
+        this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.STATS, message: `Interval stopped.`, success: true, });
         break;
       case 'change':
+        if (this.gatherStatsIntval) clearInterval(this.gatherStatsIntval);
         this.settings.pid.shouldStop = false;
         this.settings.pid.shouldIdle = false;
         this.stats.global.isGathering = true;
-        this.stats.updateLastUpdates('global', 'gatherIntval');
-        clearInterval(this.gatherStatsIntval);
+        this.stats.updateLastUpdates('global', 'gatherIntval', true);
         this.gatherStatsIntval = setInterval(() => {
           this.updateAllStats();
           // this.clients.handleClientsUpdateStats();
         }, this.settings.pid.period);
         this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.STATS, message: `intervalChange | Interval changed.`, success: true, });
         break;
+      case 'idle':
+        this.settings.pid.shouldIdle = true;
+        this.stats.updateLastUpdates('global', 'gatherIntval', true);
+        this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.STATS, message: `10000ms Interval idle ${Date.now() - this.stats.global.lastUpdates.gatherIntval.last}ms`, success: true, });
+        break;
+      case 'resume':
+        this.settings.pid.shouldIdle = false;
+        this.stats.updateLastUpdates('global', 'gatherIntval', true);
+        this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.STATS, message: `${this.settings.pid.period}ms Interval resumed ${Date.now() - this.stats.global.lastUpdates.gatherIntval.last}ms`, success: true, });
+        break;
       default:
-        this.eV.handleError(SubEventTypes.ERROR.WARNING, `gatherStatsIntvalToggle`, MainEventTypes.STATS, new Error(`Unknown status: ${this.stats.global.lastUpdates.gatherStatsIntval.success}`));
+        this.eV.handleError(SubEventTypes.ERROR.WARNING, `gatherStatsIntvalToggle`, MainEventTypes.STATS, new Error(`Unknown status: ${this.stats.global.lastUpdates.gatherIntval.success}`));
     }
   }
 

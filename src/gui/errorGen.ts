@@ -21,7 +21,7 @@ export class ErrorTable {
   constructor() {
     this.errorLogBox = new Box({
       id: "ErrorLog",
-      draggable: false,
+      draggable: true,
       visible: false,
       x: 1,
       y: 1,
@@ -34,9 +34,10 @@ export class ErrorTable {
       }
     });
     this.errorLogBox.hide();
+    this.errorLogBox.removeAllListeners();
     this.detailBox = new Box({
       id: "ErrorDetail",
-      draggable: false,
+      draggable: true,
       visible: false,
       x: 1, // Position to the right of your ErrorLog 
       y: this.errorLogBox.content.getViewedPageHeight() + 1,
@@ -48,6 +49,7 @@ export class ErrorTable {
         boxed: true,
       }
     });
+    this.detailBox.removeAllListeners();
     this.detailBox.hide(); // Initially hidden
     this.errorTable = new InPageWidgetBuilder((statsContainer.gui.selfStats.width - 4));
     this.detailedErrorTable = new InPageWidgetBuilder((statsContainer.gui.selfStats.width - 4));
@@ -79,25 +81,37 @@ export class ErrorTable {
             this.selectedRow -= 1
             this.printError();
             // this.detailBox.show();
-          }
-          break
-        case "down":
-          if (this.selectedRow < this.errorTab.length - 1) {
-            this.selectedRow += 1
-            this.printError();
+            this.displayErrorDetails(this.selectedRow);
             // this.detailBox.show();
           }
-          break
+          break;
+        case "down":
+          if (this.selectedRow < this.errorTab.length - 1) {
+            this.selectedRow += 1;
+            this.printError();
+            this.displayErrorDetails(this.selectedRow);
+            // this.detailBox.show();
+            // this.displayErrorDetails(this.errorLogBox.content.scrollIndex);
+            // this.detailBox.show();
+            // this.detailBox.show();
+          }
+          break;
         case "return":
-          this.errorLogBox.emit('rowChange', this.selectedRow);
+          // this.errorLogBox.emit('rowChange', this.errorLogBox.content.scrollIndex);
+          if (this.detailBox.visible || !this.detailBox.isVisible()) {
+            this.detailBox.hide();
+          } else {
+            this.displayErrorDetails(this.selectedRow);
+            this.detailBox.show();
+          }
           break;
       }
       // this.drawErrorTable();
     });
-    this.errorLogBox.on("rowChange", (row: number) => {
-      this.displayErrorDetails(row);
-      this.detailBox.show();
-    });
+    // this.errorLogBox.on("rowChange", (row: number) => {
+    //   this.displayErrorDetails(row);
+    //   this.detailBox.show();
+    // });
     // this.errorLogBox.on("unfocus", () => {
     //   this.errorLogBox.unfocus();
     //   this.errorLogBox.removeAllListeners();

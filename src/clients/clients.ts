@@ -66,16 +66,13 @@ export class Clients {
           // console.dir(this.clients, { depth: 3, colors: true });
           break;
         case SubEventTypes.CLIENTS.START_INTERVAL:
-          this.sendMessageIntvalToggle('start');
+          this.messageIntvalToggle('start');
           break;
         case SubEventTypes.CLIENTS.STOP_INTERVAL:
-          this.sendMessageIntvalToggle('stop');
+          this.messageIntvalToggle('stop');
           break;
-        case SubEventTypes.CLIENTS.IDLE_INTERVAL:
-          this.sendMessageIntvalToggle('idle');
-          break;
-        case SubEventTypes.CLIENTS.RESUME_INTERVAL:
-          this.sendMessageIntvalToggle('resume');
+        case SubEventTypes.CLIENTS.CHANGE_INTERVAL:
+          this.messageIntvalToggle('change');
           break;
         case SubEventTypes.CLIENTS.SUBSCRIBE:
           this.handleClientSubscribe(event);
@@ -220,8 +217,7 @@ export class Clients {
       if (type != ClientType.Server) {
         if (++this.stats.clients.activeClients == 1) {
           this.stats.server.webHandle.hasConnection = true;
-          this.eV.emit(MainEventTypes.STATS, { subType: SubEventTypes.STATS.RESUME_INTERVAL, message: 'resume gatherStats interval' });
-          this.sendMessageIntvalToggle('start');
+          this.messageIntvalToggle('start');
         }
       }
       this.eV.emit(`${MainEventTypes.PROMISE}.${SubEventTypes.PROMISE.CLIENT_SUBSCRIBE}`, true);
@@ -248,10 +244,11 @@ export class Clients {
 
     const time_diff = Date.now() - clientData.stats.lastUpdates.statsUpdated;
     if (time_diff > 20000) {
+      this.stats.updateLastUpdates("clients", "statsUpdated");
       // this.eV.emit(SubEventTypes.CLIENTS.UPDATE_CLIENT_STATS, client.info.id);
       clientData.stats.latency = await si.inetLatency(clientData.info.ip);
       clientData.stats.eventCount++;
-      clientData.stats.lastUpdates['statsUpdated'] = Date.now();
+      this.stats.updateLastUpdates("clients", "statsUpdated", true);
     }
   }
 
@@ -297,8 +294,7 @@ export class Clients {
         // console.dir(this.clients.client[id].stats, { depth: null, colors: true });
         if (--this.stats.clients.activeClients == 0) {
           this.stats.server.webHandle.hasConnection = false;
-          this.sendMessageIntvalToggle('stop');
-          this.eV.emit(MainEventTypes.STATS, { subType: SubEventTypes.STATS.RESUME_INTERVAL, message: 'Resume gatherStats interval' });
+          this.messageIntvalToggle('stop');
         }
       }
       this.clients.removeClient(id);
@@ -316,13 +312,15 @@ export class Clients {
     return this.clients.client[clientId];
   }
 
-  private sendMessageIntvalToggle(action: string): void {
+  private messageIntvalToggle(action: string): void {
     switch (action) {
       case 'start':
         this.stats.updateLastUpdates('clients', 'messageIntval', true);
-        this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.CLIENTS, message: `messageIntvalToggle | started, idle time: ${Date.now() - this.stats.clients.lastUpdates.messageIntval.last} ms.`, success: true, });
+        this.eV.emit(MainEventTypes.STATS, { subType: SubEventTypes.STATS.RESUME_INTERVAL, message: `messageIntval start -> STATS.RESUME_INTERVAL ${Date.now() - this.stats.clients.lastUpdates.messageIntval.last} ms.` });
+        // this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.CLIENTS, message: `messageIntvalToggle | started, idle time: ${Date.now() - this.stats.clients.lastUpdates.messageIntval.last} ms.`, success: true, });
         // console.log(`intervalStart: Interval started, idle time: ${this.intvalStats.idleEnd - this.intvalStats.idleStart}ms.`);
         this.sendMessageIntval = setInterval(() => {
+          if (!this.stats.server.isReachable) this.messageIntvalToggle('stop');
           this.clientsMessageReady("ALL", ["extras", "pidInfo", "rconPlayers", "rconInfo", "latencyGoogle", "latencyUser"], {});
           // this.clients.handleClientsUpdateStats();
         }, this.settings.clients.period);
@@ -333,33 +331,23 @@ export class Clients {
         this.stats.updateLastUpdates('clients', 'messageIntval');
         // console.log("intervalStart: no action taken. clientsCounter:");
         clearInterval(this.sendMessageIntval);
-        this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.CLIENTS, message: `messageIntvalToggle | stopped.`, success: true, });
+        // this.eV.emit(MainEventTypes.STATS, { subType: SubEventTypes.STATS.IDLE_INTERVAL, message: 'messageIntval stopped -> STATS.IDLE_INTERVAL' });
+        // this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.CLIENTS, message: `messageIntvalToggle | stopped.`, success: true, });
         this.settings.clients.shouldStop = true;
         this.stats.clients.isMessaging = false;
         break;
-      case 'idle':
-        this.stats.updateLastUpdates('clients', 'messageIntval', true);
-        this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.CLIENTS, message: `messageIntvalToggle | idle.`, success: true, });
+      case 'change':
         clearInterval(this.sendMessageIntval);
-        this.sendMessageIntval = setInterval(() => {
-          this.clientsMessageReady("ALL", ["extras", "pidInfo", "rconPlayers", "rconInfo", "latencyGoogle", "latencyUser"], {});
-          // this.clients.handleClientsUpdateStats();
-        }, 10000);
-        this.settings.clients.shouldIdle = true;
-        this.settings.clients.shouldStop = false;
-        this.stats.clients.isMessaging = true;
-        break;
-      case 'resume':
-        clearInterval(this.sendMessageIntval);
+        // this.eV.emit(MainEventTypes.STATS, { subType: SubEventTypes.STATS.RESUME_INTERVAL, message: 'messageIntvalToggle resume' });
         this.sendMessageIntval = setInterval(() => {
           this.clientsMessageReady("ALL", ["extras", "pidInfo", "rconPlayers", "rconInfo", "latencyGoogle", "latencyUser"], {});
           // this.clients.handleClientsUpdateStats();
         }, this.settings.clients.period);
         this.stats.updateLastUpdates('clients', 'messageIntval', true);
-        this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.CLIENTS, message: `messageIntvalToggle | resumed.`, success: true, });
-        this.settings.clients.shouldIdle = false;
-        this.settings.clients.shouldStop = false;
-        this.stats.clients.isMessaging = true;
+        this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.CLIENTS, message: `messageIntvalToggle | changed.`, success: true, });
+        // this.settings.clients.shouldIdle = false;
+        // this.settings.clients.shouldStop = false;
+        // this.stats.clients.isMessaging = true;
         break;
       default:
         this.eV.handleError(SubEventTypes.ERROR.WARNING, `messageIntvalToggle`, MainEventTypes.CLIENTS, new Error(`Unknown status: ${this.stats.clients.lastUpdates.messageIntval.success}`));

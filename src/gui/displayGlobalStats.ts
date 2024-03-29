@@ -1,6 +1,6 @@
 import { Box, ConsoleManager, InPageWidgetBuilder, SimplifiedStyledElement, StyledElement } from "console-gui-tools";
 import { IFormatedStats, IRconStatsPlayers } from '../global/statsInstance';
-import { returnBoolColor, returnStringIfBool, sOBJ } from "../global/functions";
+import { returnBoolColor, returnStringIfBool, sOBJ, sSTR } from "../global/functions";
 import { settingsContainer, statsContainer } from "../global/containerWrapper";
 
 // interface GlobalStatsDescriptor {
@@ -11,27 +11,35 @@ import { settingsContainer, statsContainer } from "../global/containerWrapper";
 //   "server": any[];
 //   [key: string]: any[] | { [key: string]: any };
 // }
+interface IWidgetPosition {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
 
 interface widgetsControls {
   [key: string]: any;
-  header: { box: Box, table: InPageWidgetBuilder, };
+  header: { box: Box, table: InPageWidgetBuilder };
   widget: { box: Box, table: InPageWidgetBuilder };
   pid: { box: Box, table: InPageWidgetBuilder };
   web: { box: Box, table: InPageWidgetBuilder };
   server: { box: Box, table: InPageWidgetBuilder };
   console: { box: Box, table: InPageWidgetBuilder };
+  consoleFS: { box: Box, table: InPageWidgetBuilder };
   rcon: { box: Box, table: InPageWidgetBuilder };
 }
-interface IGlobalStatsDefaults {
-  [key: string]: number[];
-  header: number[];
-  widget: number[];
-  pid: number[];
-  web: number[];
-  server: number[];
-  console: number[];
-  rcon: number[];
-}
+
+// interface IGlobalStatsDefaults {
+//   [key: string]: number[];
+//   header: number[];
+//   widget: number[];
+//   pid: number[];
+//   web: number[];
+//   server: number[];
+//   console: number[];
+//   rcon: number[];
+// }
 
 interface IGlobalStatsMaxSizes {
   [key: string]: number[];
@@ -42,14 +50,36 @@ interface IGlobalStatsMaxSizes {
   server: number[];
   console: number[];
   rcon: number[];
+  consoleFS: number[];
+}
+
+function returnOverheadWidth(minWidth: number, screenWidth: number, widgetWidth: number): number {
+  if (minWidth > screenWidth - 6) {
+    const widthOverhead = Math.floor((minWidth - screenWidth - 6) / 4) + 3;
+    return widgetWidth - widthOverhead;
+  } else {
+    return widgetWidth;
+  }
+  return 0;
 }
 
 export class displayGlobalStats {
   spacing: number = 2;
   selectedRow: number = 0;
+  consoleFUllscreenMode: boolean = false;
   statsWidgets: widgetsControls;
-  maxSizes: IGlobalStatsMaxSizes = { header: [31, 15, 30, 20], widget: [14, 10], pid: [10, 12], web: [12, 15], server: [8, 12], console: [100], rcon: [16, 16, 16] };
-  defaults: IGlobalStatsDefaults = { header: [2, 2, 0, 2], widget: [2, 0, 0, 0], pid: [0, 0, 0, 0], web: [0, 0, 0, 0], server: [0, 0, 0, 0], console: [2, 0, 0, 0], rcon: [0, 0, 0, 0] };
+  defaults: Record<string, IWidgetPosition> = {
+    header: { x: 2, y: 2, width: 0, height: 2 },
+    widget: { x: 0, y: 0, width: 0, height: 11 },
+    pid: { x: 0, y: 0, width: 0, height: 11 },
+    web: { x: 0, y: 0, width: 0, height: 11 },
+    server: { x: 0, y: 0, width: 0, height: 11 },
+    console: { x: 0, y: 0, width: 0, height: 7 },
+    rcon: { x: 0, y: 0, width: 0, height: 7 },
+    consoleFS: { x: 0, y: 0, width: 0, height: 0 },
+  };
+  maxSizes: IGlobalStatsMaxSizes = { header: [31, 15, 30, 20], widget: [14, 10], pid: [10, 12], web: [12, 15], server: [8, 12], console: [100], rcon: [16, 16, 16], consoleFS: [100], };
+  // defaults: IGlobalStatsDefaults = { header: [2, 2, 0, 2], widget: [2, 0, 0, 0], pid: [0, 0, 0, 0], web: [0, 0, 0, 0], server: [0, 0, 0, 0], console: [2, 0, 0, 0], rcon: [0, 0, 0, 0] };
   header: string[] = ["key", "value"];
   rconHeader: string[] = ["name", "playeruid", "steamid"];
   active: boolean = false;
@@ -57,133 +87,114 @@ export class displayGlobalStats {
   constructor(gui: ConsoleManager) {
     this.gui = gui;
     this.updateDefaults = () => {
-      this.defaults.header = [
-          this.defaults.header[0],
-          this.defaults.header[1],
-          this.gui.Screen.width - 4,
-          this.defaults.header[3]
-      ];
-      this.defaults.widget = [
-          this.defaults.widget[0],
-          this.defaults.header[3] + 3,
-          this.maxSizes.widget[0] + this.maxSizes.widget[1] + this.spacing,
-          Math.floor(this.gui.Screen.height / 2) - 4
-      ];
-      this.defaults.pid = [
-          this.defaults.widget[0] + this.maxSizes.widget[0] + this.maxSizes.widget[1] + 2,
-          this.defaults.header[3] + 3,
-          this.maxSizes.pid[0] + this.maxSizes.pid[1] + this.spacing,
-          Math.floor(this.gui.Screen.height / 2) - 4,
-      ];
-      this.defaults.web = [
-          this.defaults.pid[0] + this.maxSizes.pid[0] + this.maxSizes.pid[1] + 2,
-          this.defaults.header[3] + 3,
-          this.maxSizes.web[0] + this.maxSizes.web[1] + this.spacing,
-          Math.floor(this.gui.Screen.height / 2) - 4,
-      ];
-      this.defaults.server = [
-          this.defaults.web[0] + this.maxSizes.web[0] + this.maxSizes.web[1] + 2,
-          this.defaults.header[3] + 3,
-          this.maxSizes.server[0] + this.maxSizes.server[1] + this.spacing,
-          Math.floor(this.gui.Screen.height / 2) - 4,
-      ];
-      this.defaults.console = [
-          this.defaults.console[0],
-          this.defaults.widget[3] + this.defaults.header[3] + 1,
-          Math.floor(this.gui.Screen.width / 2) - 2,
-          Math.floor(this.gui.Screen.height) - this.defaults.header[3] + this.defaults.widget[3] - 4,
-      ];
-      this.defaults.rcon = [
-          this.defaults.console[2] + 3,
-          this.defaults.widget[3] + this.defaults.header[3] + 1,
-          Math.floor(this.gui.Screen.width / 2) - 2,
-          Math.floor(this.gui.Screen.height) - this.defaults.header[3] + this.defaults.widget[3] - 4,
-      ];
-    }
+      const screenWidth = this.gui.Screen.width - 2;
+      const screenHeight = this.gui.Screen.height - 2;
+      const minWidth = this.maxSizes.widget[0] + this.maxSizes.widget[1] + this.maxSizes.pid[0] + this.maxSizes.pid[1] + this.maxSizes.web[0] + this.maxSizes.web[1] + this.maxSizes.server[0] + this.maxSizes.server[1] + this.spacing * 4;
+      this.defaults.header.width = screenWidth - 4;
+
+      this.defaults.widget.x = this.defaults.header.x;
+      this.defaults.widget.y = this.defaults.header.height + 3;
+      this.defaults.widget.width = this.maxSizes.widget[0] + this.maxSizes.widget[1] + this.spacing,
+        // this.defaults.widget.height = Math.floor(screenHeight / 2) - 4;
+
+
+        this.defaults.pid.x = returnOverheadWidth(minWidth, screenWidth, (this.defaults.widget.x + this.maxSizes.widget[0] + this.maxSizes.widget[1] + this.spacing));
+      this.defaults.pid.y = this.defaults.header.height + 3;
+      this.defaults.pid.width = this.maxSizes.pid[0] + this.maxSizes.pid[1] + this.spacing;
+      // this.defaults.pid.height = Math.floor(screenHeight / 2) - 4;
+
+
+      this.defaults.web.x = returnOverheadWidth(minWidth, screenWidth, (this.defaults.pid.x + this.maxSizes.pid[0] + this.maxSizes.pid[1] + this.spacing));
+      this.defaults.web.y = this.defaults.header.height + 3;
+      this.defaults.web.width = this.maxSizes.web[0] + this.maxSizes.web[1] + this.spacing;
+      // this.defaults.web.height = Math.floor(screenHeight / 2) - 4;
+
+      this.defaults.server.x = returnOverheadWidth(minWidth, screenWidth, (this.defaults.web.x + this.maxSizes.web[0] + this.maxSizes.web[1] + this.spacing));
+      this.defaults.server.y = this.defaults.header.height + 3;
+      this.defaults.server.width = this.maxSizes.server[0] + this.maxSizes.server[1] + this.spacing;
+      // this.defaults.server.height = Math.floor(screenHeight / 2) - 4;
+
+      this.defaults.rcon.width = this.maxSizes.rcon[0] + this.maxSizes.rcon[1] + this.maxSizes.rcon[2] + this.spacing;
+      this.defaults.console.x = this.defaults.header.x;
+      this.defaults.console.y = screenHeight - this.defaults.console.height - 2;
+      this.defaults.console.width = screenWidth - this.defaults.rcon.width - 2;
+      // this.defaults.console.height = this.defaults.console.height;
+      this.defaults.rcon.x = this.defaults.console.width + 3;
+      this.defaults.rcon.y = screenHeight - this.defaults.rcon.height - 2;
+      // this.defaults.rcon.height = this.defaults.rcon.height;
+      this.defaults.consoleFS.x = 1;
+      this.defaults.consoleFS.y = 1;
+      this.defaults.consoleFS.width = screenWidth - 2;
+      this.defaults.consoleFS.height = screenHeight - 2;
+    };
 
     // Call the updateDefaults function to initialize the defaults
     this.updateDefaults();
 
-    const headerBoxConfig = {
-      id: "statsHeader",
-      x: this.defaults.header[0],
-      y: this.defaults.header[1],
-      width: this.defaults.header[2],
-      height: this.defaults.header[3],
-      style: { boxed: false, },
-    };
-
-    const widgetBoxConfig = {
-      id: "statsWidget",
-      x: this.defaults.widget[0],
-      y: this.defaults.widget[1],
-      width: this.defaults.widget[2],
-      height: this.defaults.widget[3],
-      draggable: true,
-      style: { label: "Widget", boxed: true, }
-    };
-
-    const pidBoxConfig = {
-      id: "statsPid",
-      x: this.defaults.pid[0],
-      y: this.defaults.pid[1],
-      width: this.defaults.pid[2],
-      height: this.defaults.pid[3],
-      draggable: true,
-      style: { label: "Pid", boxed: true }
-    };
-
-    const webBoxConfig = {
-      id: "statsWeb",
-      x: this.defaults.web[0],
-      y: this.defaults.web[1],
-      width: this.defaults.web[2],
-      height: this.defaults.web[3],
-      draggable: true,
-      style: { label: "Web", boxed: true }
-    };
-
-    const serverBoxConfig = {
-      id: "statsServer",
-      x: this.defaults.server[0],
-      y: this.defaults.server[1],
-      width: this.defaults.server[2],
-      height: this.defaults.server[3],
-      draggable: true,
-      style: { label: "Server", boxed: true }
-    };
-
-    const consoleBoxConfig = {
-      id: "statsConsole",
-      x: this.defaults.console[0],
-      y: this.defaults.console[1],
-      width: this.defaults.console[2],
-      height: this.defaults.console[3],
-      draggable: true,
-      style: { label: "Console", boxed: true }
-    };
-
-    const rconBoxConfig = {
-      id: "statsRcon",
-      x: this.defaults.rcon[0],
-      y: this.defaults.rcon[1],
-      width: this.defaults.rcon[2],
-      height: this.defaults.rcon[3],
-      draggable: true,
-      style: { label: "Players Connected", boxed: true }
-    }
-
     this.statsWidgets = {
-      header: { box: new Box({ ...headerBoxConfig }), table: new InPageWidgetBuilder() },
-      widget: { box: new Box({ ...widgetBoxConfig }), table: new InPageWidgetBuilder() },
-      pid: { box: new Box({ ...pidBoxConfig }), table: new InPageWidgetBuilder() },
-      web: { box: new Box({ ...webBoxConfig }), table: new InPageWidgetBuilder() },
-      server: { box: new Box({ ...serverBoxConfig }), table: new InPageWidgetBuilder() },
-      rcon: { box: new Box({ ...rconBoxConfig }), table: new InPageWidgetBuilder() },
-      console: { box: new Box({ ...consoleBoxConfig }), table: new InPageWidgetBuilder() },
+      header: { box: this.createWidgetBox('header', false, false), table: new InPageWidgetBuilder() },
+      widget: { box: this.createWidgetBox('widget'), table: new InPageWidgetBuilder() },
+      pid: { box: this.createWidgetBox('pid'), table: new InPageWidgetBuilder() },
+      web: { box: this.createWidgetBox('web'), table: new InPageWidgetBuilder() },
+      server: { box: this.createWidgetBox('server'), table: new InPageWidgetBuilder() },
+      rcon: { box: this.createWidgetBox('rcon'), table: new InPageWidgetBuilder() },
+      console: { box: this.createWidgetBox('console'), table: new InPageWidgetBuilder() },
+      consoleFS: { box: this.createWidgetBox('consoleFS'), table: new InPageWidgetBuilder() }
     };
+
+    this.statsWidgets.header.box.setStyle({ label: "Global Stats", color: "blackBright", boxed: false });
+    this.statsWidgets.widget.box.setStyle({ label: "Widget", color: "blackBright", boxed: true });
+    this.statsWidgets.pid.box.setStyle({ label: "PID", color: "blackBright", boxed: true });
+    this.statsWidgets.web.box.setStyle({ label: "Websocket", color: "blackBright", boxed: true });
+    this.statsWidgets.server.box.setStyle({ label: "Server", color: "blackBright", boxed: true });
+    this.statsWidgets.rcon.box.setStyle({ label: "Rcon", color: "blackBright", boxed: true });
+    this.statsWidgets.console.box.setStyle({ label: "Console", color: "blackBright", boxed: true });
+    this.statsWidgets.consoleFS.box.setStyle({ label: "Console Fullscreen", color: "gray", boxed: true });
+    this.statsWidgets.consoleFS.box.hide();
+    this.statsWidgets.header.box.removeAllListeners();
+    this.statsWidgets.widget.box.removeAllListeners();
+    this.statsWidgets.pid.box.removeAllListeners();
+    this.statsWidgets.web.box.removeAllListeners();
+    this.statsWidgets.server.box.removeAllListeners();
+    this.statsWidgets.rcon.box.removeAllListeners();
+    this.statsWidgets.console.box.removeAllListeners();
   }
 
+  // setupconsoleFSListeners(): void {
+  //   this.statsWidgets.consoleFS.box.on("keypress", (key: KeyListenerArgs) => {
+  //     if (!this.statsWidgets.consoleFS.box.isVisible() || !this.statsWidgets.consoleFS.box.isFocused()) {
+  //       return;
+  //     }
+  //     switch (key.name) {
+  //       case "up":
+  //         if (this.selectedRow > 0) {
+  //           this.selectedRow -= 1
+  //           this.drawConsole();
+  //           // this.detailBox.show();
+  //         }
+  //         break
+  //       case "down":
+  //         if (this.selectedRow < this.statsWidgets.consoleFS.table.content.length - 1) {
+  //           this.selectedRow += 1
+  //           this.drawConsole();
+  //           // this.detailBox.show();
+  //         }
+  //         break
+  //     }
+  //     // this.drawErrorTable();
+  //   });
+
+  // }
+
+  private createWidgetBox(widgetName: string, draggable: boolean = true, boxed: boolean = true): Box {
+    const config = this.defaults[widgetName];
+    return new Box({
+      id: `stats${widgetName}`,
+      ...config,
+      draggable: draggable,
+      style: { label: widgetName, boxed: boxed }
+    });
+  }
   // "GUI Events": `${EventEmitterMixin.eventStats.guiActiveEvents}`,
   // "APP Events": `${EventEmitterMixin.eventStats.errorCounter}`,
   // "Error count": `${EventEmitterMixin.eventStats.errorCounter}`,
@@ -223,16 +234,36 @@ export class displayGlobalStats {
         case "extras":
           return;
         case "rcon":
-          this.statsWidgets[mainKey].table.clear();
-          const tempRconFormatedObject = FormatedObject[mainKey].players as IRconStatsPlayers[];
           const tempRconMaxSizes = this.maxSizes[mainKey];
+          const tempRconFormatedObject = FormatedObject[mainKey];
+          this.statsWidgets[mainKey].table.clear();
+          const portOpen = tempRconFormatedObject['port open'];
+          const connected = tempRconFormatedObject['connected'];
           this.statsWidgets[mainKey].table.addRow(
-            { text: `${this.rconHeader[0]}${` `.repeat(Math.max(tempRconMaxSizes[0] - `${this.rconHeader[0]}`.length, 0))}`, color: 'whiteBright', bold: true },
-            { text: `${this.rconHeader[1]}${` `.repeat(Math.max(tempRconMaxSizes[1] - `${this.rconHeader[1]}`.length, 0))}`, color: 'whiteBright', bold: true },
-            { text: `${this.rconHeader[2]}${` `.repeat(Math.max(tempRconMaxSizes[2] - `${this.rconHeader[2]}`.length, 0))}`, color: 'whiteBright', bold: true }
+            { text: `Status:   `, color: 'cyanBright', bold: true },
+            { text: `port open `, color: 'whiteBright', bold: true },
+            { text: `${portOpen}`, color: returnBoolColor(portOpen), bold: true },
+            sOBJ(3),
+            { text: `connected `, color: 'whiteBright', bold: true },
+            { text: `${connected}`, color: returnBoolColor(connected), bold: true },
+          );
+          // const playerFiller = ` `.repeat((Math.max(30, ` connected player `.length)) / 2);
+          // this.statsWidgets[mainKey].table.addRow(
+          //   { text: `${playerFiller} connected player ${playerFiller}`, color: 'cyanBright', bold: true, overline: true },
+          // );
+          // const headerFirstBefore = ` `.repeat(Math.max(Math.floor(tempRconMaxSizes[0] / 2 - `${this.rconHeader[0]}`.length), 0));
+          // const headerFirstAfter = ` `.repeat(Math.max(Math.floor(tempRconMaxSizes[0] / 2 - `${this.rconHeader[0]}`.length), 0));
+          // const headerSecondBefore = ` `.repeat(Math.max(Math.floor(tempRconMaxSizes[1] / 2 - `${this.rconHeader[1]}`.length), 0));
+          // const headerSecondAfter = ` `.repeat(Math.max(Math.floor(tempRconMaxSizes[1] / 2 - `${this.rconHeader[1]}`.length), 0));
+          // const headerThirdBefore = ` `.repeat(Math.max(Math.floor(tempRconMaxSizes[2] / 2 - `${this.rconHeader[2]}`.length), 0));
+          // const headerThirdAfter = ` `.repeat(Math.max(Math.floor(tempRconMaxSizes[2] / 2 - `${this.rconHeader[2]}`.length), 0));
+          this.statsWidgets[mainKey].table.addRow(
+            { text: `${sSTR(5)}${this.rconHeader[0]}${sSTR(6)}|`, color: 'yellow', bold: true, underline: true },
+            { text: `${sSTR(3)}${this.rconHeader[1]}${sSTR(3)}|`, color: 'yellow', bold: true, underline: true },
+            { text: `${sSTR(4)}${this.rconHeader[2]}${sSTR(5)}`, color: 'yellow', bold: true, underline: true },
           );
           // Loop through array of players
-          tempRconFormatedObject.forEach((Element: IRconStatsPlayers) => {
+          tempRconFormatedObject['players'].forEach((Element: IRconStatsPlayers) => {
             this.statsWidgets[mainKey].table.addRow(
               { text: `${Element.name}${` `.repeat(Math.max(tempRconMaxSizes[0] - `${Element.name}`.length, 0))}`, color: 'whiteBright' },
               { text: `${Element.playeruid}${` `.repeat(Math.max(tempRconMaxSizes[1] - `${Element.playeruid}`.length, 0))}`, color: 'whiteBright' },
@@ -258,13 +289,13 @@ export class displayGlobalStats {
                 const refreshAltValuePeriod = `${settingsContainer.getSetting('gui', 'period')} ms`;
                 modifiedValue = (refreshShouldStop || refreshShouldIdle ? (refreshShouldStop ? returnStringIfBool(refreshShouldStop as boolean, `stop`) : returnStringIfBool(refreshShouldIdle as boolean, `idle`)) : refreshAltValuePeriod);
                 break;
-              case 'websocket':
+              case 'webIntval':
                 const websocketShouldStop = settingsContainer.getSetting('clients', 'shouldStop');
                 const websocketShouldIdle = settingsContainer.getSetting('clients', 'shouldIdle');
                 const websocketaltValuePeriod = `${settingsContainer.getSetting('clients', 'period')} ms`;
                 modifiedValue = (websocketShouldStop || websocketShouldIdle ? (websocketShouldStop ? returnStringIfBool(websocketShouldStop as boolean, `stop`) : returnStringIfBool(websocketShouldIdle as boolean, `idle`)) : websocketaltValuePeriod);
                 break;
-              case 'gather':
+              case 'pidIntval':
                 const gatherShouldStop = settingsContainer.getSetting('pid', 'shouldStop');
                 const gatherShouldIdle = settingsContainer.getSetting('pid', 'shouldIdle');
                 const gatheraltValuePeriod = `${settingsContainer.getSetting('pid', 'period')} ms`;
@@ -290,9 +321,11 @@ export class displayGlobalStats {
   }
 
   async drawConsole(): Promise<void> {
-    this.statsWidgets.console.table.clear();
+    let consoleBoxUsed = this.consoleFUllscreenMode ? this.statsWidgets.consoleFS.box : this.statsWidgets.console.box;
+    let consoleBoxNotUsed = this.consoleFUllscreenMode ? this.statsWidgets.console.box : this.statsWidgets.consoleFS.box;
+    
     let temp: SimplifiedStyledElement[] = [];
-    this.statsWidgets.console.box.CM.stdOut.getContent().forEach((row: any[]) => {
+    consoleBoxUsed.CM.stdOut.getContent().forEach((row: any[]) => {
       row.forEach((Element: StyledElement) => {
         const style = Element.style;
         const value = `${Element.text}`;
@@ -301,7 +334,18 @@ export class displayGlobalStats {
       });
       this.statsWidgets.console.table.addRow(...temp);
     });
-    this.statsWidgets.console.box.setContent(this.statsWidgets.console.box.CM.stdOut).draw();
+    consoleBoxUsed.setContent(this.statsWidgets.console.box.CM.stdOut).draw();
+    if (!consoleBoxUsed.isVisible()) {
+      consoleBoxUsed.show();
+      // if (this.consoleFUllscreenMode) this.setupconsoleFSListeners();
+    }
+    if (consoleBoxNotUsed.isVisible()) {
+      consoleBoxNotUsed.hide();
+      // if (!this.consoleFUllscreenMode) this.statsWidgets.consoleFS.box.removeAllListeners();
+    }
+    if (this.consoleFUllscreenMode) {
+      this.statsWidgets.consoleFS.box.focus();
+    }
   }
 
   printGlobalStats(): void {

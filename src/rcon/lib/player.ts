@@ -4,19 +4,19 @@ const versionRegex = /(?<=\[).+?(?=\])/;
 const serverNameRegex = /(?<=\] ).*/;
 
 export function splitInfo(serverName: string): IRconStatsInfo {
-  return { "name": getServerName(serverName) || "NaN", "ver": getVersion(serverName) || "NaN" };
+  return { "name": getServerName(serverName), "ver": getVersion(serverName) };
 }
 
 function getVersion(data: string) {
   const version = data.match(versionRegex);
-  if (version) return version[0];
-  return 'NaN';
+  if (!version || !version[0]) return 'NaN';
+  return version[0];
 }
 
 function getServerName(data: string) {
   const version = data.match(serverNameRegex);
-  if (version) return version[0];
-  return 'NaN';
+  if (!version || !version[0]) return 'NaN';
+  return version[0];
 }
 
 export function parsePlayers(data: string): IRconStatsPlayers[] {

@@ -3,6 +3,8 @@ export const SERVERDATA_AUTH_RESPONSE = 2;
 export const SERVERDATA_EXECCOMMAND = 2;
 export const SERVERDATA_RESPONSE_VALUE = 0;
 
+
+
 export type RconResponse = {
   size: number;
   id: number;

@@ -105,7 +105,7 @@ export class Main {
     //   // console.warn(`Unknown event: ${mainType}.${event.subType}`);
     // });
   }
-  
+
   private handleMainEvent(event: IEventTypes) {
     let subType = typeof event.subType === 'string' ? event.subType : 'no subtype';
     let message = typeof event.message === 'string' ? event.message : `no message | ${subType}`;
@@ -121,25 +121,27 @@ export class Main {
     this.eV.emit(MainEventTypes.BASIC, newEvent);
 
     switch (event.subType) {
-    case SubEventTypes.MAIN.PID_AVAILABLE:
+      case SubEventTypes.MAIN.START:
+        this.eV.emit(MainEventTypes.STATS, { subType: SubEventTypes.STATS.START_INTERVAL, message: 'START -> STATS.START_INTERVAL' });
+        break;
+      case SubEventTypes.MAIN.PID_AVAILABLE:
         // const newEvent: IBaseEvent = {
         //   subType: SubEventTypes.BASIC.STATS,
         //   message: `startPidWatcher | Pid Watcher online`,
         //   success: true,
         // };
         // this.eV.emit(MainEventTypes.BASIC, newEvent);
-        const pidAvEvent: IBaseEvent = {
-          subType: SubEventTypes.STATS.PREPARE,
-          message: `PID_AVAILABLE -> STATS.PREPARE`,
-          success: true,
-        };
-        this.eV.emit(MainEventTypes.STATS, pidAvEvent);
+        if (event.success) this.eV.emit(MainEventTypes.STATS, { subType: SubEventTypes.STATS.PREPARE, message: 'PID_AVAILABLE -> STATS.PREPARE' });
+        else this.eV.emit(MainEventTypes.STATS, { subType: SubEventTypes.STATS.IDLE_INTERVAL, message: 'PID_UNAVAILABLE -> STATS.IDLE_INTERVAL' });
         break;
-      case SubEventTypes.MAIN.PID_UNAVAILABLE:
-        this.eV.emit(MainEventTypes.STATS, { subType: SubEventTypes.STATS.IDLE_INTERVAL, message: 'PID_UNAVAILABLE -> STATS.IDLE_INTERVAL'});
-        break;
+      // case SubEventTypes.MAIN.PID_UNAVAILABLE:
+      //   // this.eV.emit(MainEventTypes.STATS, { subType: SubEventTypes.STATS.STOP_INTERVAL, message: 'PID_UNAVAILABLE -> STATS.STOP_INTERVAL' });
+      //   this.eV.emit(MainEventTypes.STATS, { subType: SubEventTypes.STATS.PREPARE, message: 'PID_UNAVAILABLE -> STATS.PREPARE' });
+      //   break;
       case SubEventTypes.MAIN.PROCESS_FOUND:
-        this.eV.emit(MainEventTypes.SERVER, { subType: SubEventTypes.SERVER.RCON_CONNECT, message: `PROCESS_FOUND -> SERVER.RCON_CONNECT` });
+        if (event.success) this.eV.emit(MainEventTypes.STATS, { subType: SubEventTypes.STATS.READY, message: 'PROCESS_FOUND -> STATS.READY' });
+        else this.eV.emit(MainEventTypes.STATS, { subType: SubEventTypes.STATS.IDLE_INTERVAL, message: 'PROCESS_NOT_FOUND -> STATS.IDLE_INTERVAL' });
+        // this.eV.emit(MainEventTypes.SERVER, { subType: SubEventTypes.SERVER.RCON_GET_STATS, message: `PROCESS_FOUND -> SERVER.RCON_GET_STATS` });
         break;
       case SubEventTypes.MAIN.PRINT_DEBUG:
         this.eV.emit(MainEventTypes.SERVER, { subType: SubEventTypes.SERVER.DEBUG_LOG_TO_FILE, data: this, message: `MAIN` });

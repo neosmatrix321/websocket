@@ -36,7 +36,6 @@ export class displayLastUpdates {
     this.lastUpdatesTab = statsContainer.getFormatedLastUpdates();
     ;
     this.spacing = 2;
-    this.setupLastUpdatesListeners();
   }
 
   setupLastUpdatesListeners(): void {
@@ -128,6 +127,7 @@ export class displayLastUpdates {
       this.lastUpdateBox.content.clear();
       this.printLastUpdates();
       this.lastUpdateBox.show();
+      this.setupLastUpdatesListeners();
       this.lastUpdateBox.focus();
       this.active = true;
     } else {

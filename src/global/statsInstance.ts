@@ -19,6 +19,7 @@ export interface IRconStatsInfo {
 }
 
 export interface IRconStats {
+  portOpen: boolean,
   isConnected: boolean,
   info: IRconStatsInfo;
   players: IRconStatsPlayers[];
@@ -92,6 +93,7 @@ interface IServerStats {
     isAlive: boolean;
     hasConnection: boolean;
   };
+  isReachable: boolean;
   lastUpdates: ILastUpdatesSERVER;
 }
 
@@ -113,7 +115,6 @@ interface ILastUpdatesGUI {
   start: { last: number, count: number, success: boolean },
   stop: { last: number, count: number, success: boolean },
   draw: { last: number, count: number, success: boolean },
-  guiStart: { last: number, count: number, success: boolean },
   [key: string]: { last: number, count: number, success: boolean };
 }
 
@@ -154,11 +155,11 @@ export interface IFormatedLastUpdates extends Array<{ cat: string, function: str
 export class globalStats implements IGlobalStats {
   isGathering = false;
   latencyGoogle = "NaN";
-  widget = { cpu: -1, memory: -1, pid: -1, ctime: -1, elapsed: -1, timestamp: -1, formattedTime: "NaN", cpuLoad: "NaN", memoryFormated: "NaN", elapsedFormated: "NaN", ctimeFormated: "NaN", };
+  widget = { cpu: 0, memory: 0, pid: 0, ctime: 0, elapsed: 0, timestamp: 0, formattedTime: "NaN", cpuLoad: "NaN", memoryFormated: "NaN", elapsedFormated: "NaN", ctimeFormated: "NaN", };
   pid = { fileExists: false, fileReadable: false, processFound: false };
-  si = { proc: "NaN", pid: -1, cpu: -1, mem: -1, memFormated: "NaN",};
-  pu = { cpu: -1, memory: -1, pid: -1, ctime: -1, elapsed: -1, timestamp: -1, elapsedFormated: "NaN", ctimeFormated: "NaN", cpuFormated: "NaN", memFormated: "NaN", };
-  rcon: IRconStats = { isConnected: false, info: { name: "NaN", ver: "NaN" }, players: [{ name: "NaN", playeruid: "NaN", steamid: "NaN" }] }; // { name: "name", playeruid: "playeruid", steamid: "steamid" },
+  si = { proc: "NaN", pid: 0, cpu: 0, mem: 0, memFormated: "NaN",};
+  pu = { cpu: 0, memory: 0, pid: 0, ctime: 0, elapsed: 0, timestamp: 0, elapsedFormated: "NaN", ctimeFormated: "NaN", cpuFormated: "NaN", memFormated: "NaN", };
+  rcon: IRconStats = { portOpen: false, isConnected: false, info: { name: "NaN", ver: "NaN" }, players: [{ name: "NaN", playeruid: "NaN", steamid: "NaN" }] }; // { name: "name", playeruid: "playeruid", steamid: "steamid" },
   widgetExtra = { memMB: "NaN", memHeap: "NaN", memHeapTotal: "NaN" };
   lastUpdates: ILastUpdatesSTATS = {
     gatherIntval: { last: 0, count: 0, success: false }, initStats: { last: 0, count: 0, success: false }, comparePids: { last: 0, count: 0, success: false }, updateAllStats: { last: 0, count: 0, success: false }, getSI: { last: 0, count: 0, success: false }, getPU: { last: 0, count: 0, success: false }, getLatencyGoogle: {
@@ -188,7 +189,7 @@ export interface IFormatedStats {
     [key: string]: string | boolean | number,
   };
   "pid": {
-    "gather": boolean,
+    "pidIntval": boolean,
     "exists": boolean,
     "readable": boolean,
     "found": boolean,
@@ -198,7 +199,8 @@ export interface IFormatedStats {
     [key: string]: string | boolean,
   };
   "web": {
-    "websocket": boolean,
+    "webIntval": boolean,
+    "reachable": boolean,
     "has conn": boolean,
     "clients <3": number,
     "clients ##": number,
@@ -212,11 +214,13 @@ export interface IFormatedStats {
     "CPU load": string,
     "SI Mem": string,
     "PU Mem": string,
-    [key: string]: string,
+    [key: string]: string | boolean,
   };
   "rcon": {
+    "port open": boolean,
+    "connected": boolean,
     "players": IRconStatsPlayers[],
-     [key: string]: { [key: string]: string } | IRconStatsPlayers[],
+     [key: string]: string | boolean | IRconStatsPlayers[],
   }
   "extras": {
     'localTime': string,
@@ -257,7 +261,6 @@ export class guiStats implements IGuiStats {
     start: { last: 0, count: 0, success: false },
     stop: { last: 0, count: 0, success: false },
     draw: { last: 0, count: 0, success: false },
-    guiStart: { last: 0, count: 0, success: false },
   };
   constructor() { }
 }
@@ -265,6 +268,7 @@ export class guiStats implements IGuiStats {
 export class serverStats implements IServerStats {
   webHandle = { isAlive: false, hasConnection: false };
   fileHandle = { isAlive: false, hasConnection: false };
+  isReachable = false;
   lastUpdates = { createServer: { last: 0, count: 0, success: false }, rconConnect: { last: 0, count: 0, success: false }, rconDisconnect: { last: 0, count: 0, success: false }, rconGetStatsInfo: { last: 0, count: 0, success: false }, rconGetStatsPlayers: { last: 0, count: 0, success: false }, startPidWatcher: { last: 0, count: 0, success: false }, updatePid: { last: 0, count: 0, success: false } };
   constructor() { }
 }
@@ -313,7 +317,7 @@ export class statsWrapper implements IStatsWrapper {
       const categories = ["main", "gui", "global", "server", "clients"];
       const functions: { [key: string]: string[] } = {
         "main": ["init", "start"],
-        "gui": ["start", "stop", "draw", "guiStart"],
+        "gui": ["start", "stop", "draw"],
         "global": ["initStats", "gatherIntval", "comparePids", "updateAllStats", "getSI", "getPU", "widgetStats", "getLatencyGoogle"],
         "server": ["createServer", "rconConnect", "rconDisconnect", "rconGetStatsInfo", "rconGetStatsPlayers", "startPidWatcher", "updatePid"],
         "clients": ["statsUpdated", "messageIntval", "subscribe", "unsubscribe", "messagePayload"]
@@ -346,7 +350,7 @@ export class statsWrapper implements IStatsWrapper {
           "ErrLog count": this.gui.selfStats.capturedErrors,
         },
         "pid": {
-          "gather": this.global.isGathering,
+          "pidIntval": this.global.isGathering,
           "exists": this.global.pid.fileExists,
           "readable": this.global.pid.fileReadable,
           "found": this.global.pid.processFound,
@@ -355,7 +359,8 @@ export class statsWrapper implements IStatsWrapper {
           "cTime": this.global.pu.ctimeFormated,
         },
         "web": {
-          "websocket": this.clients.isMessaging,
+          "webIntval": this.clients.isMessaging,
+          "reachable": this.server.isReachable,
           "has conn": this.server.webHandle.hasConnection,
           "clients <3": this.clients.activeClients,
           "clients ##": this.clients.clientsCounter,
@@ -372,6 +377,8 @@ export class statsWrapper implements IStatsWrapper {
           "PU Mem": `${this.global.pu.memFormated}`,
         },
         "rcon": {
+          "port open": this.global.rcon.portOpen,
+          "connected": this.global.rcon.isConnected,
           "players": this.global.rcon.players,
         },
         "extras": {
@@ -382,6 +389,7 @@ export class statsWrapper implements IStatsWrapper {
       };
       return FormatedStats;
     };
+    this.updateLastUpdates("global", "initStats");
   }
   public getFormatedStats: () => IFormatedStats;
 
@@ -404,7 +412,7 @@ export class statsWrapper implements IStatsWrapper {
 
     // Update the statistics
     statsObject.lastUpdates[index].last = Date.now();
-    statsObject.lastUpdates[index].count++;
+    if (!success) statsObject.lastUpdates[index].count++;
     statsObject.lastUpdates[index].success = success;
   }
 

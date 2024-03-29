@@ -50,6 +50,7 @@ export const SubEventTypes = {
     STOP_INTERVAL: 'STOP_INTERVAL',
     RESUME_INTERVAL: 'RESUME_INTERVAL',
     IDLE_INTERVAL: 'IDLE_INTERVAL',
+    READY: 'READY',
   },
   SERVER: {
     LISTEN: 'LISTEN',
@@ -61,10 +62,10 @@ export const SubEventTypes = {
     PRINT_DEBUG: 'PRINT_DEBUG',
     LOG_TO_FILE: 'LOG_TO_FILE',
     DEBUG_LOG_TO_FILE: 'DEBUG_LOG_TO_FILE',
-    RCON_CONNECT: 'RCON_CONNECT',
-    RCON_DISCONNECT: 'RCON_DISCONNECT',
     RCON_MESSAGE: 'RCON_MESSAGE',
     RCON_GET_STATS: 'RCON_GET_STATS',
+    RCON_DISCONNECT: 'RCON_DISCONNECT',
+    PREPARE: 'PREPARE',
   },
   CLIENTS: {
     SUBSCRIBE: 'SUBSCRIBE',
@@ -81,8 +82,7 @@ export const SubEventTypes = {
     PRINT_DEBUG: 'PRINT_DEBUG',
     START_INTERVAL: 'START_INTERVAL',
     STOP_INTERVAL: 'STOP_INTERVAL',
-    IDLE_INTERVAL: 'IDLE_INTERVAL',
-    RESUME_INTERVAL: 'RESUME_INTERVAL',
+    CHANGE_INTERVAL: 'CHANGE_INTERVAL',
   },
   ERROR: {
     INFO: 'INFO',
@@ -132,7 +132,7 @@ export class DebugEventGenerator {
         startTime: this.startTime,
         endTime: DEFAULT_VALUE_CALLBACKS.timestamp(),
         duration: 0,
-        activeEvents: -1,
+        activeEvents: 0,
         // eventCounter: -1
     };
   }
