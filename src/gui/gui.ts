@@ -4,7 +4,7 @@ import { injectable } from 'inversify';
 import "reflect-metadata";
 
 import mixin, { EventEmitterMixin } from "../global/EventEmitterMixin";
-import { IBaseEvent, IEventTypes, INewErr, MainEventTypes, SubEventTypes } from '../global/eventInterface';
+import { IBaseEvent, IGuiEvent, INewErr, MainEventTypes, SubEventTypes } from '../global/eventInterface';
 import { settingsWrapper } from '../settings/settingsInstance';
 import { statsWrapper } from '../global/statsInstance';
 // Import module with ES6 syntax
@@ -94,11 +94,11 @@ export class consoleGui {
       width: this.gui.Screen.width - 4,
       height: 1,
     });
-    this.footer.show();
     this.guiIntVat = setInterval(async () => {
     }, 1000);
     clearInterval(this.guiIntVat);
-
+    // TODO: IF GUI smaller then 100 x 15 display dummy screen
+    this.footer.show();
     this.globalStats = new displayGlobalStats(this.gui);
     this.lastUpdates = new displayLastUpdates();
     this.errorLog = new ErrorTable(); // Use the width of your 'ErrorLog' Box
@@ -199,7 +199,7 @@ export class consoleGui {
   }
   
   private setupEventListeners() {
-    this.eV.on(MainEventTypes.GUI, (event: IEventTypes) => {
+    this.eV.on(MainEventTypes.GUI, (event: IGuiEvent) => {
       let subType = typeof event.subType === 'string' ? event.subType : 'no subtype';
       let message = typeof event.message === 'string' ? event.message : `no message | ${subType}`;
       let success = typeof event.success === 'boolean' ? event.success : false;
@@ -211,16 +211,27 @@ export class consoleGui {
         message: message,
         json: json,
       };
-      this.eV.emit(MainEventTypes.BASIC, newEvent);      switch (event.subType) {
+      this.eV.emit(MainEventTypes.BASIC, newEvent);
+      switch (event.subType) {
         case SubEventTypes.GUI.PRINT_DEBUG:
           this.eV.emit(MainEventTypes.SERVER, { subType: SubEventTypes.SERVER.DEBUG_LOG_TO_FILE, data: this, message: `GUI` });
           // console.log("Clients:");
           // console.dir(this.clients, { depth: 3, colors: true });
           break;
+        case SubEventTypes.GUI.DRAW:
+          this.drawGUI();
+          break;
         case SubEventTypes.GUI.UPDATE_STATS:
           this.getSelfStats();
           // console.log("Clients:");
           // console.dir(this.clients, { depth: 3, colors: true });
+          break;
+        case SubEventTypes.GUI.IDLE_INTERVAL:
+          this.toggleIdleMode(event.newStringValue);
+          break;
+        case SubEventTypes.GUI.CHANGE_INTERVAL:
+          this.settings.gui.period = event.newNumberValue;
+          this.changeInterval();
           break;
         case SubEventTypes.GUI.FILL_ERROR_ARRAY:
           const error: INewErr = event.message as unknown as INewErr;
@@ -296,10 +307,7 @@ export class consoleGui {
               if (answer === "Yes") {
                 if (this.guiIntVat.hasRef()) this.guiIntVat.unref();
                 this.settings.gui.period = _period;
-                clearInterval(this.guiIntVat);
-                this.guiIntVat = setInterval(async () => {
-                  this.intervalRunner();
-                }, this.settings.gui.period);
+                this.changeInterval();
                 // this.guiIntVat.ref();
                 this.gui.info(`NEW PERIOD: ${this.settings.gui.period}`)
                 // this.guiIntVat.refresh();
@@ -425,15 +433,22 @@ export class consoleGui {
 
   }
 
-  private toggleIdleMode() {
-    if (this.settings.gui.shouldIdle) {
+  private changeInterval() {
+    clearInterval(this.guiIntVat);
+    this.guiIntVat = setInterval(async () => {
+      this.intervalRunner();
+    }, this.settings.gui.period);
+  }
+
+  private toggleIdleMode(mode: string = 'toggle') {
+    if ((mode == 'toggle' && this.settings.gui.shouldIdle) || mode == 'resume') {
       this.settings.gui.shouldIdle = false;
-    } else {
+      this.settings.gui.shouldStop = false;
+    } else if ((mode == 'toggle' && !this.settings.gui.shouldIdle) || mode == 'idle') {
       this.settings.gui.shouldIdle = true;
       this.settings.gui.shouldStop = false;
     }
-    this.globalStats.printGlobalStats();
-    this.globalStats.drawConsole();
+    this.drawGUI();
   }
 
   // Funktion zur Ermittlung der Farbe für Log-Level
@@ -495,8 +510,8 @@ export class consoleGui {
   public async drawGUI(): Promise<void> {
     // const p = new PageBuilder();
     const currentTime = Date.now();
-    this.stats.updateLastUpdates("gui", "draw");
-    if (!this.settings.gui.shouldIdle || this.settings.gui.shouldIdle && (currentTime - this.stats.gui.lastUpdates.draw.last) >= 5000) { // stats.gui.selfStats.isPainting
+    if (!this.settings.gui.shouldIdle || (this.settings.gui.shouldIdle && (currentTime - this.stats.gui.lastUpdates.draw.last) >= 5000)) { // stats.gui.selfStats.isPainting
+      this.stats.updateLastUpdates("gui", "draw");
       this.globalStats.printGlobalStats();
       this.globalStats.drawConsole();
       if (this.lastUpdates.active) this.lastUpdates.printLastUpdates();

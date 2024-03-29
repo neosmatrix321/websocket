@@ -317,6 +317,7 @@ export class Clients {
       case 'start':
         this.stats.updateLastUpdates('clients', 'messageIntval', true);
         this.eV.emit(MainEventTypes.STATS, { subType: SubEventTypes.STATS.RESUME_INTERVAL, message: `messageIntval start -> STATS.RESUME_INTERVAL ${Date.now() - this.stats.clients.lastUpdates.messageIntval.last} ms.` });
+        this.eV.emit(MainEventTypes.GUI, { subType: SubEventTypes.GUI.IDLE_INTERVAL, message: `messageIntval started -> GUI.RESUME`, success: true, newStringValue: 'resume',  });
         // this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.CLIENTS, message: `messageIntvalToggle | started, idle time: ${Date.now() - this.stats.clients.lastUpdates.messageIntval.last} ms.`, success: true, });
         // console.log(`intervalStart: Interval started, idle time: ${this.intvalStats.idleEnd - this.intvalStats.idleStart}ms.`);
         this.sendMessageIntval = setInterval(() => {

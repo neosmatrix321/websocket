@@ -76,7 +76,7 @@ export class settingsWrapper implements IReadOnlySettings {
   };
   gui: IGuiSettings = {
     enabled: true,
-    period: 500,
+    period: 1000,
     // refreshCounter: 0,
     shouldPaint: true,
     shouldIdle: false,

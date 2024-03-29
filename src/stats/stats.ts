@@ -4,7 +4,7 @@ import 'reflect-metadata';
 
 import pidusage, { Status } from 'pidusage';
 import si from 'systeminformation';
-import { IBaseEvent, IStatsEvent, MainEventTypes, SubEventTypes } from "../global/eventInterface";
+import { IBaseEvent, IGuiEvent, IStatsEvent, MainEventTypes, SubEventTypes } from "../global/eventInterface";
 import mixin, { EventEmitterMixin } from "../global/EventEmitterMixin";
 import { settingsWrapper } from '../settings/settingsInstance';
 import { statsWrapper } from "../global/statsInstance";
@@ -45,6 +45,7 @@ export class Stats {
       if (!type) throw new Error('No event type provided');
       switch (type) {
         case SubEventTypes.STATS.READY:
+          this.eV.emit(MainEventTypes.SERVER, { subType: SubEventTypes.SERVER.PREPARE, message: `stats ready -> SERVER.PREPARE` });
           this.updateAllStats();
           break;
         case SubEventTypes.STATS.UPDATE_ALL:
@@ -268,11 +269,14 @@ export class Stats {
         this.settings.pid.shouldIdle = true;
         this.stats.updateLastUpdates('global', 'gatherIntval', true);
         this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.STATS, message: `10000ms Interval idle ${Date.now() - this.stats.global.lastUpdates.gatherIntval.last}ms`, success: true, });
+        const GuiEvent: IGuiEvent = { subType: SubEventTypes.GUI.IDLE_INTERVAL, message: `changing to GUI idle mode 2000ms`, success: true, newNumberValue: 2000, newStringValue: 'idle' };
+        this.eV.emit(MainEventTypes.GUI, GuiEvent, );
         break;
       case 'resume':
         this.settings.pid.shouldIdle = false;
         this.stats.updateLastUpdates('global', 'gatherIntval', true);
         this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.STATS, message: `${this.settings.pid.period}ms Interval resumed ${Date.now() - this.stats.global.lastUpdates.gatherIntval.last}ms`, success: true, });
+        this.eV.emit(MainEventTypes.GUI, { subType: SubEventTypes.GUI.DRAW, message: `clients > 0`, success: true, });
         break;
       default:
         this.eV.handleError(SubEventTypes.ERROR.WARNING, `gatherStatsIntvalToggle`, MainEventTypes.STATS, new Error(`Unknown status: ${this.stats.global.lastUpdates.gatherIntval.success}`));

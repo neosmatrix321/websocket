@@ -137,6 +137,7 @@ interface ILastUpdatesSERVER {
   rconGetStatsPlayers: { last: number, count: number, success: boolean },
   startPidWatcher: { last: number, count: number, success: boolean },
   updatePid: { last: number, count: number, success: boolean },
+  isPortOpen: { last: number, count: number, success: boolean },
   [key: string]: { last: number, count: number, success: boolean };
 }
 
@@ -269,7 +270,7 @@ export class serverStats implements IServerStats {
   webHandle = { isAlive: false, hasConnection: false };
   fileHandle = { isAlive: false, hasConnection: false };
   isReachable = false;
-  lastUpdates = { createServer: { last: 0, count: 0, success: false }, rconConnect: { last: 0, count: 0, success: false }, rconDisconnect: { last: 0, count: 0, success: false }, rconGetStatsInfo: { last: 0, count: 0, success: false }, rconGetStatsPlayers: { last: 0, count: 0, success: false }, startPidWatcher: { last: 0, count: 0, success: false }, updatePid: { last: 0, count: 0, success: false } };
+  lastUpdates = { createServer: { last: 0, count: 0, success: false }, rconConnect: { last: 0, count: 0, success: false }, rconDisconnect: { last: 0, count: 0, success: false }, rconGetStatsInfo: { last: 0, count: 0, success: false }, rconGetStatsPlayers: { last: 0, count: 0, success: false }, startPidWatcher: { last: 0, count: 0, success: false }, updatePid: { last: 0, count: 0, success: false }, isPortOpen: { last: 0, count: 0, success: false }, };
   constructor() { }
 }
 
@@ -319,7 +320,7 @@ export class statsWrapper implements IStatsWrapper {
         "main": ["init", "start"],
         "gui": ["start", "stop", "draw"],
         "global": ["initStats", "gatherIntval", "comparePids", "updateAllStats", "getSI", "getPU", "widgetStats", "getLatencyGoogle"],
-        "server": ["createServer", "rconConnect", "rconDisconnect", "rconGetStatsInfo", "rconGetStatsPlayers", "startPidWatcher", "updatePid"],
+        "server": ["createServer", "rconConnect", "rconDisconnect", "rconGetStatsInfo", "rconGetStatsPlayers", "startPidWatcher", "updatePid", "isPortOpen"],
         "clients": ["statsUpdated", "messageIntval", "subscribe", "unsubscribe", "messagePayload"]
       };
   

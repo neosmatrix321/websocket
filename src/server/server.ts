@@ -175,7 +175,7 @@ export class Server {
           break;
         case SubEventTypes.SERVER.PREPARE:
           this.testIfPortIsOpen();
-            break;
+          break;
         case SubEventTypes.SERVER.RCON_GET_STATS:
           this.rconGetStats();
           break;
@@ -189,9 +189,9 @@ export class Server {
   }
 
   private async testIfPortIsOpen() {
-    const isRconPortOpen = await this.server.rcon.isPortOpen(this.settings.rcon.host, this.settings.rcon.port);
-    if (!isRconPortOpen) this.stats.global.rcon.portOpen = false;
-    else this.stats.global.rcon.portOpen = true;
+    this.server.rcon.isPortOpen(this.settings.rcon.host, this.settings.rcon.port).then((isRconPortOpen) => {
+      this.stats.global.rcon.portOpen = isRconPortOpen;
+    });
   }
 
   private rconDisconnect() {
@@ -209,55 +209,60 @@ export class Server {
     }
   }
 
-  private async rconGetStatsInfo(): Promise<void> {
-    if (!this.stats.global.rcon.isConnected) return;
-    this.stats.updateLastUpdates("server", "rconGetStatsInfo");
-    try {
-      const info = await this.sendRconCommand('Info');
-      if (!info) throw new Error(`No info from rcon`);
-      this.stats.global.rcon.info = splitInfo(info);
-      this.stats.updateLastUpdates("server", "rconGetStatsInfo", true);
-      return;
-    } catch (error) {
-      this.stats.global.rcon.info = { name: "NaN", ver: "NaN" };
-      this.eV.handleError(SubEventTypes.ERROR.INFO, `RCON Info`, MainEventTypes.STATS, new Error(`rconGetStatsInfo failed`), error);
-    };
+  private async rconGetStatsInfo(): Promise<boolean> {
+    return new Promise<boolean>((resolve) => {
+      if (!this.stats.global.rcon.isConnected) resolve(false);
+      this.stats.updateLastUpdates("server", "rconGetStatsInfo");
+      this.server.rcon.exec('Info').then((info) => {
+        if (!info.body) throw new Error(`No info from rcon`);
+        this.stats.global.rcon.info = splitInfo(info.body);
+        this.stats.updateLastUpdates("server", "rconGetStatsInfo", true);
+        resolve(true);
+      }).catch(() => {
+        this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.SERVER, message: `RCON Info`, success: this.stats.server.lastUpdates.rconGetStatsInfo.success });
+        resolve(false);
+      });
+    });
   }
 
-  private async rconGetStatsPlayers(): Promise<void> {
-    if (!this.stats.global.rcon.isConnected) return;
-    this.stats.updateLastUpdates("server", "rconGetStatsPlayers");
-    try {
-      const players: string | undefined = await this.sendRconCommand('ShowPlayers');
-      if (!players) throw new Error(`No players from rcon`);
-      const playerArray = (players != "name,playeruid,steamid\n") ? parsePlayers(players) : [{ name: "NaN", playeruid: "NaN", steamid: "NaN" }];
-      this.stats.global.rcon.players = (playerArray[0]) ? playerArray : [{ name: "NaN", playeruid: "NaN", steamid: "NaN" }];
-      this.stats.updateLastUpdates("server", "rconGetStatsPlayers", true);
-      return;
-    } catch (error) {
-      this.stats.global.rcon.players = [{ name: "NaN", playeruid: "NaN", steamid: "NaN" }];
-      this.eV.handleError(SubEventTypes.ERROR.INFO, `RCON ShowPlayers`, MainEventTypes.STATS, new Error("rconGetStatsPlayers failed"), error);
-    }
+  private async rconGetStatsPlayers(): Promise<boolean> {
+    return new Promise<boolean>((resolve) => {
+      if (!this.stats.global.rcon.isConnected) return;
+      this.stats.updateLastUpdates("server", "rconGetStatsPlayers");
+      this.server.rcon.exec('ShowPlayers').then((players) => {
+        if (!players.body) throw new Error(`No players from rcon`);
+        const playerArray = (players.body != "name,playeruid,steamid\n") ? parsePlayers(players.body) : [{ name: "NaN", playeruid: "NaN", steamid: "NaN" }];
+        this.stats.global.rcon.players = (playerArray[0]) ? playerArray : [{ name: "NaN", playeruid: "NaN", steamid: "NaN" }];
+        this.stats.updateLastUpdates("server", "rconGetStatsPlayers", true);
+        resolve(true);
+      }).catch(() => {
+        this.eV.emit(MainEventTypes.BASIC, { subType: SubEventTypes.BASIC.SERVER, message: `RCON ShowPlayers`, success: this.stats.server.lastUpdates.rconGetStatsPlayers.success });
+        // this.stats.global.rcon.players = [{ name: "NaN", playeruid: "NaN", steamid: "NaN" }];
+        // this.eV.handleError(SubEventTypes.ERROR.INFO, `RCON ShowPlayers`, MainEventTypes.STATS, new Error(`rconGetStatsPlayers failed ${error.message || 'no error message'}`), error);
+        resolve(false);
+      });
+    });
   }
 
   private async rconGetStats(force: boolean = false): Promise<void> {
-    if (force || !this.stats.server.lastUpdates.rconGetStatsPlayers.last || (Date.now() - this.stats.server.lastUpdates.rconGetStatsPlayers.last) > 5000) {
-      this.server.rcon.connect().then(() => {;
-        // if (!this.stats.global.rcon.isConnected) return
-        this.rconGetStatsPlayers();
-        if (force || !this.stats.server.lastUpdates.rconGetStatsInfo.last || (Date.now() - this.stats.server.lastUpdates.rconGetStatsInfo.last) > 60000) {
-          this.rconGetStatsInfo();
-        }
-      });
+    await this.testIfPortIsOpen();
+    if (!this.stats.global.rcon.portOpen || force || !this.stats.server.lastUpdates.rconGetStatsPlayers.last || (Date.now() - this.stats.server.lastUpdates.rconGetStatsPlayers.last) > 5000) {
+      await this.server.rcon.connect();
+
+      await this.rconGetStatsPlayers();
+        
+      if (force || !this.stats.server.lastUpdates.rconGetStatsInfo.last || (Date.now() - this.stats.server.lastUpdates.rconGetStatsInfo.last) > 60000) {
+        await this.rconGetStatsInfo();
+      }
     }
   }
 
   async sendRconCommand(command: string): Promise<string | undefined> {
-    if (!this.server.rcon || !this.stats.global.rcon.isConnected || !this.server.rcon.client) return undefined;
+    // if (!this.server.rcon || !this.stats.global.rcon.isConnected || !this.server.rcon.client) return undefined;
     try {
       // Ensure RCON connection if not open? rconConnection.connect();
       const response = await this.server.rcon.exec(command);
-      if (!response) return undefined;
+      // if (!response) return undefined;
       return response.body; // Or format the response if needed
     } catch (error: any) {
       this.eV.handleError(SubEventTypes.ERROR.INFO, `RCON Command`, MainEventTypes.STATS, new Error(error.message || 'no error message'), error);
@@ -378,7 +383,7 @@ export class Server {
           message: `CREATE -> MAIN.START`,
           success: true,
         });
-      // const serverEvent: IBaseEvent = {
+        // const serverEvent: IBaseEvent = {
         //   subType: SubEventTypes.SERVER.LISTEN,
         //   message: 'listen | serverCreated',
         //   success: true,
@@ -440,7 +445,7 @@ export class Server {
       this.server.pidWatcher = fs.watch(this.settings.pid.file, (eventType) => {
         this.updatePid(eventType); // Neue Funktion zum erneuten Einlesen
         // if (eventType === 'change') {
-          // }
+        // }
       });
     } catch (error: any) {
       this.settings.pid.pid = 0;

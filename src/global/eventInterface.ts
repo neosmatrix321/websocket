@@ -38,6 +38,9 @@ export const SubEventTypes = {
     PRINT_DEBUG: 'PRINT_DEBUG',
     UPDATE_STATS: 'UPDATE_STATS',
     FILL_ERROR_ARRAY: 'FILL_ERROR_ARRAY',
+    CHANGE_INTERVAL: 'CHANGE_INTERVAL',
+    IDLE_INTERVAL: 'IDLE_INTERVAL',
+    DRAW: 'DRAW',
   },
   STATS: {
     UPDATE_ALL: 'UPDATE_ALL',
@@ -183,6 +186,11 @@ export interface IClientsEvent extends IBaseEvent {
   data: any;
 }
 
+export interface IGuiEvent extends IBaseEvent {
+  newNumberValue: number;
+  newStringValue: string;
+}
+
 export interface IErrorEvent extends IBaseEvent {
   counter: number;
   mainSource: string;
@@ -204,7 +212,7 @@ export interface IPromiseEvent<T> extends IBaseEvent {
   (value?: T | PromiseLike<T>): void;
 }
 
-export type IEventTypes = Partial<IBaseEvent> | Partial<IMainEvent> | Partial<IStatsEvent> | Partial<IServerEvent> | Partial<IClientsEvent>;
+export type IEventTypes = Partial<IBaseEvent> | Partial<IMainEvent> | Partial<IStatsEvent> | Partial<IServerEvent> | Partial<IClientsEvent> | Partial<IGuiEvent>;
 
 
 export class BaseEvent implements IBaseEvent {
@@ -275,6 +283,17 @@ export class ClientsEvent extends BaseEvent implements IClientsEvent {
     this.type = type;
     this.client = client;
     this.data = data;
+  }
+}
+
+export class GuiEvent extends BaseEvent implements IGuiEvent {
+  newNumberValue: number;
+  newStringValue: string;
+
+  constructor(subType: string, message: string, success: boolean, newNumberValue: number, newStringValue: string, debugEvent?: IDebugEvent, json?: any) {
+    super(subType, message, success, debugEvent, json);
+    this.newNumberValue = newNumberValue;
+    this.newStringValue = newStringValue;
   }
 }
 
